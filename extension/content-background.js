@@ -178,7 +178,7 @@
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!['contentIngest', 'contentList', 'contentSaveSources', 'contentAction', 'contentAddManual', 'contentClear', 'contentBatch', 'contentDraftAction', 'contentRescan'].includes(message?.type)) return false;
     const task = handle(message, sender);
-    task.then(data => respond({ ok: true, data }), error => respond({ ok: false, error: error.message + ' [Assistant 1.5.11]' }));
+    task.then(data => respond({ ok: true, data }), error => respond({ ok: false, error: error.message + ' [Assistant 1.5.12]' }));
     // Save before replying; jobs update persistent state so a restarted worker can resume them.
     task.then(() => runJobs()).catch(() => {}); return true;
   });

@@ -11,7 +11,7 @@ $total = 0
 $names = @()
 try {
   foreach ($entry in $archiveFile.Entries) {
-    if ($entry.FullName -notmatch '^[a-zA-Z0-9_-]+\.(js|css|svg|json|txt)$' -or $entry.FullName -eq 'config.local.js') { throw 'Invalid archive path or personal config' }
+    if ($entry.FullName -notmatch '^[a-zA-Z0-9_-]+\.(js|css|svg|json|txt|html)$' -or $entry.FullName -eq 'config.local.js') { throw ('Invalid archive path or personal config: ' + $entry.FullName) }
     if ($names -contains $entry.FullName) { throw 'Duplicate archive file' }
     $names += $entry.FullName
     $total += $entry.Length
