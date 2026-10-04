@@ -33,4 +33,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $releaseVersion = (Get-Content extension/manifest.json | ConvertFrom-Json).version
-          gh release create "v$releaseVersion" "assistant-update-$releaseVersion.zip" "assistant-updater-$releaseVersion.zip" install-assistant-updater.cmd --repo TO-HU-TIEU/extension --title "Assistant $releaseVersion" --notes "Thiết lập trình cập nhật một lần bằng install-assistant-updater.cmd. Sau đó dùng Cập nhật ngay trong Assistant; tự tải, giải nén, sao lưu và giữ nguyên kết nối. Node.js 22 trở lên."
+          gh release create "v$releaseVersion" "assistant-update-$releaseVersion.zip" "assistant-updater-$releaseVersion.zip" install-assistant-updater.cmd --repo TO-HU-TIEU/extension --title "Assistant $releaseVersion" --notes "Thiết lập trình cập nhật một lần bằng install-assistant-updater.cmd. Sau đó dùng Cập nhật ngay trong Assistant; tự tải, giải nén, sao lưu và giữ nguyên kết nối. Đã kèm bộ chạy, không cần cài Node.js riêng."
