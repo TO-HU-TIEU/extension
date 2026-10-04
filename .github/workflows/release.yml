@@ -14,6 +14,12 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci --prefix companion --omit=dev --ignore-scripts
+      - name: Bundle Windows runtime
+        run: |
+          $nodeExecutable = (Get-Command node).Source
+          $nodeVersion = (& node --version).Trim()
+          Copy-Item -LiteralPath $nodeExecutable -Destination companion/node.exe
+          Invoke-WebRequest "https://raw.githubusercontent.com/nodejs/node/$nodeVersion/LICENSE" -OutFile companion/NODE-LICENSE.txt
       - name: Validate and package
         run: |
           $releaseVersion = (Get-Content extension/manifest.json | ConvertFrom-Json).version

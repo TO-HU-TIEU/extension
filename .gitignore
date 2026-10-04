@@ -1,4 +1,6 @@
 companion/node_modules/
+companion/node.exe
+companion/NODE-LICENSE.txt
 companion/server/.data/
 companion/server/config.local.mjs
 extension/config.local.js
