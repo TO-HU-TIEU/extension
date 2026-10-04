@@ -1,0 +1,24 @@
+name: Public extension release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and package
+        run: |
+          $releaseVersion = (Get-Content extension/manifest.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$releaseVersion") { throw 'Version tag mismatch' }
+          if (Test-Path extension/config.local.js) { throw 'Personal connection must not be published' }
+          Compress-Archive -Path extension/* -DestinationPath "assistant-update-$releaseVersion.zip"
+      - name: Publish stable version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseVersion = (Get-Content extension/manifest.json | ConvertFrom-Json).version
+          gh release create "v$releaseVersion" "assistant-update-$releaseVersion.zip" --repo TO-HU-TIEU/extension --title "Assistant $releaseVersion" --notes "Cập nhật Assistant. Giải nén và chép vào thư mục extension đang dùng, sau đó Tải lại trong Chrome. Giữ nguyên config.local.js và dữ liệu trình duyệt."
