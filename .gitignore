@@ -1,0 +1,4 @@
+companion/node_modules/
+companion/server/.data/
+companion/server/config.local.mjs
+extension/config.local.js
