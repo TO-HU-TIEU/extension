@@ -31,5 +31,5 @@ if (-not (Test-Path -LiteralPath $nodeExecutable)) { $nodeExecutable = (Get-Comm
 if ($LASTEXITCODE -ne 0) { throw 'Không liên kết được trình cập nhật.' }
 $runCommand = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
 New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AssistantExtensionUpdater' -Value $runCommand -PropertyType String -Force | Out-Null
-Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$startScript)
+Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File', ('"' + $startScript + '"'))
 Write-Host 'Đã cài trình cập nhật. Tải lại Assistant một lần. Các lần sau bấm Cập nhật ngay, không cần giải nén ZIP.'
