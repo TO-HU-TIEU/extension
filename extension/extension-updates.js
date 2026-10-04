@@ -28,7 +28,7 @@
       headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store',
       signal: AbortSignal.timeout(10000)
     });
-    if (response.status === 404) throw new Error('Chưa truy cập được nguồn cập nhật công khai. Nhà phát hành cần mở nguồn tải bản cập nhật.');
+    if (response.status === 404) throw new Error('Chưa tìm thấy bản phát hành công khai trên nguồn cập nhật. Hãy thử lại sau.');
     if (!response.ok) throw new Error('Không thể kiểm tra cập nhật. Hãy thử lại sau.');
     return release(await response.json());
   }
