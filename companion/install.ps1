@@ -1,4 +1,4 @@
-﻿param([string]$ExtensionPath)
+﻿param([string]$ExtensionPath,[string]$NodePath)
 $ErrorActionPreference = 'Stop'
 $packageRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $companionRoot = Join-Path $env:LOCALAPPDATA 'AssistantUpdater'
@@ -24,8 +24,10 @@ if ([IO.Path]::GetFullPath($packageRoot) -ne [IO.Path]::GetFullPath($companionRo
 $startScript = Join-Path $companionRoot 'start.ps1'
 $serverConfig = Join-Path $companionRoot 'server\config.local.mjs'
 $extensionConfig = Join-Path (Split-Path -Parent $companionRoot) 'x-reply-assistant\config.local.js'
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Cần cài Node.js 22 trở lên trước khi cài companion.' }
-& node (Join-Path $companionRoot 'configure.mjs') $companionRoot $ExtensionPath
+if ($NodePath) { Copy-Item -LiteralPath $NodePath -Destination (Join-Path $companionRoot 'node.exe') -Force }
+$nodeExecutable = Join-Path $companionRoot 'node.exe'
+if (-not (Test-Path -LiteralPath $nodeExecutable)) { $nodeExecutable = (Get-Command node -ErrorAction Stop).Source }
+& $nodeExecutable (Join-Path $companionRoot 'configure.mjs') $companionRoot $ExtensionPath
 if ($LASTEXITCODE -ne 0) { throw 'Không liên kết được trình cập nhật.' }
 $runCommand = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`""
 New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AssistantExtensionUpdater' -Value $runCommand -PropertyType String -Force | Out-Null

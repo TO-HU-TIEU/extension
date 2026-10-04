@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Assistant",
   "description": "Trợ lý nội dung theo ngữ cảnh, hỗ trợ phản hồi và tạo bài từ nhiều nguồn.",
-  "version": "1.5.10",
+  "version": "1.5.11",
   "minimum_chrome_version": "116",
   "permissions": [
     "sidePanel",
