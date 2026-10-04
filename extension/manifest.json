@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "Assistant",
+  "description": "Trợ lý nội dung theo ngữ cảnh, hỗ trợ phản hồi và tạo bài từ nhiều nguồn.",
+  "version": "1.5.8",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "sidePanel",
+    "scripting",
+    "storage",
+    "clipboardWrite",
+    "activeTab",
+    "alarms"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://www.x.com/*",
+    "https://twitter.com/*",
+    "https://www.twitter.com/*",
+    "https://pbs.twimg.com/*",
+    "https://video.twimg.com/*",
+    "https://raw.githubusercontent.com/*",
+    "https://api.openai.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "http://127.0.0.1/*",
+    "https://api.github.com/*"
+  ],
+  "action": {
+    "default_title": "Mở Assistant"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://x.com/*",
+        "https://www.x.com/*",
+        "https://twitter.com/*",
+        "https://www.twitter.com/*"
+      ],
+      "js": [
+        "language.js",
+        "reply-preferences.js",
+        "reply-layout.js",
+        "x-media.js",
+        "x-content.js",
+        "x-personalization.js"
+      ],
+      "css": [
+        "x-content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
