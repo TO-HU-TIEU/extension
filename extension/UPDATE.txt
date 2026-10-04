@@ -1,4 +1,4 @@
-Assistant 1.5.8
+Assistant 1.5.9
 Giải nén và chép các file vào thư mục extension đang dùng.
 Giữ nguyên config.local.js. Trong Chrome, mở trang quản lý tiện ích và bấm Tải lại Assistant.
 Tải lại trang X để áp dụng bản mới. Cài đặt và kết nối được giữ nguyên.

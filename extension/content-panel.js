@@ -123,7 +123,7 @@
   }
   $c('contentInboxTab').onclick = () => { view = 'inbox';selected.clear();render(); };
   $c('contentQueueTab').onclick = () => { view = 'queue';selected.clear();render(); };
-  $c('contentOpenSources').onclick = () => { showSettings(true); $c('contentSources').focus(); };
+  $c('contentOpenSources').onclick = () => { $c('contentSettings').open = !$c('contentSettings').open; if ($c('contentSettings').open) $c('contentSources').focus(); };
   $c('saveContentSources').onclick = async () => {
     try {
     const sources = ContentCore.sourceRules($c('contentSources').value), enabled = $c('contentScanEnabled').checked;
