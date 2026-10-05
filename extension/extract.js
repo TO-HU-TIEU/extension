@@ -8,17 +8,19 @@
     }
     return false;
   }
+  const safeUrl = (value, base = location.origin) => { try { return new URL(value, base); } catch { return null; } };
+  const urlPath = (value, base = location.origin) => safeUrl(value, base)?.pathname || '';
   function ownPermalink(article) {
     return [...article.querySelectorAll('a[href]')].find(anchor => {
       if (!anchor.querySelector('time') || anchor.closest('article') !== article || insideQuote(anchor, article)) return false;
-      const path = new URL(anchor.href, location.origin).pathname;
+      const path = urlPath(anchor.href);
       return /^\/[A-Za-z0-9_]{1,15}\/status\/\d+$/.test(path);
     });
   }
   const articles = [...document.querySelectorAll('main article[data-testid="tweet"]')];
   const target = articles.find(article => {
     const anchor = ownPermalink(article);
-    return anchor && new URL(anchor.href).pathname.match(/\/status\/(\d+)$/)?.[1] === postId;
+    return anchor && urlPath(anchor.href).match(/\/status\/(\d+)$/)?.[1] === postId;
   });
   if (!target) return { error: 'Chưa thấy đúng bài theo ID trên URL. Chờ X tải xong, cuộn tới bài rồi bấm Đọc bài X.' };
   const originalLabels = /^(?:hiện|xem) bản gốc$|^show original$|^view original$/i;
@@ -90,7 +92,7 @@
     mediaUrls = [...new Set([...mediaUrls, ...urls])].slice(0, 4);
     const count = [...article.querySelectorAll('[data-testid="tweetPhoto"], [data-testid="videoPlayer"], video')].filter(el => el.closest('article') === article && !insideQuote(el, article)).length;
     mediaCount += count;
-    return { turn: index + 1, author: new URL(ownPermalink(article).href).pathname.split('/')[1], text: textNode(article).innerText.trim(), media_count: count };
+    return { turn: index + 1, author: urlPath(ownPermalink(article)?.href).split('/')[1] || '', text: textNode(article).innerText.trim(), media_count: count };
   });
   const context = JSON.stringify({ order: 'oldest_to_newest', instruction: text ? 'Reply to target_text as the next turn; ancestors and embedded context explain references only.' : 'The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview as the context being reacted to.', turns, embedded }).slice(0, 3000);
   const expandable = Boolean(target.querySelector('[data-testid="tweet-text-show-more-link"]'));
