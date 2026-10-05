@@ -1,7 +1,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const current = chrome.runtime.getManifest().version;
-  $('extensionVersion').textContent = `Đang dùng phiên bản ${current}`;
+  const setVersion = newest => { $('extensionVersion').textContent = `Đang dùng phiên bản ${current}${newest ? ' (Mới nhất)' : ''}`; };
+  setVersion(false);
   let latest = null;
   let updaterReady = false;
   async function updaterStatus() {
@@ -32,6 +33,7 @@
     }
   };
   $('setupExtensionUpdater').onclick = () => chrome.tabs.create({url:'https://github.com/TO-HU-TIEU/extension/releases/latest/download/install-assistant-updater.cmd'});
+  $('extensionReleaseLink').onclick = event => event.stopPropagation();
   updaterStatus();
   if (chrome.storage?.local) chrome.storage.local.get('extensionUpdatedTo').then(value => {
     if (value.extensionUpdatedTo === current) {
@@ -48,10 +50,12 @@
     $('extensionReleaseLink').hidden = true;
     $('extensionUpdateHelp').hidden = true;
     $('extensionUpdateStatus').textContent = 'Đang kiểm tra…';
+    setVersion(false);
     try {
       latest = await ExtensionUpdates.check();
       const available = ExtensionUpdates.newer(latest.version, current);
-      $('extensionUpdateStatus').textContent = available ? `Có phiên bản mới ${latest.version}` : 'Bạn đang dùng phiên bản mới nhất.';
+      setVersion(!available);
+      $('extensionUpdateStatus').textContent = available ? `Có phiên bản mới ${latest.version}` : '';
       $('downloadExtensionUpdate').hidden = !available;
       $('extensionReleaseLink').href = latest.page;
       $('extensionReleaseLink').hidden = false;

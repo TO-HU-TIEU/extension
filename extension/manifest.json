@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Assistant",
   "description": "Trợ lý nội dung theo ngữ cảnh, hỗ trợ phản hồi và tạo bài từ nhiều nguồn.",
-  "version": "1.5.12",
+  "version": "1.5.21",
   "minimum_chrome_version": "116",
   "permissions": [
     "sidePanel",
@@ -24,6 +24,7 @@
     "https://video.twimg.com/*",
     "https://raw.githubusercontent.com/*",
     "https://api.openai.com/*",
+    "https://api.deepseek.com/*",
     "https://generativelanguage.googleapis.com/*",
     "http://127.0.0.1/*",
     "https://api.github.com/*"

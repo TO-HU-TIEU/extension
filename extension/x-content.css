@@ -26,3 +26,4 @@
 .xra-box,.xra-person-dialog,.xra-person-menu,.xra-person-tag,.xra-tool-label{font-family:var(--xra-font,Arial,system-ui,sans-serif)}
 .xra-generation-time{display:block;margin-top:6px;font-size:10px;opacity:.6;text-align:right;color:inherit}
 .xra-tools-group:not(.xra-tools-hidden)>.xra-auto-suggest,.xra-tools-group:not(.xra-tools-hidden)>.xra-auto-like,.xra-tools-group:not(.xra-tools-hidden)>.xra-auto-reply{display:grid}.xra-auto-panel label[hidden]{display:none}
+.xra-hidden-ad{display:none!important}

@@ -121,7 +121,7 @@ const server = http.createServer(async (req, res) => {
         let last = 0;
         let result = await consumeResponseStream(response, () => {
           if (Date.now() - last > 400) { send({ type: 'progress' }); last = Date.now(); }
-        }, post.reply_count,raw=>parseReplies(raw,post.reply_count,true));
+        }, post.reply_count,raw=>parseReplies(raw,post.reply_count,true,post.language_hint,post));
         result=await completeTranslations(result,post,model,mode,async request=>{const translation=await openai('responses',credential.token,{method:'POST',body:JSON.stringify(request),signal:controller.signal});return consumeResponseStream(translation,()=>{},post.reply_count,JSON.parse)});
         if (post.media_expected && (!result.grounding?.media_observation?.trim() || result.grounding.confidence === 'no_media')) throw new Error('Mô hình chưa phân tích được media. Hãy tạo lại hoặc chọn model multimodal khác.');
         for (const [key, value] of cache) if (value.until < Date.now()) cache.delete(key);
