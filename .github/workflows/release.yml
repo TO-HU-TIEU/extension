@@ -26,11 +26,14 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$releaseVersion") { throw 'Version tag mismatch' }
           if (Test-Path extension/config.local.js) { throw 'Personal connection must not be published' }
           Compress-Archive -Path extension/* -DestinationPath "assistant-update-$releaseVersion.zip"
-          Compress-Archive -Path companion/* -DestinationPath "assistant-updater-$releaseVersion.zip"
-          Copy-Item companion/install-assistant-updater.cmd .
       - name: Publish stable version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $releaseVersion = (Get-Content extension/manifest.json | ConvertFrom-Json).version
-          gh release create "v$releaseVersion" "assistant-update-$releaseVersion.zip" "assistant-updater-$releaseVersion.zip" install-assistant-updater.cmd --repo TO-HU-TIEU/extension --title "Assistant $releaseVersion" --notes "Thiết lập trình cập nhật một lần bằng install-assistant-updater.cmd. Sau đó dùng Cập nhật ngay trong Assistant; tự tải, giải nén, sao lưu và giữ nguyên kết nối. Đã kèm bộ chạy, không cần cài Node.js riêng."
+          $tag = "v$releaseVersion"
+          gh release view $tag --repo TO-HU-TIEU/extension *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete $tag --repo TO-HU-TIEU/extension --yes
+          }
+          gh release create $tag "assistant-update-$releaseVersion.zip" --repo TO-HU-TIEU/extension --title "Assistant $releaseVersion" --notes "Tải assistant-update-$releaseVersion.zip, giải nén và chép đè vào thư mục extension đang dùng, sau đó bấm Reload trong chrome://extensions."
