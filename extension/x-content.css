@@ -27,3 +27,5 @@
 .xra-generation-time{display:block;margin-top:6px;font-size:10px;opacity:.6;text-align:right;color:inherit}
 .xra-tools-group:not(.xra-tools-hidden)>.xra-auto-suggest,.xra-tools-group:not(.xra-tools-hidden)>.xra-auto-like,.xra-tools-group:not(.xra-tools-hidden)>.xra-auto-reply{display:grid}.xra-auto-panel label[hidden]{display:none}
 .xra-hidden-ad{display:none!important}
+
+.xra-sidebar-hidden{display:none!important}.xra-sidebar-box{margin:10px 0 0!important;width:100%;box-sizing:border-box}.xra-sidebar-box .xra-tools{align-items:center}.xra-sidebar-box .xra-results{align-items:stretch}.xra-sidebar-box .xra-chip{font-size:13px}.xra-sidebar-box .xra-count-menu{right:0;left:auto}
