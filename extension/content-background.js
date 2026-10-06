@@ -32,25 +32,46 @@
     });
     registrations = work.catch(() => {}); return work;
   }
+  function geminiKeys(s) {
+    const keys = [];
+    if (s.geminiKey) keys.push(s.geminiKey);
+    for (const item of Array.isArray(s.geminiKeys) ? s.geminiKeys : []) {
+      const key = typeof item === 'string' ? item : item?.key;
+      if (key && key !== s.geminiKey && (typeof item === 'string' || item.enabled)) keys.push(key);
+    }
+    return keys;
+  }
+  const quotaError = text => /(?:quota|rate.?limit|RESOURCE_EXHAUSTED|high demand|too many requests|429|503|retry)/iu.test(String(text || ''));
   async function provider() {
-    const s = await chrome.storage.local.get(['provider', 'geminiKey', 'geminiModel', 'apiKey', 'apiModel']);
-    if (s.provider === 'gemini' && s.geminiKey) return { kind: 'gemini', key: s.geminiKey, model: s.geminiModel || 'gemini-3.1-flash-lite' };
+    const s = await chrome.storage.local.get(['provider', 'geminiKey', 'geminiKeys', 'geminiModel', 'apiKey', 'apiModel']);
+    const keys = geminiKeys(s);
+    if (s.provider === 'gemini' && keys.length) return { kind: 'gemini', keys, model: s.geminiModel || 'gemini-3.1-flash-lite' };
     if (s.provider === 'api' && s.apiKey) return { kind: 'api', key: s.apiKey, model: s.apiModel || 'gpt-4.1-mini' };
-    if (s.geminiKey) return { kind: 'gemini', key: s.geminiKey, model: s.geminiModel || 'gemini-3.1-flash-lite' };
+    if (keys.length) return { kind: 'gemini', keys, model: s.geminiModel || 'gemini-3.1-flash-lite' };
     if (s.apiKey) return { kind: 'api', key: s.apiKey, model: s.apiModel || 'gpt-4.1-mini' };
     throw new Error('Kết nối Gemini hoặc OpenAI API trong Cài đặt để dịch và soạn Content.');
   }
   async function ai(instructions, input, schema, maxTokens) {
     const p = await provider(), signal = AbortSignal.timeout(25000);
-    const response = p.kind === 'gemini'
-      ? await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(p.model)}:generateContent?key=${encodeURIComponent(p.key)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: instructions }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify(input) }] }],
-          generationConfig: { responseMimeType: 'application/json', responseJsonSchema: schema, maxOutputTokens: maxTokens, temperature: .35 } }) })
-      : await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' }, signal,
+    const geminiBody = { systemInstruction: { parts: [{ text: instructions }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify(input) }] }],
+      generationConfig: { responseMimeType: 'application/json', responseJsonSchema: schema, maxOutputTokens: maxTokens, temperature: .35 } };
+    let response, data;
+    if (p.kind === 'gemini') {
+      let last = '';
+      for (let i = 0; i < p.keys.length; i++) {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(p.model)}:generateContent?key=${encodeURIComponent(p.keys[i])}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal, body: JSON.stringify(geminiBody) });
+        try { data = await response.json(); } catch { data = {}; }
+        if (response.ok) break;
+        last = data.error?.message || `AI HTTP ${response.status}`;
+        if (!quotaError(last) || i === p.keys.length - 1) throw new Error(`AI HTTP ${response.status}. Kiểm tra kết nối hoặc hạn mức rồi thử lại.`);
+      }
+    } else {
+      response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' }, signal,
         body: JSON.stringify({ model: p.model, instructions, input: JSON.stringify(input), store: false, max_output_tokens: maxTokens,
           text: { format: { type: 'json_schema', name: 'content_result', strict: true, schema } } }) });
-    let data; try { data = await response.json(); } catch { throw new Error(`Không đọc được phản hồi AI (HTTP ${response.status}).`); }
+      try { data = await response.json(); } catch { throw new Error(`Không đọc được phản hồi AI (HTTP ${response.status}).`); }
+    }
     if (!response.ok) throw new Error(`AI HTTP ${response.status}. Kiểm tra kết nối hoặc hạn mức rồi thử lại.`);
     const raw = p.kind === 'gemini' ? (data.candidates?.[0]?.content?.parts || []).map(part => part.text || '').join('')
       : (data.output || []).flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text || '').join('');
@@ -186,7 +207,7 @@
   chrome.runtime.onStartup.addListener(() => settings().then(register).then(runJobs).catch(console.error));
   chrome.permissions.onRemoved.addListener(() => settings().then(register).catch(console.error));
   chrome.storage.onChanged?.addListener((changes, area) => {
-    if (area !== 'local' || !['provider', 'geminiKey', 'apiKey'].some(key => changes[key])) return;
+    if (area !== 'local' || !['provider', 'geminiKey', 'geminiKeys', 'apiKey'].some(key => changes[key])) return;
     mutate(state => {
       for (const item of state.items) {
         if (item.translationStatus === 'error' && item.translationError?.startsWith('Kết nối Gemini')) { item.translationStatus = 'waiting'; item.translationError = ''; }
