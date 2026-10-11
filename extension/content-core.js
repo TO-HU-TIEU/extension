@@ -1,6 +1,32 @@
 (() => {
   const limit=(key,fallback)=>globalThis.RemoteConfig?.get('limits')?.[key]||fallback;
   const clean = value => String(value || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  function stripSourceFooter(value) {
+    let text = clean(value), changed = true;
+    const source = '(?:Odaily|PA\\s*News|PANews|The\\s*Block|CoinDesk|Cointelegraph|Bloomberg|Reuters|Decrypt|Wu\\s*Blockchain|SoSoValue|CryptoSlate|TechFlow|Foresight\\s*News|BlockBeats|NewsBTC|U\\.Today|Watcher\\s*Guru|[A-Z][A-Za-z0-9&.,\\- ]{1,40}(?:News|Daily|Research|Capital|Labs|Media))';
+    const bracketed = new RegExp(`(?:\\s*(?:\\[|【|\\()\\s*${source}\\s*(?:\\]|】|\\))[.。]*)+$`, 'iu');
+    const anyBracketedFooter = /(?:\s*(?:\[[^\]\n]{1,80}\]|【[^】\n]{1,80}】)[.。]*)+$/u;
+    const bareLine = new RegExp(`(?:\\n\\s*(?:Source\\s*:\\s*)?${source}\\s*[.。]*)+$`, 'iu');
+    while (changed) {
+      const next = clean(text.replace(bracketed, '').replace(anyBracketedFooter, '').replace(bareLine, ''));
+      changed = next !== text; text = next;
+    }
+    return text;
+  }
+  function normalizeTitle(value) {
+    return clean(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  }
+  function stripRepeatedLead(title, value) {
+    let text = clean(value), key = normalizeTitle(title);
+    if (!text || !key) return text;
+    const parts = text.split(/\n+/).map(part => part.trim()).filter(Boolean);
+    if (parts.length > 1 && normalizeTitle(parts[0]) === key) text = clean(parts.slice(1).join('\n\n'));
+    const escaped = String(title || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const direct = escaped && new RegExp('^' + escaped + '\\s*([.!?。！？:]\\s*)?', 'iu');
+    if (direct && direct.test(text)) return clean(text.replace(direct, ''));
+    const firstSentence = text.match(/^(.{8,260}?[.!?。！？])\s+/u)?.[1];
+    return firstSentence && normalizeTitle(firstSentence.replace(/[.!?。！？]+$/u, '')) === key ? clean(text.slice(firstSentence.length)) : text;
+  }
   function sourceRules(value) {
     const lines = Array.isArray(value) ? value : String(value || '').split('\n');
     const rules = [...new Set(lines.map(line => String(line).trim()).filter(Boolean).map(line => {
@@ -28,16 +54,18 @@
     return (hash >>> 0).toString(36);
   }
   function article(input, sourceUrl) {
-    const text = clean(input.text).slice(0, limit('maxSourceCharacters',10000));
-    if (text.length < limit('minSourceCharacters',80)) return null;
+    const rawText = stripSourceFooter(input.text).slice(0, limit('maxSourceCharacters',10000));
+    if (rawText.length < limit('minSourceCharacters',80)) return null;
     let url; try { url = new URL(input.url || sourceUrl, sourceUrl); } catch { return null; }
     if (url.protocol !== 'https:' || url.username || url.password) return null;
     url.hash = '';
     for (const key of [...url.searchParams.keys()]) if (/^(utm_|fbclid|gclid)/i.test(key)) url.searchParams.delete(key);
     const page = new URL(sourceUrl); page.hash = '';
+    const explicitTitle = clean(input.title).slice(0, 200), title = explicitTitle || rawText.split('\n')[0].slice(0, 160), candidateText = explicitTitle ? stripRepeatedLead(title, rawText) : rawText, text = candidateText.length >= limit('minSourceCharacters',80) ? candidateText : rawText;
+    if (text.length < limit('minSourceCharacters',80)) return null;
     const identity = url.href === page.href ? `${url.href}|${text}` : url.href;
     return { id: 'article-' + fingerprint(identity), url: url.href, sourceUrl: page.href,
-      title: clean(input.title).slice(0, 200) || text.split('\n')[0].slice(0, 160), text,
+      title, text,
       language: globalThis.X_REPLY_LANGUAGE(text, clean(input.lang).slice(0, 35)),
       publishedAt: globalThis.ContentReader?.date(input.publishedAt) || null, publishedApproximate:!!input.publishedApproximate,publishedLabel:clean(input.publishedLabel).slice(0,60), discoveredAt: new Date().toISOString(), status: 'inbox', translationStatus: 'waiting', translationVi: null, drafts: [] };
   }
@@ -96,6 +124,6 @@
   }
   function ordered(items){return items.slice().sort((a,b)=>Number(!!b.publishedAt)-Number(!!a.publishedAt)||(Date.parse(b.publishedAt||b.discoveredAt)||0)-(Date.parse(a.publishedAt||a.discoveredAt)||0))}
   function batch(state,ids,action){const selected=[...new Set(ids)].filter(id=>state.items.some(item=>item.id===id&&item.status==='inbox'));if(!['queue','skip'].includes(action))throw new Error('Thao tác không hợp lệ.');if(action==='queue'&&state.items.filter(item=>item.status!=='inbox').length+selected.length>limit('maxQueue',120))throw new Error('Mục chờ đăng đã đầy.');for(const id of selected)transition(state,id,action);return selected.length}
-  function clearInbox(state){const ids=state.items.filter(item=>item.status==='inbox').map(item=>item.id);state.items=state.items.filter(item=>item.status!=='inbox');state.skipped=[...new Set([...state.skipped,...ids])].slice(-500);return ids.length}
-  globalThis.ContentCore = { limit, ordered, batch, clearInbox, clean, sourceRules, matches, origins, article, emptyState, ingest, transition, swipe, drafts };
+  function clearInbox(state){const count=state.items.length;state.items=[];state.skipped=[];return count}
+  globalThis.ContentCore = { limit, ordered, batch, clearInbox, clean, stripSourceFooter, stripRepeatedLead, sourceRules, matches, origins, article, emptyState, ingest, transition, swipe, drafts };
 })();

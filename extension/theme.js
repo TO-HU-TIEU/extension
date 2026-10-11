@@ -7,8 +7,8 @@
   let readyResolve;
   const ready = new Promise(resolve => { readyResolve = resolve; });
   const palette = {
-    dark: { bg: '#000000', surface: '#000000', raised: '#16181c', border: '#2f3336', text: '#e7e9ea', muted: '#71767b', accent: '#1d9bf0' },
-    light: { bg: '#ffffff', surface: '#ffffff', raised: '#f7f9f9', border: '#cfd9de', text: '#0f1419', muted: '#536471', accent: '#1d9bf0' }
+    dark: { bg: '#101419', surface: '#171b21', raised: '#1d232b', border: '#303842', text: '#edf1f5', muted: '#9aa4af', accent: '#1d9bf0' },
+    light: { bg: '#f7f9fb', surface: '#ffffff', raised: '#eef2f5', border: '#aeb8c2', text: '#0b1117', muted: '#405261', accent: '#0969da' }
   };
   const normalize = value => value === 'light' ? 'light' : 'dark';
   function paint(next) {

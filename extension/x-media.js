@@ -1,4 +1,6 @@
 (() => {
+  const insideQuote = (element, article) => { for (let node = element?.parentElement; node && node !== article; node = node.parentElement) if (node.dataset?.testid === 'quoteTweet' || (node.tagName !== 'A' && node.getAttribute?.('role') === 'link')) return true; return false; };
+  const ownElements = article => [...(article?.querySelectorAll('video,[data-testid="tweetPhoto"] img,[data-testid="videoPlayer"] img') || [])].filter(e => e.closest('article') === article && !insideQuote(e, article) && !e.closest('[data-testid="card.layoutLarge.media"]'));
   const ready = el => el.tagName === 'VIDEO' ? el.readyState >= 2 && el.videoWidth > 0 : el.complete && el.naturalWidth > 0;
   const posterUrl = value => { try { const u = new URL(value); return u.protocol === 'https:' && u.hostname === 'pbs.twimg.com' && /^\/(?:ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\//.test(u.pathname); } catch { return false; } };
   function wait(el, ms) {
@@ -29,7 +31,11 @@
     } catch { return null; }
   }
   async function collect(article, fast = false) {
-    const frames = [], notes = [], capturedUrls = [], elements = [...(article?.querySelectorAll('video,[data-testid="tweetPhoto"] img,[data-testid="videoPlayer"] img') || [])].filter(e => e.closest('article') === article && !e.closest('[data-testid="card.layoutLarge.media"]')).sort((a, b) => (b.tagName === 'VIDEO') - (a.tagName === 'VIDEO'));
+    let elements = ownElements(article);
+    const hasOwnMediaShell = () => [...(article?.querySelectorAll('[data-testid="tweetPhoto"],[data-testid="videoPlayer"],video') || [])].some(e => e.closest('article') === article && !insideQuote(e, article) && !e.closest('[data-testid="card.layoutLarge.media"]'));
+    if (!elements.length && hasOwnMediaShell()) for (let elapsed = 0; elapsed < 2000 && !elements.length; elapsed += 100) { await new Promise(resolve => setTimeout(resolve, 100)); elements = ownElements(article); }
+    elements.sort((a, b) => (b.tagName === 'VIDEO') - (a.tagName === 'VIDEO'));
+    const frames = [], notes = [], capturedUrls = [];
     const limit = fast ? 3 : 5;
     const posterAvailable = elements.some(el => posterUrl(el.poster) || posterUrl(el.currentSrc || el.src));
     // Ready frames and poster URLs can be submitted immediately in fast mode.
@@ -56,7 +62,7 @@
     return { mediaInline: frames, mediaCapturedUrls: capturedUrls, mediaFrameNotes: notes.join('; '), fastMode: fast };
   }
   const pending = new WeakMap();
-  const signature = (article, fast) => JSON.stringify([fast, [...(article?.querySelectorAll('video,[data-testid="tweetPhoto"] img,[data-testid="videoPlayer"] img') || [])].map(el => el.currentSrc || el.src || el.poster || '')]);
+  const signature = (article, fast) => JSON.stringify([fast, ownElements(article).map(el => el.currentSrc || el.src || el.poster || '')]);
   function prime(article, fast = false) { if (!article) return; const key = signature(article, fast), old = pending.get(article); if (old?.key === key && Date.now() - old.at < 2000) return; const promise = collect(article, fast); pending.set(article, { key, at: Date.now(), promise }); promise.catch(() => {}); }
   async function capture(article, fast = false) { const old = article && pending.get(article); if (article) pending.delete(article); if (old?.key === signature(article, fast) && Date.now() - old.at < 2000) return old.promise; return collect(article, fast); }
   globalThis.XReplyMedia = { ready, wait, capture, prime };

@@ -8,18 +8,23 @@
     }
     return false;
   }
+  const safeUrl = (value, base = location.origin) => { try { return new URL(value, base); } catch { return null; } };
+  const urlPath = (value, base = location.origin) => safeUrl(value, base)?.pathname || '';
   function ownPermalink(article) {
     return [...article.querySelectorAll('a[href]')].find(anchor => {
       if (!anchor.querySelector('time') || anchor.closest('article') !== article || insideQuote(anchor, article)) return false;
-      const path = new URL(anchor.href, location.origin).pathname;
+      const path = urlPath(anchor.href);
       return /^\/[A-Za-z0-9_]{1,15}\/status\/\d+$/.test(path);
     });
   }
   const articles = [...document.querySelectorAll('main article[data-testid="tweet"]')];
-  const target = articles.find(article => {
+  const exactTarget = articles.find(article => {
     const anchor = ownPermalink(article);
-    return anchor && new URL(anchor.href).pathname.match(/\/status\/(\d+)$/)?.[1] === postId;
+    return anchor && urlPath(anchor.href).match(/\/status\/(\d+)$/)?.[1] === postId;
   });
+  const editor = document.querySelector('[data-testid="tweetTextarea_0"]');
+  const beforeEditor = editor ? articles.filter(article => article.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).at(-1) : null;
+  const target = exactTarget || beforeEditor;
   if (!target) return { error: 'Chưa thấy đúng bài theo ID trên URL. Chờ X tải xong, cuộn tới bài rồi bấm Đọc bài X.' };
   const originalLabels = /^(?:hiện|xem) bản gốc$|^show original$|^view original$/i;
   const translatedLabels = /được dịch từ|translated from/i;
@@ -49,8 +54,22 @@
     });
     return originalForeign || notTranslated || nodes[0];
   }
+  function embeddedContext(article) {
+    const quoted = [...article.querySelectorAll('[data-testid="quoteTweet"]')]
+      .filter(node => node.closest('article') === article)
+      .slice(0, 2)
+      .map(node => ({ type: 'quoted_post', text: (node.innerText || node.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 1200) }))
+      .filter(item => item.text);
+    const cards = [...article.querySelectorAll('[data-testid^="card."], [data-testid="card.layoutLarge.media"], [data-testid="card.layoutSmall.media"]')]
+      .filter(node => node.closest('article') === article && !node.closest('[data-testid="quoteTweet"]'))
+      .slice(0, 2)
+      .map(node => ({ type: 'link_preview', text: (node.innerText || node.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 800) }))
+      .filter(item => item.text);
+    return [...quoted, ...cards];
+  }
   const node = textNode(target);
   const text = node?.innerText?.trim() || '';
+  const embedded = embeddedContext(target);
   const userName = target.querySelector('[data-testid="User-Name"]');
   const displayName = [...(userName?.querySelectorAll('span') || [])].map(el => el.textContent?.trim()).find(value => value && !value.startsWith('@') && value !== '·') || username;
   const avatarUrl = target.querySelector('[data-testid="Tweet-User-Avatar"] img')?.src || '';
@@ -68,7 +87,7 @@
   const previewMediaUrls = [...mediaUrls];
   const hasVideo = Boolean([...target.querySelectorAll('[data-testid="videoPlayer"], video')].find(el => el.closest('article') === target && !insideQuote(el, target) && !el.closest('[data-testid="card.layoutLarge.media"]')));
   let mediaCount = [...target.querySelectorAll('[data-testid="tweetPhoto"], [data-testid="videoPlayer"], video')].filter(el => el.closest('article') === target && !insideQuote(el, target) && !el.closest('[data-testid="card.layoutLarge.media"]')).length;
-  const before = articles.slice(0, articles.indexOf(target)).filter(article => !article.querySelector('[data-testid="placementTracking"]') && ownPermalink(article) && textNode(article)).slice(-6);
+  const before = articles.slice(0, articles.indexOf(target)).filter(article => !article.querySelector('[data-testid="placementTracking"]') && textNode(article)).slice(-6);
   for (const article of before) await restoreOriginal(article);
   const turns = before.map((article, index) => {
     const ancestorMedia = [...article.querySelectorAll('[data-testid="tweetPhoto"] img, [data-testid="videoPlayer"] img, video[poster], source[src]')].filter(el => el.closest('article') === article && !insideQuote(el, article));
@@ -76,17 +95,17 @@
     mediaUrls = [...new Set([...mediaUrls, ...urls])].slice(0, 4);
     const count = [...article.querySelectorAll('[data-testid="tweetPhoto"], [data-testid="videoPlayer"], video')].filter(el => el.closest('article') === article && !insideQuote(el, article)).length;
     mediaCount += count;
-    return { turn: index + 1, author: new URL(ownPermalink(article).href).pathname.split('/')[1], text: textNode(article).innerText.trim(), media_count: count };
+    return { turn: index + 1, author: urlPath(ownPermalink(article)?.href).split('/')[1] || '', text: textNode(article).innerText.trim(), media_count: count };
   });
-  const context = JSON.stringify({ order: 'oldest_to_newest', instruction: 'Reply to target_text as the next turn; ancestors are context, not the message to answer.', turns }).slice(0, 3000);
+  const context = JSON.stringify({ order: 'oldest_to_newest', instruction: text ? 'Reply to target_text as the next turn. If target_text is a short reaction/comment, use the nearest ancestor/root post as the main topic and write a reply that connects the comment to that original context; do not answer the short comment in isolation.' : 'The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview as the context being reacted to.', turns, embedded }).slice(0, 3000);
   const expandable = Boolean(target.querySelector('[data-testid="tweet-text-show-more-link"]'));
   const captured=globalThis.XReplyMedia?await globalThis.XReplyMedia.capture(target,!!(await chrome.storage.local.get('fastReplyMode')).fastReplyMode):{};
   return {
     url: `https://x.com/${username}/status/${postId}`, postId, username, displayName, avatarUrl, text,
     ...captured,
-    publishedAt: target.querySelector('time')?.dateTime || '', generatedAt: new Date().toISOString(), clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+    publishedAt: target.querySelector('time')?.dateTime || '', generatedAt: new Date().toISOString(), clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '', clientLocalHour: new Date().getHours(),
     lang: scriptLanguage(text, node?.getAttribute('lang') || ''), context, mediaCount, mediaUrls, previewMediaUrls, mediaKind: hasVideo ? 'video_thumbnail' : mediaCount ? 'images' : 'none', expandable,
-    warning: !text ? 'Bài không có văn bản. Hãy nhập nội dung/ngữ cảnh bằng tay.' :
+    warning: !text && !(mediaUrls.length || captured.mediaInline?.length || embedded.length) ? 'Bài không có văn bản và chưa lấy được media để phân tích.' :
       expandable ? 'Bài có nút Show more: mở rộng toàn bộ nội dung rồi đọc lại để tránh thiếu ngữ cảnh.' :
       mediaCount ? mediaUrls.length||captured.mediaInline?.length ? `Đã nhận ${mediaUrls.length+(captured.mediaInline?.length||0)} ${hasVideo ? 'thumbnail video/ảnh' : 'ảnh'} để phân tích cùng nội dung.` : 'Phát hiện media nhưng chưa lấy được dữ liệu ảnh. Không nên tạo gợi ý cho đến khi tải lại bài.' : ''
   };
