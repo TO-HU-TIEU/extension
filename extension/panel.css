@@ -420,8 +420,6 @@ html[data-theme="light"] .quote-card .icon:hover{color:#0759b5!important;backgro
 html[data-theme="light"] .settings-card .provider>button{opacity:1!important;background:#fff!important;color:#1c2733!important;border:1px solid #b8c4cf!important;box-shadow:none!important}
 html[data-theme="light"] .settings-card .provider>button:hover{border-color:#1976d2!important;background:#f3f8ff!important}
 html[data-theme="light"] .settings-card .provider>button.active{background:#e5f2ff!important;border-color:#1976d2!important;box-shadow:inset 0 0 0 1px #1976d2,0 0 0 2px #1976d226!important}
-html[data-theme="light"] .settings-card .provider-logo[data-icon="chatgpt"]{height:34px!important}
-html[data-theme="light"] .settings-card .provider-logo[data-icon="chatgpt"] .ui-icon{width:58px!important;height:34px!important;max-width:none!important}
 html[data-theme="light"] .settings-card .provider>button small{color:#405261!important;opacity:1!important;font-weight:650}
 html[data-theme="light"] .settings-card .key-row label{color:#1c2733!important;font-weight:650}
 html[data-theme="light"] .settings-card .key-row code{color:#174f8f!important;font-weight:600}
