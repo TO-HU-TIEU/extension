@@ -98,3 +98,5 @@ function decorateQuotePostCard(post={}){const card=$('quotePostCard');if(!card||
 chrome.storage.local.get('quoteAnalysisState').then(({quoteAnalysisState})=>decorateQuotePostCard(quoteAnalysisState?.quotePost||{})).catch(()=>{});
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.quoteAnalysisState)decorateQuotePostCard(changes.quoteAnalysisState.newValue?.quotePost||{})});
 $('clearQuotePost')?.addEventListener('click',async()=>{const saved=await chrome.storage.local.get('quoteAnalysisState'),state=saved.quoteAnalysisState||{};await chrome.storage.local.set({quoteAnalysisState:{...state,quotePost:null,postUrl:'',draft:'',status:'idle',updatedAt:Date.now()}})});
+
+document.getElementById('autoReplyFlow')?.addEventListener('change',async()=>{const enabled=document.getElementById('autoReplyFlow').checked;await chrome.storage.local.set({autoReplyFlow:enabled,autoReply:enabled});const tab=await activeTab().catch(()=>null);if(tab?.id)chrome.tabs.sendMessage(tab.id,{type:'autoReplyFlow',enabled}).catch(()=>{})});
