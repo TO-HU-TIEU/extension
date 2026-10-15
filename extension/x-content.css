@@ -78,3 +78,6 @@ html[data-theme="light"] .xra-root,html[data-theme="light"] .xra-panel,html[data
 .xra-results:has(.xra-loading) { flex-direction:row; align-items:center; justify-content:flex-start; }
 .xra-loading-label { display:inline-flex; align-items:center; }
 @media(prefers-color-scheme:light){.xra-relevance{color:color-mix(in srgb,var(--xra-color,#0f1419) 84%,var(--xra-bg,#fff));}}
+.xra-assistant-fab .xra-assistant-logo{display:block;width:32px;height:32px;object-fit:contain;pointer-events:none}
+.xra-assistant-fab{top:8px;right:8px;bottom:auto!important}
+.xra-assistant-fab{touch-action:none;cursor:grab}.xra-assistant-fab:active{cursor:grabbing}

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Assistant",
   "description": "Trợ lý nội dung theo ngữ cảnh, hỗ trợ phản hồi và tạo bài từ nhiều nguồn.",
-  "version": "1.5.16",
+  "version": "1.5.22",
   "minimum_chrome_version": "116",
   "permissions": [
     "sidePanel",
@@ -32,17 +32,17 @@
   "action": {
     "default_title": "Mở Assistant",
     "default_icon": {
-      "16": "assets/assistant-logo.svg",
-      "32": "assets/assistant-logo.svg",
-      "48": "assets/assistant-logo.svg",
-      "128": "assets/assistant-logo.svg"
+      "16": "assets/assistant-mascot.png",
+      "32": "assets/assistant-mascot.png",
+      "48": "assets/assistant-mascot.png",
+      "128": "assets/assistant-mascot.png"
     }
   },
   "icons": {
-    "16": "assets/assistant-logo.svg",
-    "32": "assets/assistant-logo.svg",
-    "48": "assets/assistant-logo.svg",
-    "128": "assets/assistant-logo.svg"
+    "16": "assets/assistant-mascot.png",
+    "32": "assets/assistant-mascot.png",
+    "48": "assets/assistant-mascot.png",
+    "128": "assets/assistant-mascot.png"
   },
   "background": {
     "service_worker": "background.js"
@@ -64,7 +64,9 @@
         "x-media.js",
         "x-content.js",
         "x-personalization.js",
-        "follow.js"
+        "follow.js",
+        "follow-speed-content.js",
+        "follow-scroll-fix.js"
       ],
       "css": [
         "x-content.css",
@@ -80,7 +82,7 @@
     {
       "resources": [
         "assets/ai-generate.png",
-        "assets/assistant-logo.svg"
+        "assets/logo.svg"
       ],
       "matches": [
         "https://x.com/*",

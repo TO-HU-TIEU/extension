@@ -23,8 +23,12 @@
     return anchor && urlPath(anchor.href).match(/\/status\/(\d+)$/)?.[1] === postId;
   });
   const editor = document.querySelector('[data-testid="tweetTextarea_0"]');
-  const beforeEditor = editor ? articles.filter(article => article.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).at(-1) : null;
-  const target = exactTarget || beforeEditor;
+  // When replying to a comment on the user's own post, X keeps the URL on the
+  // root post but places the composer after the comment being answered. The
+  // editor context is more precise than the permalink in this case.
+  const editorArticle = editor?.closest('article[data-testid="tweet"]') || null;
+  const beforeEditor = editorArticle || (editor ? articles.filter(article => article.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).at(-1) : null);
+  const target = beforeEditor || exactTarget;
   if (!target) return { error: 'Chưa thấy đúng bài theo ID trên URL. Chờ X tải xong, cuộn tới bài rồi bấm Đọc bài X.' };
   const originalLabels = /^(?:hiện|xem) bản gốc$|^show original$|^view original$/i;
   const translatedLabels = /được dịch từ|translated from/i;
