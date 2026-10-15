@@ -578,3 +578,9 @@ html[data-theme="light"] .module-nav button.active{background:#fff!important;col
 #replySettings[hidden]{display:none!important}
 html[data-theme="light"] header.settings-open>.settings-button,
 html[data-theme="light"] header.settings-open>.settings-button:hover{background:transparent!important;color:#17202a!important;border-color:transparent!important;box-shadow:none!important}
+.reply-live-preview .toggle-row{min-height:52px;padding:10px 0;align-items:center}
+.reply-live-preview .toggle-row>div{display:flex;flex-direction:column;justify-content:center;min-height:32px}
+.reply-live-preview .toggle-row b{display:flex;align-items:center;gap:5px;line-height:16px}
+.reply-live-preview .reply-layout-help{display:inline-grid;place-items:center;width:16px;height:16px;margin:0;padding:0;border:1px solid var(--ui-border,#687582);border-radius:50%;background:transparent;color:var(--ui-muted,#8b98a6);font-size:10px;line-height:14px}
+.reply-live-preview .reply-layout-help:hover{background:transparent!important;color:var(--ui-text)!important;border-color:var(--ui-accent,#1d9bf0)!important}
+.config-summary{min-height:46px;align-items:center}
