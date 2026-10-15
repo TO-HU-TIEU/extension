@@ -1,4 +1,7 @@
-importScripts('config.local.js', 'language.js', 'reply-time.js', 'reply-preferences.js', 'content-presets.js', 'remote-config.js');
+importScripts('language.js', 'reply-time.js', 'reply-preferences.js', 'content-presets.js', 'remote-config.js');
+// config.local.js is optional and intentionally excluded from public releases.
+// Keep the service worker loadable on a fresh browser profile.
+globalThis.X_REPLY_CONFIG ||= Object.freeze({serverUrl:'http://127.0.0.1:8791',localToken:''});
 globalThis.RemoteConfig?.start();
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(console.error);
 const LOCAL=globalThis.X_REPLY_CONFIG;
