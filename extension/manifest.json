@@ -64,6 +64,7 @@
         "x-media.js",
           "x-content.js",
           "x-content-fix.js",
+          "auto-flow.js",
         "x-personalization.js",
         "follow.js",
         "follow-speed-content.js",
