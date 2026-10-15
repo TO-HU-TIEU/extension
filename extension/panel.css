@@ -566,3 +566,7 @@ html[data-theme="light"] .follow-filter-icon.tick-gray{color:#829aab!important}h
 .follow-tabs.follow-tabs-narrow button:not(.active) .follow-tab-label{display:none}
 .follow-tabs.follow-tabs-narrow button:not(.active)::after{content:none!important}
 .style-tone-card{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px}.style-tone-card>.section-head{grid-column:1/-1;margin-bottom:0}.style-tone-card>#stylePickerField,.style-tone-card>.inline-tone-field{min-width:0;margin:0;padding:10px;border:1px solid var(--ui-border,#2f3336);border-radius:9px;align-content:start}.style-tone-card>#stylePickerField>label,.style-tone-card>.inline-tone-field>label{display:block;margin:0 0 7px;font-size:12px}.style-tone-card>#stylePickerField .style-open{min-height:36px}.style-tone-card>.inline-tone-field{display:block}.style-tone-card>.inline-tone-field .tone-choice{width:100%}@media(max-width:430px){.style-tone-card{grid-template-columns:1fr}.style-tone-card>.section-head{grid-column:auto}}
+/* Keep navigation available while the panel content scrolls. */
+header{position:sticky;top:0;z-index:120;background:var(--panel-bg,#0b0f14)}
+.module-nav{position:sticky;top:var(--panel-header-height,64px);z-index:110;background:var(--panel-bg,#0b0f14)}
+#quoteWorkspace{display:none!important}
