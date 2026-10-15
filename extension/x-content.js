@@ -99,3 +99,5 @@ async function composeQuoteFromArticle(article,button){
 
 
 
+// Scope reply-editor detection to the active status article; never mount into X's global post composer.
+globalThis.__xraScopedEditorFix = true;
