@@ -576,6 +576,7 @@ html[data-theme="light"] .module-nav button{color:#526170!important}
 html[data-theme="light"] .module-nav button.active{background:#fff!important;color:#17202a!important;border-color:#b9c6d2!important;box-shadow:0 1px 3px #24344722!important}
 /* Settings view must not leak the reply-only prompt editor. */
 #replySettings[hidden]{display:none!important}
+body.settings-open #replySettings{display:none!important}
 html[data-theme="light"] header.settings-open>.settings-button,
 html[data-theme="light"] header.settings-open>.settings-button:hover{background:transparent!important;color:#17202a!important;border-color:transparent!important;box-shadow:none!important}
 .reply-live-preview .toggle-row{min-height:52px;padding:10px 0;align-items:center}
