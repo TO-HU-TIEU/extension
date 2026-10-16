@@ -566,28 +566,3 @@ html[data-theme="light"] .follow-filter-icon.tick-gray{color:#829aab!important}h
 .follow-tabs.follow-tabs-narrow button:not(.active) .follow-tab-label{display:none}
 .follow-tabs.follow-tabs-narrow button:not(.active)::after{content:none!important}
 .style-tone-card{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px}.style-tone-card>.section-head{grid-column:1/-1;margin-bottom:0}.style-tone-card>#stylePickerField,.style-tone-card>.inline-tone-field{min-width:0;margin:0;padding:10px;border:1px solid var(--ui-border,#2f3336);border-radius:9px;align-content:start}.style-tone-card>#stylePickerField>label,.style-tone-card>.inline-tone-field>label{display:block;margin:0 0 7px;font-size:12px}.style-tone-card>#stylePickerField .style-open{min-height:36px}.style-tone-card>.inline-tone-field{display:block}.style-tone-card>.inline-tone-field .tone-choice{width:100%}@media(max-width:430px){.style-tone-card{grid-template-columns:1fr}.style-tone-card>.section-head{grid-column:auto}}
-/* Keep navigation available while the panel content scrolls. */
-header{position:sticky;top:0;z-index:120;background:var(--panel-bg,#0b0f14)}
-.module-nav{position:sticky;top:var(--panel-header-height,64px);z-index:110;background:var(--panel-bg,#0b0f14)}
-#quoteWorkspace{display:none!important}
-html[data-theme="light"] header,html[data-theme="light"] .module-nav{background:#f7f9fb!important;color:#17202a!important}
-html[data-theme="light"] header{border-bottom:1px solid #d8e0e7!important}
-html[data-theme="light"] .module-nav button{color:#526170!important}
-html[data-theme="light"] .module-nav button.active{background:#fff!important;color:#17202a!important;border-color:#b9c6d2!important;box-shadow:0 1px 3px #24344722!important}
-/* Settings view must not leak the reply-only prompt editor. */
-#replySettings[hidden]{display:none!important}
-body.settings-open #replySettings{display:none!important}
-body[data-module="content"] #replySettings,body[data-module="follow"] #replySettings,body.settings-open #replySettings{display:none!important}
-html[data-theme="light"] header.settings-open>.settings-button,
-html[data-theme="light"] header.settings-open>.settings-button:hover{background:transparent!important;color:#17202a!important;border-color:transparent!important;box-shadow:none!important}
-.reply-live-preview .toggle-row{min-height:52px;padding:10px 0;align-items:center}
-.reply-live-preview .toggle-row>div{display:flex;flex-direction:column;justify-content:center;min-height:32px}
-.reply-live-preview .toggle-row b{display:flex;align-items:center;gap:5px;line-height:16px}
-.reply-live-preview .reply-layout-help{display:inline-grid;place-items:center;width:16px;height:16px;margin:0;padding:0;border:1px solid var(--ui-border,#687582);border-radius:50%;background:transparent;color:var(--ui-muted,#8b98a6);font-size:10px;line-height:14px}
-.reply-live-preview .reply-layout-help:hover{background:transparent!important;color:var(--ui-text)!important;border-color:var(--ui-accent,#1d9bf0)!important}
-.config-summary{min-height:46px;align-items:center}
-.reply-live-preview{padding:7px 10px}
-.reply-live-preview .section-head{min-height:28px;padding:0;align-items:center}
-.reply-live-preview .section-head h2,.reply-live-preview .toggle-row b{font-size:14px;line-height:20px;margin:0}
-.reply-live-preview .toggle-row{min-height:42px;padding:7px 0}
-.reply-live-preview .compact-switch{align-self:center}
