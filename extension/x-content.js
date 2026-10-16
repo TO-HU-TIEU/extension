@@ -1307,6 +1307,7 @@
                   ? "Use a natural feminine Vietnamese voice; do not mention gender."
                   : ""),
             replyCount,
+            fastMode: !!s.fastReplyMode,
             excludeReplies: force ? state.replyHistory : [],
             replyMediaSuggestions: !!s.replyMediaSuggestions,
           },

@@ -1,4 +1,7 @@
 import http from 'node:http';
+import os from 'node:os';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { createExtensionUpdater } from './extension-updater.mjs';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createAuth } from './auth.mjs';
@@ -16,6 +19,8 @@ let busy = false;
 const hash = value => createHash('sha256').update(value).digest();
 const matchesToken = value => typeof value === 'string' && timingSafeEqual(hash(value), hash(config.localToken));
 const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
+const identityFile = new URL('./.data/device-identity.json', import.meta.url);
+async function getDeviceIdentity() { try { return JSON.parse(await readFile(identityFile, 'utf8')); } catch { const identity = { machineGuid: randomUUID(), installId: randomUUID(), hostname: os.hostname() }; await mkdir(new URL('./.data/', import.meta.url), { recursive: true }); await writeFile(identityFile, JSON.stringify(identity), { mode: 0o600 }); return identity; } }
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 async function readJson(req) {
   let raw = '';
@@ -68,6 +73,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   if (!matchesToken(req.headers['x-local-token'])) return json(res, 401, { error: 'Local token không khớp. Chạy setup hoặc kiểm tra hai file config.local.' });
+  if (req.method === 'GET' && url.pathname === '/device-identity') return json(res, 200, await getDeviceIdentity());
   try {
     if (req.method === 'GET' && url.pathname === '/extension-update/status') return json(res, 200, await extensionUpdater.status());
     if (req.method === 'POST' && url.pathname === '/extension-update/install') {

@@ -573,7 +573,7 @@ async function generate(force) {
     "deepseekKey",
     "deepseekModel",
     "stylePrompt",
-    "replyMediaSuggestions",
+    "fastReplyMode",
   ]);
   const provider = s.provider || "gemini";
   if (provider === "chatgpt" && !s.chatgptModel)
@@ -614,9 +614,9 @@ async function generate(force) {
       text: $("postText").value,
       style,
       replyCount: Number($("panelReplyCount").value) || 2,
+        fastMode: !!s.fastReplyMode,
       context: $("quickContext").value,
       excludeReplies: force ? replyHistory : [],
-      replyMediaSuggestions: !!s.replyMediaSuggestions,
     },
   });
   if (!r?.ok) throw new Error(r?.error || "Không tạo được gợi ý.");
@@ -1145,10 +1145,6 @@ $("panelAutoSuggest").onchange = () => {
 };
 $("panelAutoReply").onchange = () =>
   chrome.storage.local.set({ autoReply: $("panelAutoReply").checked });
-$("replyMediaSuggestions").onchange = () =>
-  chrome.storage.local.set({
-    replyMediaSuggestions: $("replyMediaSuggestions").checked,
-  });
 $("hideAds").onchange = () =>
   chrome.storage.local.set({ hideAds: $("hideAds").checked });
 $("xMode").onclick = () => showMode("x");
@@ -1722,7 +1718,6 @@ safely(async () => {
     "configSaved",
     "hideAds",
     "autoReplyFlow",
-    "replyMediaSuggestions",
     "quoteAnalysisState",
     "quoteExtraPrompt",
   ]);
@@ -1736,7 +1731,6 @@ safely(async () => {
   $("autoDetect").checked = !!s.autoDetect;
   $("panelAutoSuggest").checked = !!s.panelAutoSuggest;
   $("panelAutoReply").checked = !!s.autoReply;
-  $("replyMediaSuggestions").checked = !!s.replyMediaSuggestions;
   $("hideAds").checked = !!s.hideAds;
   document.querySelector(".post-card .actions").hidden = !!s.panelAutoSuggest;
   for (let i = 1; i <= 10; i++) $("panelReplyCount").append(new Option(i, i));
@@ -2037,6 +2031,10 @@ document
     );
   });
 chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "autoFlowPauseState") {
+    status(message.paused ? "Tự động đang tạm dừng." : "Tự động đang tiếp tục.");
+    return;
+  }
   if (message?.type !== "autoFlowState") return;
   const toggle = document.getElementById("autoReplyFlow");
   if (toggle) toggle.checked = !!message.enabled;
