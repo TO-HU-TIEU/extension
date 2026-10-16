@@ -1,101 +1,1535 @@
-(()=>{
-document.querySelectorAll('.xra-box').forEach(e=>e.remove());
-let state={postId:null,replies:[],replyHistory:[],selected:null,generated:false,liked:false},invalid=false,mounting=false,observer,hideAdsEnabled=false;const discreet=text=>String(text||'').replace(/X Reply Assistant|Reply Assistant/gi,'Assistant').replace(/trang X/gi,'trang hiện tại').replace(/bài X/gi,'bài viết').replace(/trên X/gi,'trên trang');
-function applyAiIconMask(root=document){const markup=globalThis.AssistantIcons?.svg?.('generate');if(!markup)return;root.querySelectorAll?.('.ai-icon').forEach(icon=>{if(!icon.querySelector('.ui-icon-generate'))icon.innerHTML=markup;icon.style.backgroundColor='transparent';icon.style.backgroundImage='none';icon.style.webkitMaskImage='none';icon.style.maskImage='none';icon.style.opacity='1'})}
-const contextError=e=>/Extension context invalidated/i.test(e?.message||'');
-const safeGet=async keys=>{try{return await chrome.storage.local.get(keys)}catch(e){if(contextError(e)){invalid=true;observer?.disconnect();return null}throw e}};const safeSet=async data=>{try{return await chrome.storage.local.set(data)}catch(e){if(contextError(e)){invalid=true;observer?.disconnect();return false}throw e}};const safeMessage=async data=>{try{return await chrome.runtime.sendMessage(data)}catch(e){if(contextError(e)){invalid=true;observer?.disconnect();return null}throw e}};
-const request=async body=>{try{const r=await chrome.runtime.sendMessage({type:'suggest',...body});if(!r?.ok)throw new Error(r?.error||'Không tạo được gợi ý.');return r.data}catch(e){if(contextError(e))throw new Error('Extension vừa cập nhật. Hãy tải lại trang X.');throw e}};
-const safeUrl=(value,base=location.origin)=>{try{return new URL(value,base)}catch{return null}};
-const urlPath=(value,base=location.origin)=>safeUrl(value,base)?.pathname||'';
-function insideQuote(element,article){for(let node=element?.parentElement;node&&node!==article;node=node.parentElement)if(node.dataset.testid==='quoteTweet'||(node.tagName!=='A'&&node.getAttribute?.('role')==='link'))return true;return false}function ownPermalink(article){return[...(article?.querySelectorAll('a[href]')||[])].find(a=>a.closest('article')===article&&!insideQuote(a,article)&&a.querySelector('time')&&/\/[A-Za-z0-9_]{1,15}\/status\/\d+/.test(urlPath(a.href)))||null}function articleFor(id){return[...document.querySelectorAll('article[data-testid="tweet"]')].find(a=>ownPermalink(a)?.href.match(/\/status\/(\d+)/)?.[1]===id)}function currentArticle(id){const e=document.querySelector('[data-testid="tweetTextarea_0"]'),articles=[...document.querySelectorAll('main article[data-testid="tweet"]')];if(e){const inside=e.closest('article[data-testid="tweet"]');if(inside)return inside;const before=articles.filter(a=>a.compareDocumentPosition(e)&Node.DOCUMENT_POSITION_FOLLOWING);if(before.length)return before.at(-1)}const exact=articleFor(id);if(exact)return exact;return articles.at(-1)||null}
-const originalLabel=/^(?:hiện|xem) bản gốc$|^show original$|^view original$/i,scriptLanguage=globalThis.X_REPLY_LANGUAGE;
-function originalControl(article){return[...(article?.querySelectorAll('button,[role="button"],a,span')||[])].find(el=>originalLabel.test((el.textContent||'').trim()))}
-function promotedArticle(article){if(!article)return false;if(article.querySelector('[data-testid="placementTracking"],[data-testid*="promoted" i],[data-testid*="sponsor" i]'))return true;const exact=/^(?:promoted|sponsored|ad|advertisement|quảng cáo|được quảng cáo|được tài trợ|tài trợ)$/iu,contains=/(?:promoted|sponsored|advertisement|được\s+quảng\s+cáo|quảng\s+cáo|được\s+tài\s+trợ|tài\s+trợ)/iu,translation=/được\s+dịch\s+từ|translated\s+from|hiện\s+bản\s+gốc|show\s+original/iu,markers=[...article.querySelectorAll('[data-testid="socialContext"],[aria-label],span,div')].filter(e=>e.closest('article')===article&&!insideQuote(e,article)).slice(0,320);return markers.some(e=>{const label=(e.getAttribute('aria-label')||'').trim().replace(/\s+/g,' '),text=(e.textContent||'').trim().replace(/\s+/g,' '),short=text.slice(0,220),compact=short.replace(translation,' ').replace(/\s+/g,' ').trim();if(exact.test(label)||contains.test(label))return true;if(exact.test(text)||exact.test(compact))return true;if(text.length<=120&&contains.test(text))return true;if(compact.length<=120&&contains.test(compact))return true;if(contains.test(short)&&translation.test(short))return true;return false})}function applyAdHiding(){document.documentElement.classList.toggle('xra-hide-ads-enabled',hideAdsEnabled);const currentId=location.pathname.match(/\/status\/(\d+)/)?.[1],root=currentId?articleFor(currentId):null;for(const article of [...document.querySelectorAll('article[data-testid="tweet"]')]){if(article===root||!promotedArticle(article))continue;if(hideAdsEnabled){article.remove()}else article.classList.remove('xra-hidden-ad')}}
-function originalTextNode(article){const nodes=[...(article?.querySelectorAll('[data-testid="tweetText"]')||[])].filter(n=>n.closest('article')===article&&!insideQuote(n,article)),notTranslated=nodes.find(n=>{let p=n.parentElement,depth=0;while(p&&p!==article&&depth++<4){if(/translated from|dịch từ|bản dịch/i.test(p.getAttribute('aria-label')||''))return false;p=p.parentElement}return true});return notTranslated||nodes[0]||null}
-function mediaFor(article){if(!article)return{mediaUrls:[],mediaCount:0,mediaKind:'none'};const own=e=>e.closest('article')===article&&!insideQuote(e,article)&&!e.closest('[data-testid="card.layoutLarge.media"]'),elements=[...article.querySelectorAll('[data-testid="tweetPhoto"] img,[data-testid="videoPlayer"] img,img[src*="pbs.twimg.com/media/"],video[poster],source[src]')].filter(own),urls=elements.flatMap(e=>[e.currentSrc,e.src,e.poster,...(e.getAttribute('srcset')||'').split(',').map(part=>part.trim().split(/\s+/)[0])]);for(const el of article.querySelectorAll('[style*="pbs.twimg.com"],[style*="video.twimg.com"]'))if(own(el))urls.push(...((el.getAttribute('style')||'').match(/https:\/\/[^"')]+/g)||[]));const valid=u=>{try{const x=new URL(u);return x.protocol==='https:'&&((x.hostname==='pbs.twimg.com'&&/^\/(?:media|ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\//.test(x.pathname))||x.hostname==='video.twimg.com')}catch{return false}},mediaUrls=[...new Set(urls.filter(valid))].slice(0,4),hasVideo=!![...article.querySelectorAll('[data-testid="videoPlayer"],video')].find(own),mediaCount=[...article.querySelectorAll('[data-testid="tweetPhoto"],[data-testid="videoPlayer"],video')].filter(own).length;return{mediaUrls,mediaCount,mediaKind:hasVideo?'video_thumbnail':mediaCount?'images':'none'}}
-function embeddedContext(article){const quoted=[...article.querySelectorAll('[data-testid="quoteTweet"]')].filter(q=>q.closest('article')===article).slice(0,2).map(q=>({type:'quoted_post',text:(q.innerText||q.textContent||'').trim().replace(/\s+/g,' ').slice(0,1200)})).filter(x=>x.text),cards=[...article.querySelectorAll('[data-testid^="card."], [data-testid="card.layoutLarge.media"], [data-testid="card.layoutSmall.media"]')].filter(c=>c.closest('article')===article&&!c.closest('[data-testid="quoteTweet"]')).slice(0,2).map(c=>({type:'link_preview',text:(c.innerText||c.textContent||'').trim().replace(/\s+/g,' ').slice(0,800)})).filter(x=>x.text);return{embedded:[...quoted,...cards]}}
-
-function targetPost(){const id=location.pathname.match(/\/status\/(\d+)/)?.[1],article=currentArticle(id),node=originalTextNode(article),text=node?.innerText?.trim()||'',author=location.pathname.match(/^\/([^/]+)\/status/)?.[1];if(!id||!article)return null;const ownMedia=mediaFor(article),embedded=embeddedContext(article).embedded,articles=[...document.querySelectorAll('main article[data-testid="tweet"]')],before=articles.slice(0,articles.indexOf(article)).filter(a=>!promotedArticle(a)&&originalTextNode(a)).slice(-6),urls=[...ownMedia.mediaUrls];const turns=before.map((a,index)=>{const link=ownPermalink(a),turnMedia=mediaFor(a),mediaIndexes=[];for(const url of turnMedia.mediaUrls){if(!urls.includes(url)&&urls.length<4)urls.push(url);if(urls.includes(url))mediaIndexes.push(urls.indexOf(url)+1)}return{turn:index+1,author:urlPath(link?.href).split('/')[1]||'',text:originalTextNode(a).innerText.trim(),media_count:turnMedia.mediaCount,media_indexes:mediaIndexes}}).filter(t=>t.text);if(!text&&!ownMedia.mediaCount&&!ownMedia.mediaUrls.length&&!embedded.length&&!turns.length)return null;return{url:`https://x.com/${author}/status/${id}`,postId:id,username:author,text,context:JSON.stringify({order:'oldest_to_newest',instruction:text?'Reply to target_text as the next turn. If target_text is a short reaction/comment, use the nearest ancestor/root post as the main topic and write a reply that connects the comment to that original context; do not answer the short comment in isolation.':'The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview or visible ancestor/root posts as the context being reacted to.',turns,embedded}).slice(0,3000),conversationDepth:turns.length+1,lang:text?scriptLanguage(text,node?.lang||''):'',mediaUrls:urls,mediaCount:ownMedia.mediaCount+turns.reduce((sum,t)=>sum+t.media_count,0),mediaKind:ownMedia.mediaKind==='video_thumbnail'?'video_thumbnail':urls.length?'images':'none'}}
-async function readOriginalPost(){const id=location.pathname.match(/\/status\/(\d+)/)?.[1],article=currentArticle(id),control=originalControl(article);if(control){(control.closest('button,[role="button"],a')||control).click();for(let i=0;i<15&&originalControl(article);i++)await new Promise(resolve=>setTimeout(resolve,100));if(originalControl(article))throw new Error('Không chuyển được về nội dung gốc. Hãy bấm “Hiện bản gốc” rồi thử lại.')}let post=targetPost();if(post){const preferences=await safeGet(['fastReplyMode']),fast=true;let captured={};for(let attempt=0;attempt<3;attempt++){captured=await globalThis.XReplyMedia.capture(article,fast);const refreshed=targetPost();if(refreshed)post={...post,...refreshed};if(!post.mediaCount||captured.mediaInline?.length||post.mediaUrls?.length)break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)))}Object.assign(post,captured);post.publishedAt=article.querySelector('time')?.dateTime||'';post.generatedAt=new Date().toISOString();post.clientTimezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'';post.clientLocalHour=new Date().getHours()}return post}
-function postFromArticle(article){const link=ownPermalink(article),id=link?.href.match(/\/status\/(\d+)/)?.[1],author=urlPath(link?.href||'').split('/')[1]||'',node=originalTextNode(article),text=node?.innerText?.trim()||'',ownMedia=mediaFor(article),embedded=embeddedContext(article).embedded,authorNode=article.querySelector('[data-testid="User-Name"]'),authorName=(authorNode?.querySelector('[dir="ltr"] span')?.textContent||authorNode?.querySelector('span')?.textContent||author).trim(),avatar=(()=>{const scopes=[article,article.parentElement,article.closest('[data-testid="cellInnerDiv"]')||null].filter(Boolean);for(const scope of scopes){const found=[...scope.querySelectorAll('[data-testid^="UserAvatar-Container"] img,[data-testid*="Avatar"] img,img[src*="profile_images"],img[src*="pbs.twimg.com/profile_images"],img[alt*="avatar" i]')].find(x=>x);if(found)return found;const small=[...scope.querySelectorAll('img')].find(x=>{const src=(x.currentSrc||x.src||x.getAttribute('data-src')||'');const r=x.getBoundingClientRect?.();return /profile_images|pbs\\.twimg\\.com/i.test(src)||((r?.width||0)<=80&&(r?.height||0)<=80)});if(small)return small}return null})(),avatarUrl=(avatar?.getAttribute('src')||avatar?.getAttribute('data-src')||avatar?.currentSrc||avatar?.src||avatar?.closest('[style*="background-image"]')?.style?.backgroundImage?.match(/url\\(["']?([^"')]+)["']?\\)/i)?.[1]||'');if(!id||!article)return null;if(!text&&!ownMedia.mediaCount&&!ownMedia.mediaUrls.length&&!embedded.length)return null;return{url:`https://x.com/${author}/status/${id}`,postId:id,username:author,authorName,handle:'@'+author,avatarUrl,text,context:JSON.stringify({instruction:text?'Write a quote-post analysis about target_text and its media.':'The target post has no caption or only an icon. Use its own media first; if absent, use quoted_post/link_preview context.',embedded}).slice(0,3000),conversationDepth:1,lang:text?scriptLanguage(text,node?.lang||''):'',mediaUrls:ownMedia.mediaUrls,mediaCount:ownMedia.mediaCount,mediaKind:ownMedia.mediaKind}}
-async function readQuotePost(article){let post=postFromArticle(article);if(!post)return null;const mediaUrls=post.mediaUrls||[],needsCapture=!mediaUrls.length||mediaUrls.some(isVideoMedia);let captured={};if(needsCapture){const fast=true;for(let attempt=0;attempt<2;attempt++){captured=await globalThis.XReplyMedia.capture(article,fast);const refreshed=postFromArticle(article);if(refreshed)post={...post,...refreshed};if(captured.mediaInline?.length||post.mediaUrls?.length)break;if(attempt===0)await new Promise(resolve=>setTimeout(resolve,120))}Object.assign(post,captured);}post.publishedAt=article.querySelector('time')?.dateTime||'';post.generatedAt=new Date().toISOString();post.clientTimezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'';post.clientLocalHour=new Date().getHours();return post}
-async function composeQuoteFromArticle(article,button){button.disabled=true;button.classList.add('xra-quote-loading');try{safeMessage({type:'openPanel'}).catch(()=>{});const post=await readQuotePost(article);if(!post)throw new Error('Không đọc được bài viết để phân tích.');if(!(await safeSet({quoteAnalysisState:{status:'loading',postUrl:post.url,updatedAt:Date.now(),draft:'',quotePost:{...post,mediaInline:[]}}})))return;const s=await safeGet(['provider','apiKey','apiModel','geminiKey','geminiKeys','geminiModel','deepseekKey','deepseekModel','fastReplyMode','quoteExtraPrompt']);const provider=s.provider||'gemini',model=provider==='gemini'?(s.geminiModel||'gemini-3.1-flash-lite'):provider==='deepseek'?(s.deepseekModel||'deepseek-flash'):(s.apiModel||'gpt-4.1-mini'),extraInstruction=String(s.quoteExtraPrompt||'').trim();const r=await safeMessage({type:'composeQuotePost',provider,model,apiKey:s.apiKey,geminiKey:s.geminiKey,geminiKeys:s.geminiKeys,deepseekKey:s.deepseekKey,extraInstruction,post:{...post,fastMode:true}});if(invalid||!r)return;if(!r?.ok)throw new Error(r?.error||'Không tạo được bài trích dẫn.');await safeSet({quoteAnalysisState:{status:'ready',postUrl:post.url,updatedAt:Date.now(),draft:r.data.draft,model:r.data.model,quotePost:{...post,mediaInline:[]}}})}catch(error){if(contextError(error))return;await safeSet({quoteAnalysisState:{status:'error',updatedAt:Date.now(),error:discreet(error.message)}})}finally{button.disabled=false;button.classList.remove('xra-quote-loading')}}
-function topActionRow(anchor,article){for(let node=anchor?.parentElement,depth=0;node&&node!==article&&depth<6;depth++,node=node.parentElement){const ownButtons=[...node.querySelectorAll('button,[role="button"],a')].filter(el=>el.closest('article')===article&&!insideQuote(el,article)),hasMenu=ownButtons.some(el=>el.matches('[data-testid="caret"]')||/more|thêm|khác|more options/i.test((el.getAttribute('aria-label')||'').trim())),hasAnchor=ownButtons.some(el=>el===anchor||el.contains(anchor)||anchor?.contains(el));if(hasAnchor&&hasMenu&&ownButtons.length<=8)return node}return anchor?.parentElement||null}function clearQuoteButtons(){document.querySelectorAll('.xra-quote-top-wrap,.xra-quote-floating').forEach(node=>node.remove());document.querySelectorAll('article[data-testid="tweet"]').forEach(article=>delete article.dataset.xraQuoteButton)}
-function injectQuoteButtons(){const id=location.pathname.match(/^\/[^/]+\/status\/(\d+)/)?.[1];if(!id){clearQuoteButtons();return}const target=articleFor(id);if(!target){clearQuoteButtons();return}for(const article of document.querySelectorAll('article[data-testid="tweet"]')){if(article!==target){article.querySelectorAll('.xra-quote-top-wrap,.xra-quote-floating').forEach(node=>node.remove());delete article.dataset.xraQuoteButton;continue}if(article.dataset.xraQuoteButton)continue;const link=ownPermalink(article);if(!link)continue;const own=el=>el.closest('article')===article&&!insideQuote(el,article),controls=[...article.querySelectorAll('button,[role="button"],a')].filter(own),subscribe=controls.find(el=>/^\d+-subscribe$/.test(el.getAttribute('data-testid')||'')||/subscribe|đăng ký/i.test((el.getAttribute('aria-label')||el.textContent||'').trim())),grok=controls.find(el=>/grok|phân tích|analy/i.test((el.getAttribute('aria-label')||el.textContent||'').trim())),caret=controls.find(el=>el.matches('[data-testid="caret"]')||/more|thêm|khác|more options/i.test((el.getAttribute('aria-label')||'').trim()));const anchor=subscribe||grok||caret,row=topActionRow(anchor,article),host=row||(subscribe?subscribe.parentElement?.parentElement:anchor?.parentElement)||article;article.dataset.xraQuoteButton='1';const button=document.createElement('button');button.type='button';button.className='xra-quote-action xra-quote-top-action';button.title='Viết bài trích dẫn phân tích góc nhìn';button.setAttribute('aria-label','Viết bài trích dẫn phân tích góc nhìn');button.innerHTML=globalThis.AssistantIcons?.svg('quote')||'<span class="ai-icon" aria-hidden="true"></span>';button.onclick=event=>{event.preventDefault();event.stopPropagation();composeQuoteFromArticle(article,button)};const wrap=document.createElement('span');wrap.className='xra-quote-top-wrap';wrap.append(button);if(anchor){const slot=[...host.children].find(child=>child===anchor||child.contains(anchor));(slot||anchor).insertAdjacentElement('beforebegin',wrap)}else{article.classList.add('xra-quote-anchor');button.classList.add('xra-quote-floating');host.append(button)}}}const editor=()=>document.querySelector('[data-testid="tweetTextarea_0"]');
-function activate(){const e=editor();if(e){e.click();e.focus()}}
-function fillOnce(text){const e=editor();if(!e)return;activate();if((e.innerText||'').trim())document.execCommand('selectAll',false);const transfer=new DataTransfer();transfer.setData('text/plain',text);const event=new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:transfer}),dispatched=e.dispatchEvent(event);if(dispatched&&!event.defaultPrevented)document.execCommand('insertText',false,text)}
-function fill(text,auto){fillOnce(text);if(auto)setTimeout(()=>document.querySelector('[data-testid="tweetButtonInline"]')?.click(),90)}
-async function openMediaPicker(query,kind='gif'){const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'},label=e=>`${e.getAttribute('aria-label')||''} ${e.getAttribute('data-testid')||''} ${e.textContent||''}`.toLowerCase(),buttons=[...document.querySelectorAll('button,[role="button"]')].filter(visible),picker=buttons.find(e=>/(?:gif|media|ảnh|image)/i.test(label(e)));if(!picker)throw new Error('Không tìm thấy bộ chọn GIF/ảnh trong ô trả lời.');picker.click();await new Promise(resolve=>setTimeout(resolve,350));const dialog=document.querySelector('[role="dialog"]')||document.body,input=[...dialog.querySelectorAll('input')].find(e=>visible(e)&&/(?:search|tìm)/i.test(`${e.getAttribute('placeholder')||''} ${e.getAttribute('aria-label')||''}`));if(input&&query){const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;if(setter)setter.call(input,String(query));else input.value=String(query);input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}))}return{ok:true,kind,query}}
-try{chrome.runtime.onMessage.addListener((message,_sender,sendResponse)=>{if(message?.type==='panelState'){const b=document.querySelector('.xra-assistant-fab');if(b)b.hidden=!!message.open;sendResponse({ok:true});return false}if(message?.type==='usageMode'){document.querySelectorAll('.xra-box').forEach(e=>e.remove());if(message.mode==='x')safeMount();sendResponse({ok:true});return false}if(message?.type==='mountAssistant'){chrome.storage.local.set({usageMode:'x'}).then(safeMount);sendResponse({ok:true});return false}if(message?.type==='readQuotePost'){const id=location.pathname.match(/\/status\/(\d+)/)?.[1],article=currentArticle(id);readQuotePost(article).then(post=>sendResponse({ok:!!post,post:post?{...post,mediaInline:[]}:null,error:post?null:'Không đọc được bài viết để phân tích.'}),e=>sendResponse({ok:false,error:e.message}));return true}if(message?.type==='openMediaPicker'){openMediaPicker(String(message.query||''),message.kind).then(sendResponse,e=>sendResponse({ok:false,error:e.message}));return true}if(message?.type!=='fillReply')return false;try{fill(String(message.text||''),!!message.submit);sendResponse({ok:true})}catch(e){sendResponse({ok:false,error:e.message})}return false})}catch{}
-function mountAssistantButton(){if(document.querySelector('.xra-assistant-fab'))return;const button=document.createElement('button');button.className='xra-assistant-fab';button.title='Mở X Assistant';button.setAttribute('aria-label','Mở X Assistant');button.innerHTML=`<img class="xra-assistant-logo" src="${chrome.runtime.getURL('assets/logo.svg')}" alt="">`;let dragging=false,moved=false,startX=0,startY=0,startLeft=0,startTop=0;const clamp=()=>{const r=button.getBoundingClientRect();button.style.left=Math.max(4,Math.min(window.innerWidth-r.width-4,r.left))+'px';button.style.top=Math.max(4,Math.min(window.innerHeight-r.height-4,r.top))+'px';button.style.right='auto'};button.addEventListener('pointerdown',event=>{if(event.button!==0)return;dragging=true;moved=false;startX=event.clientX;startY=event.clientY;const r=button.getBoundingClientRect();startLeft=r.left;startTop=r.top;button.setPointerCapture?.(event.pointerId);event.preventDefault()});button.addEventListener('pointermove',event=>{if(!dragging)return;const dx=event.clientX-startX,dy=event.clientY-startY;if(Math.abs(dx)+Math.abs(dy)>4)moved=true;if(moved){button.style.left=startLeft+dx+'px';button.style.top=startTop+dy+'px';button.style.right='auto'}});button.addEventListener('pointerup',event=>{if(!dragging)return;dragging=false;button.releasePointerCapture?.(event.pointerId);if(moved){clamp();event.preventDefault()}});button.onclick=async event=>{if(moved){moved=false;event.preventDefault();return}button.disabled=true;try{const result=await chrome.runtime.sendMessage({type:'openPanel'});if(!result?.ok)throw new Error(result?.error||'Không mở được side panel.');button.hidden=true}catch(error){button.hidden=false;button.title=error.message}finally{button.disabled=false}};document.body.append(button)}
-
-let lastScrollY=scrollY;function updateStickyUser(){let card=document.querySelector('.xra-sticky-user');const id=location.pathname.match(/\/status\/(\d+)/)?.[1],article=articleFor(id),identity=article?.querySelector('[data-testid="User-Name"]'),goingDown=scrollY>=lastScrollY;lastScrollY=scrollY;if(!document.querySelector('.xra-box')||!identity||identity.getBoundingClientRect().bottom>=8||!goingDown){if(card)card.hidden=true;return}if(!card){card=document.createElement('div');card.className='xra-sticky-user';document.body.append(card)}const avatar=article.querySelector('[data-testid="Tweet-User-Avatar"] img,div[data-testid="Tweet-User-Avatar"] img'),lines=(identity.innerText||'').split('\n').map(x=>x.trim()).filter(Boolean);card.replaceChildren();if(avatar){const img=document.createElement('img');img.src=avatar.currentSrc||avatar.src;card.append(img)}const text=document.createElement('span'),name=document.createElement('b'),handle=document.createElement('small');name.textContent=lines.find(x=>!x.startsWith('@'))||lines[0]||'';handle.textContent=lines.find(x=>x.startsWith('@'))||'';text.append(name,handle);card.append(text);card.hidden=false}
-addEventListener('scroll',()=>requestAnimationFrame(updateStickyUser),{passive:true});
-function likePost(){if(state.liked)return;const b=articleFor(state.postId)?.querySelector('[data-testid="like"]');if(b){b.click();state.liked=true}}
-function render(box){const results=box.querySelector('.xra-results');results.replaceChildren();if(!state.replies.length)return;state.replies.sort((a,b)=>(b.relevance_score||0)-(a.relevance_score||0));const picks=document.createElement('div');picks.className='xra-pick';state.replies.forEach((item,i)=>{const wrap=document.createElement('div');wrap.className='xra-suggestion-wrap';const b=document.createElement('button');b.className='xra-chip';b.classList.toggle('selected',state.selected===i);const row=document.createElement('span'),t=document.createElement('span'),score=document.createElement('span');row.className='xra-chip-main';t.textContent=item.reply;score.className='xra-relevance';score.textContent=Number.isFinite(item.relevance_score)?`${item.relevance_score}%`:'';row.append(t,score);b.append(row);if(item.translation_vi){const s=document.createElement('small');s.className='xra-translation';s.textContent=item.translation_vi;b.append(s)}b.onclick=()=>{state.selected=i;fill(item.reply,box.querySelector('.xra-auto-reply').classList.contains('active'));render(box)};wrap.append(b);if(item.media_suggestion?.query){const media=document.createElement('button');media.type='button';media.className='xra-media-suggestion';media.textContent=`${item.media_suggestion.kind==='gif'?'GIF':'Ảnh/meme'} · ${item.media_suggestion.query}`;media.title=item.media_suggestion.reason||'Mở bộ chọn media với gợi ý này';media.onclick=event=>{event.preventDefault();event.stopPropagation();openMediaPicker(item.media_suggestion.query,item.media_suggestion.kind).catch(error=>{media.title=error.message})};wrap.append(media)}picks.append(wrap)});results.append(picks);if(Number.isFinite(state.elapsedMs)){const timing=document.createElement('small');timing.className='xra-generation-time';timing.textContent=new Intl.NumberFormat('vi-VN',{maximumFractionDigits:1}).format(state.elapsedMs/1000)+' giây';timing.title='Thời gian đọc bài và nhận đầy đủ gợi ý, gồm bản dịch nếu cần';results.append(timing)}}
-async function mount(){if(invalid||mounting)return;mounting=true;const saved=await safeGet(['autoReply','autoSuggest','autoLike','usageMode','replyCount','fastReplyMode','replyMediaSuggestions']);if(!saved){mounting=false;return}if(saved.usageMode==='panel'){document.querySelectorAll('.xra-box').forEach(e=>e.remove());mounting=false;return}if(!/^\/[^/]+\/status\/\d+/.test(location.pathname)){document.querySelectorAll('.xra-box').forEach(e=>e.remove());mounting=false;return}const existing=document.querySelector('.xra-box'),currentId=location.pathname.match(/\/status\/(\d+)/)?.[1];if(existing&&existing.dataset.postId!==currentId)existing.remove();else if(existing){mounting=false;return}if(saved.autoSuggest)globalThis.XReplyMedia?.prime(currentArticle(currentId),!!saved.fastReplyMode);let e=editor();if(!e){const id=location.pathname.match(/\/status\/(\d+)/)?.[1],reply=articleFor(id)?.querySelector('[data-testid="reply"]');if(reply&&!reply.dataset.xraOpened){reply.dataset.xraOpened='1';reply.click();setTimeout(safeMount,250)}mounting=false;return}const post=targetPost();if(post?.postId!==state.postId)state={postId:post?.postId||null,replies:[],replyHistory:[],selected:null,generated:false,liked:false};activate();
-const host=e.closest('[data-testid="tweetTextarea_0_label"]')?.parentElement?.parentElement||e.parentElement,box=document.createElement('div');box.className='xra-box';box.dataset.postId=post?.postId||'';box.innerHTML='<div class="xra-tools"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v6h-6"/></svg></button><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><span class="xra-spacer"></span><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></button><button class="xra-button xra-auto-like" title="Tự like khi mở bài"><svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.9-8.6a5.5 5.5 0 0 0-.1-7.8Z"/></svg></button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4 20-7Z"/></svg></button></div><div class="xra-results"></div>';
-const generate=box.querySelector('.xra-generate'),sync=box.querySelector('.xra-sync');sync.innerHTML=globalThis.AssistantIcons?.svg('refresh')||sync.innerHTML;let run,running=false,pending=false;const pairIcon=(selector,path)=>{const button=box.querySelector(selector),outline=button.querySelector('svg'),filled=document.createElementNS('http://www.w3.org/2000/svg','svg');outline.classList.add('xra-icon-outline');filled.classList.add('xra-icon-filled');filled.setAttribute('viewBox','0 0 24 24');filled.innerHTML=`<path d="${path}"/>`;button.append(filled)};pairIcon('.xra-auto-suggest','M12 2.5l2.2 6.1 6.3 2.2-6.3 2.2-2.2 6.2-2.2-6.2-6.3-2.2 6.3-2.2L12 2.5Zm7 12.5.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z');pairIcon('.xra-auto-like','M12 21 3.1 12.4a5.5 5.5 0 0 1 7.8-7.8L12 5.7l1-1.1a5.5 5.5 0 0 1 7.8 7.8L12 21Z');pairIcon('.xra-auto-reply','M21.7 2.3a1 1 0 0 0-1-.24l-18 7a1 1 0 0 0 .08 1.89l7.35 2.45 2.45 7.35a1 1 0 0 0 1.89.08l7-18a1 1 0 0 0-.24-1.04ZM12 11.59 7.2 10 18 5.8 12 11.59Z');
-let replyCount=Math.min(10,Math.max(1,Number(saved.replyCount)||2));const countButton=box.querySelector('.xra-count'),countMenu=box.querySelector('.xra-count-menu');countButton.textContent=replyCount;for(let i=1;i<=10;i++){const button=document.createElement('button');button.textContent=i;button.onclick=()=>{replyCount=i;countButton.textContent=i;countMenu.hidden=true;chrome.storage.local.set({replyCount:i}).catch(()=>{})};countMenu.append(button)}countButton.onclick=()=>{countMenu.hidden=!countMenu.hidden};
-const toggle=(button,key,value)=>{button.classList.toggle('active',value);button.setAttribute('aria-pressed',String(value));button.onclick=()=>{const next=!button.classList.contains('active');button.classList.toggle('active',next);button.setAttribute('aria-pressed',String(next));try{chrome.storage.local.set({[key]:next}).catch(()=>{})}catch{}if(key==='autoLike'&&next)likePost();if(key==='autoSuggest'&&next&&!state.generated)run(false)}};
-toggle(box.querySelector('.xra-auto-reply'),'autoReply',!!saved.autoReply);toggle(box.querySelector('.xra-auto-suggest'),'autoSuggest',!!saved.autoSuggest);toggle(box.querySelector('.xra-auto-like'),'autoLike',!!saved.autoLike);const gear=document.createElement('button');gear.className='xra-button xra-settings';gear.title='Cài đặt tự động';gear.innerHTML='<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z" stroke="currentColor" stroke-width="1.5"/></svg>';const tools=box.querySelector('.xra-tools');tools.append(gear);tools.insertBefore(box.querySelector('.xra-count-wrap'),gear);const autoPanel=document.createElement('div');autoPanel.className='xra-auto-panel';autoPanel.hidden=true;autoPanel.innerHTML='<label><span><b>Tự động gợi ý</b><small>Tạo khi mở bài</small></span><input type="checkbox" data-key="autoSuggest"></label><label><span><b>Tự thả like</b><small>Like khi mở bài</small></span><input type="checkbox" data-key="autoLike"></label><label><span><b>Tự đăng trả lời</b><small>Đăng khi chọn gợi ý</small></span><input type="checkbox" data-key="autoReply"></label><label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';box.querySelector('.xra-results').before(autoPanel);for(const input of autoPanel.querySelectorAll('input')){input.checked=!!saved[input.dataset.key];input.onchange=()=>{const key=input.dataset.key,value=input.checked;chrome.storage.local.set({[key]:value}).catch(()=>{});box.querySelector(`.xra-${key.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`)?.classList.toggle('active',value);if(key==='autoLike'&&value)likePost();if(key==='autoSuggest'&&value&&!state.generated)run(false)}}gear.onclick=()=>{autoPanel.hidden=!autoPanel.hidden;gear.classList.toggle('active',!autoPanel.hidden)};
-run=async force=>{if(running){pending=true;return}const started=performance.now();running=true;state.generated=true;generate.disabled=sync.disabled=true;const results=box.querySelector('.xra-results');results.classList.remove('xra-error');results.innerHTML='<span class="xra-loading"></span><span class="xra-loading-label">Đang viết gợi ý…</span>';try{const post=await readOriginalPost();if(!post)throw new Error('Chưa đọc được bài viết gốc.');const s=await safeGet(['provider','apiKey','apiModel','chatgptModel','geminiKey','geminiKeys','geminiModel','deepseekKey','deepseekModel','stylePrompt','replyMediaSuggestions']);if(!s)throw new Error('Hãy tải lại trang X.');const provider=s.provider||'gemini';if(provider==='api'&&!/^sk-[A-Za-z0-9_-]{20,}$/.test(s.apiKey||''))throw new Error('Mở side panel và nhập API key.');if(provider==='chatgpt'&&!s.chatgptModel)throw new Error('Kết nối ChatGPT và chọn model.');if(provider==='gemini'&&!s.geminiKey)throw new Error('Nhập Gemini API key trong cài đặt.');if(provider==='deepseek'&&!s.deepseekKey)throw new Error('Nhập DeepSeek API key trong cài đặt.');const model=provider==='chatgpt'?s.chatgptModel:provider==='gemini'?(s.geminiModel||'gemini-3.1-flash-lite'):provider==='deepseek'?(s.deepseekModel||'deepseek-flash'):(s.apiModel||'gpt-4.1-mini');const data=await request({provider,apiKey:s.apiKey,geminiKey:s.geminiKey,geminiKeys:s.geminiKeys,deepseekKey:s.deepseekKey,model,force,post:{...post,style:s.stylePrompt,replyCount,excludeReplies:force?state.replyHistory:[],replyMediaSuggestions:!!s.replyMediaSuggestions}});if(!pending&&box.isConnected&&location.pathname.match(/\/status\/(\d+)/)?.[1]===box.dataset.postId){state.replies=data.result.replies;state.replyHistory=[...new Set([...state.replyHistory,...(state.replies||[]).map(x=>x.reply).filter(Boolean)])].slice(-30);state.selected=null;state.elapsedMs=performance.now()-started;render(box)}}catch(err){results.textContent=err.message;results.classList.add('xra-error')}finally{running=false;generate.disabled=sync.disabled=false;if(pending&&box.isConnected){pending=false;run(true)}}};document.addEventListener('xra-style-changed',()=>{if(box.isConnected&&(running||state.replies.length))run(true)});
-generate.onclick=()=>run(false);sync.onclick=()=>run(true);host.insertAdjacentElement('afterend',box);render(box);applyAiIconMask(box);if(saved.autoLike)likePost();if(saved.autoSuggest&&!state.generated)run(false);mounting=false}
-document.addEventListener('click',event=>{if(!event.target.closest?.('[data-testid="tweetButtonInline"]')||state.selected===null)return;const used=state.selected;setTimeout(()=>{state.replies.splice(used,1);state.selected=null;const box=document.querySelector('.xra-box');if(box)render(box)},0)},true);
-const safeMount=()=>{applyAdHiding();injectQuoteButtons();mountAssistantButton();applyAiIconMask();const launcher=document.querySelector('.xra-assistant-fab');if(launcher){launcher.title='Mở Assistant';launcher.setAttribute('aria-label','Mở Assistant')}mount().catch(e=>{mounting=false;if(contextError(e)){invalid=true;observer?.disconnect()}else console.error('Assistant:',discreet(e.message))})};observer=new MutationObserver(safeMount);observer.observe(document.documentElement,{childList:true,subtree:true});safeGet(['hideAds']).then(s=>{hideAdsEnabled=!!s?.hideAds;applyAdHiding()});try{chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&Object.hasOwn(changes,'hideAds')){hideAdsEnabled=!!changes.hideAds.newValue;applyAdHiding()}safeMount()})}catch{}safeMount();
-// Cho phép nút Phân tích chuyển thành nút dừng trong lúc chờ mô hình, không khoá nút.
-async function composeQuoteFromArticle(article,button){
-  if(button.dataset.xraQuoteRunning==='1'){
-    button.dataset.xraQuoteCancel='1';
-    button.title='Đang dừng phân tích…';
-    button.setAttribute('aria-label','Đang dừng phân tích…');
-    return;
+(() => {
+  document.querySelectorAll(".xra-box").forEach((e) => e.remove());
+  let state = {
+      postId: null,
+      replies: [],
+      replyHistory: [],
+      selected: null,
+      generated: false,
+      liked: false,
+    },
+    invalid = false,
+    mounting = false,
+    observer,
+    hideAdsEnabled = false;
+  const discreet = (text) =>
+    String(text || "")
+      .replace(/X Reply Assistant|Reply Assistant/gi, "Assistant")
+      .replace(/trang X/gi, "trang hiện tại")
+      .replace(/bài X/gi, "bài viết")
+      .replace(/trên X/gi, "trên trang");
+  function applyAiIconMask(root = document) {
+    const markup = globalThis.AssistantIcons?.svg?.("generate");
+    if (!markup) return;
+    root.querySelectorAll?.(".ai-icon").forEach((icon) => {
+      if (!icon.querySelector(".ui-icon-generate")) icon.innerHTML = markup;
+      icon.style.backgroundColor = "transparent";
+      icon.style.backgroundImage = "none";
+      icon.style.webkitMaskImage = "none";
+      icon.style.maskImage = "none";
+      icon.style.opacity = "1";
+    });
   }
-  button.dataset.xraQuoteRunning='1';
-  button.dataset.xraQuoteCancel='0';
-  button.classList.add('xra-quote-loading');
-  button.title='Dừng phân tích';
-  button.setAttribute('aria-label','Dừng phân tích');
-  const cancelled=()=>button.dataset.xraQuoteCancel==='1';
-  try{
-    safeMessage({type:'openPanel'}).catch(()=>{});
-    const post=await readQuotePost(article);
-    if(cancelled())return;
-    if(!post)throw new Error('Không đọc được bài viết để phân tích.');
-    if(!(await safeSet({quoteAnalysisState:{status:'loading',postUrl:post.url,updatedAt:Date.now(),draft:'',quotePost:{...post,mediaInline:[]}}}))||cancelled())return;
-    const s=await safeGet(['provider','apiKey','apiModel','geminiKey','geminiKeys','geminiModel','deepseekKey','deepseekModel','fastReplyMode','quoteExtraPrompt']);
-    if(cancelled())return;
-    const provider=s.provider||'gemini',model=provider==='gemini'?(s.geminiModel||'gemini-3.1-flash-lite'):provider==='deepseek'?(s.deepseekModel||'deepseek-flash'):(s.apiModel||'gpt-4.1-mini'),extraInstruction=String(s.quoteExtraPrompt||'').trim();
-    const request=safeMessage({type:'composeQuotePost',provider,model,apiKey:s.apiKey,geminiKey:s.geminiKey,geminiKeys:s.geminiKeys,deepseekKey:s.deepseekKey,extraInstruction,post:{...post,fastMode:true}}),timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('Phân tích quá lâu, hãy bấm lại để thử lại.')),30000));
-    const r=await Promise.race([request,timeout]);
-    if(cancelled())return;
-    if(invalid||!r)return;
-    if(!r?.ok)throw new Error(r?.error||'Không tạo được bài trích dẫn.');
-    await safeSet({quoteAnalysisState:{status:'ready',postUrl:post.url,updatedAt:Date.now(),draft:r.data.draft,model:r.data.model,quotePost:{...post,mediaInline:[]}}});
-  }catch(error){
-    if(contextError(error)||cancelled())return;
-    await safeSet({quoteAnalysisState:{status:'error',updatedAt:Date.now(),error:discreet(error.message)}});
-  }finally{
-    const wasCancelled=cancelled();
-    button.dataset.xraQuoteRunning='0';
-    button.dataset.xraQuoteCancel='0';
-    button.classList.remove('xra-quote-loading');
-    button.disabled=false;
-    button.title='Viết bài trích dẫn phân tích góc nhìn';
-    button.setAttribute('aria-label','Viết bài trích dẫn phân tích góc nhìn');
-    if(wasCancelled)await safeSet({quoteAnalysisState:{status:'error',updatedAt:Date.now(),error:'Đã dừng phân tích.'}});
+  const contextError = (e) =>
+    /Extension context invalidated/i.test(e?.message || "");
+  const safeGet = async (keys) => {
+    try {
+      return await chrome.storage.local.get(keys);
+    } catch (e) {
+      if (contextError(e)) {
+        invalid = true;
+        observer?.disconnect();
+        return null;
+      }
+      throw e;
+    }
+  };
+  const safeSet = async (data) => {
+    try {
+      return await chrome.storage.local.set(data);
+    } catch (e) {
+      if (contextError(e)) {
+        invalid = true;
+        observer?.disconnect();
+        return false;
+      }
+      throw e;
+    }
+  };
+  const safeMessage = async (data) => {
+    try {
+      return await chrome.runtime.sendMessage(data);
+    } catch (e) {
+      if (contextError(e)) {
+        invalid = true;
+        observer?.disconnect();
+        return null;
+      }
+      throw e;
+    }
+  };
+  const request = async (body) => {
+    try {
+      const r = await chrome.runtime.sendMessage({ type: "suggest", ...body });
+      if (!r?.ok) throw new Error(r?.error || "Không tạo được gợi ý.");
+      return r.data;
+    } catch (e) {
+      if (contextError(e))
+        throw new Error("Extension vừa cập nhật. Hãy tải lại trang X.");
+      throw e;
+    }
+  };
+  const safeUrl = (value, base = location.origin) => {
+    try {
+      return new URL(value, base);
+    } catch {
+      return null;
+    }
+  };
+  const urlPath = (value, base = location.origin) =>
+    safeUrl(value, base)?.pathname || "";
+  function insideQuote(element, article) {
+    for (
+      let node = element?.parentElement;
+      node && node !== article;
+      node = node.parentElement
+    )
+      if (
+        node.dataset.testid === "quoteTweet" ||
+        (node.tagName !== "A" && node.getAttribute?.("role") === "link")
+      )
+        return true;
+    return false;
   }
-}
+  function ownPermalink(article) {
+    return (
+      [...(article?.querySelectorAll("a[href]") || [])].find(
+        (a) =>
+          a.closest("article") === article &&
+          !insideQuote(a, article) &&
+          a.querySelector("time") &&
+          /\/[A-Za-z0-9_]{1,15}\/status\/\d+/.test(urlPath(a.href)),
+      ) || null
+    );
+  }
+  function articleFor(id) {
+    return [...document.querySelectorAll('article[data-testid="tweet"]')].find(
+      (a) => ownPermalink(a)?.href.match(/\/status\/(\d+)/)?.[1] === id,
+    );
+  }
+  function currentArticle(id) {
+    const e = document.querySelector('[data-testid="tweetTextarea_0"]'),
+      articles = [
+        ...document.querySelectorAll('main article[data-testid="tweet"]'),
+      ];
+    if (e) {
+      const inside = e.closest('article[data-testid="tweet"]');
+      if (inside) return inside;
+      const before = articles.filter(
+        (a) => a.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      if (before.length) return before.at(-1);
+    }
+    const exact = articleFor(id);
+    if (exact) return exact;
+    return articles.at(-1) || null;
+  }
+  const originalLabel =
+      /^(?:hiện|xem) bản gốc$|^show original$|^view original$/i,
+    scriptLanguage = globalThis.X_REPLY_LANGUAGE;
+  function originalControl(article) {
+    return [
+      ...(article?.querySelectorAll('button,[role="button"],a,span') || []),
+    ].find((el) => originalLabel.test((el.textContent || "").trim()));
+  }
+  function promotedArticle(article) {
+    if (!article) return false;
+    if (
+      article.querySelector(
+        '[data-testid="placementTracking"],[data-testid*="promoted" i],[data-testid*="sponsor" i]',
+      )
+    )
+      return true;
+    const exact =
+        /^(?:promoted|sponsored|ad|advertisement|quảng cáo|được quảng cáo|được tài trợ|tài trợ)$/iu,
+      contains =
+        /(?:promoted|sponsored|advertisement|được\s+quảng\s+cáo|quảng\s+cáo|được\s+tài\s+trợ|tài\s+trợ)/iu,
+      translation =
+        /được\s+dịch\s+từ|translated\s+from|hiện\s+bản\s+gốc|show\s+original/iu,
+      markers = [
+        ...article.querySelectorAll(
+          '[data-testid="socialContext"],[aria-label],span,div',
+        ),
+      ]
+        .filter(
+          (e) => e.closest("article") === article && !insideQuote(e, article),
+        )
+        .slice(0, 320);
+    return markers.some((e) => {
+      const label = (e.getAttribute("aria-label") || "")
+          .trim()
+          .replace(/\s+/g, " "),
+        text = (e.textContent || "").trim().replace(/\s+/g, " "),
+        short = text.slice(0, 220),
+        compact = short.replace(translation, " ").replace(/\s+/g, " ").trim();
+      if (exact.test(label) || contains.test(label)) return true;
+      if (exact.test(text) || exact.test(compact)) return true;
+      if (text.length <= 120 && contains.test(text)) return true;
+      if (compact.length <= 120 && contains.test(compact)) return true;
+      if (contains.test(short) && translation.test(short)) return true;
+      return false;
+    });
+  }
+  function applyAdHiding() {
+    document.documentElement.classList.toggle(
+      "xra-hide-ads-enabled",
+      hideAdsEnabled,
+    );
+    // Never remove articles from profile, post, replies, or media pages.
+    // X reuses article markup there for pinned/media content and false positives
+    // would otherwise delete real user posts from the DOM.
+    if (!/^\/(?:home|explore|search)(?:\/|$)/i.test(location.pathname)) return;
+    const currentId = location.pathname.match(/\/status\/(\d+)/)?.[1],
+      root = currentId ? articleFor(currentId) : null;
+    for (const article of [
+      ...document.querySelectorAll('article[data-testid="tweet"]'),
+    ]) {
+      if (article === root || !promotedArticle(article)) continue;
+      if (hideAdsEnabled) {
+        article.remove();
+      } else article.classList.remove("xra-hidden-ad");
+    }
+  }
+  function originalTextNode(article) {
+    const nodes = [
+        ...(article?.querySelectorAll('[data-testid="tweetText"]') || []),
+      ].filter(
+        (n) => n.closest("article") === article && !insideQuote(n, article),
+      ),
+      notTranslated = nodes.find((n) => {
+        let p = n.parentElement,
+          depth = 0;
+        while (p && p !== article && depth++ < 4) {
+          if (
+            /translated from|dịch từ|bản dịch/i.test(
+              p.getAttribute("aria-label") || "",
+            )
+          )
+            return false;
+          p = p.parentElement;
+        }
+        return true;
+      });
+    return notTranslated || nodes[0] || null;
+  }
+  function mediaFor(article) {
+    if (!article) return { mediaUrls: [], mediaCount: 0, mediaKind: "none" };
+    const own = (e) =>
+        e.closest("article") === article &&
+        !insideQuote(e, article) &&
+        !e.closest('[data-testid="card.layoutLarge.media"]'),
+      elements = [
+        ...article.querySelectorAll(
+          '[data-testid="tweetPhoto"] img,[data-testid="videoPlayer"] img,img[src*="pbs.twimg.com/media/"],video[poster],source[src]',
+        ),
+      ].filter(own),
+      urls = elements.flatMap((e) => [
+        e.currentSrc,
+        e.src,
+        e.poster,
+        ...(e.getAttribute("srcset") || "")
+          .split(",")
+          .map((part) => part.trim().split(/\s+/)[0]),
+      ]);
+    for (const el of article.querySelectorAll(
+      '[style*="pbs.twimg.com"],[style*="video.twimg.com"]',
+    ))
+      if (own(el))
+        urls.push(
+          ...((el.getAttribute("style") || "").match(/https:\/\/[^"')]+/g) ||
+            []),
+        );
+    const valid = (u) => {
+        try {
+          const x = new URL(u);
+          return (
+            x.protocol === "https:" &&
+            ((x.hostname === "pbs.twimg.com" &&
+              /^\/(?:media|ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\//.test(
+                x.pathname,
+              )) ||
+              x.hostname === "video.twimg.com")
+          );
+        } catch {
+          return false;
+        }
+      },
+      mediaUrls = [...new Set(urls.filter(valid))].slice(0, 4),
+      hasVideo = !![
+        ...article.querySelectorAll('[data-testid="videoPlayer"],video'),
+      ].find(own),
+      mediaCount = [
+        ...article.querySelectorAll(
+          '[data-testid="tweetPhoto"],[data-testid="videoPlayer"],video',
+        ),
+      ].filter(own).length;
+    return {
+      mediaUrls,
+      mediaCount,
+      mediaKind: hasVideo ? "video_thumbnail" : mediaCount ? "images" : "none",
+    };
+  }
+  function embeddedContext(article) {
+    const quoted = [...article.querySelectorAll('[data-testid="quoteTweet"]')]
+        .filter((q) => q.closest("article") === article)
+        .slice(0, 2)
+        .map((q) => ({
+          type: "quoted_post",
+          text: (q.innerText || q.textContent || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 1200),
+        }))
+        .filter((x) => x.text),
+      cards = [
+        ...article.querySelectorAll(
+          '[data-testid^="card."], [data-testid="card.layoutLarge.media"], [data-testid="card.layoutSmall.media"]',
+        ),
+      ]
+        .filter(
+          (c) =>
+            c.closest("article") === article &&
+            !c.closest('[data-testid="quoteTweet"]'),
+        )
+        .slice(0, 2)
+        .map((c) => ({
+          type: "link_preview",
+          text: (c.innerText || c.textContent || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 800),
+        }))
+        .filter((x) => x.text);
+    return { embedded: [...quoted, ...cards] };
+  }
+
+  function targetPost() {
+    const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
+      article = currentArticle(id),
+      node = originalTextNode(article),
+      text = node?.innerText?.trim() || "",
+      author = location.pathname.match(/^\/([^/]+)\/status/)?.[1];
+    if (!id || !article) return null;
+    const ownMedia = mediaFor(article),
+      embedded = embeddedContext(article).embedded,
+      articles = [
+        ...document.querySelectorAll('main article[data-testid="tweet"]'),
+      ],
+      before = articles
+        .slice(0, articles.indexOf(article))
+        .filter((a) => !promotedArticle(a) && originalTextNode(a))
+        .slice(-6),
+      urls = [...ownMedia.mediaUrls];
+    const turns = before
+      .map((a, index) => {
+        const link = ownPermalink(a),
+          turnMedia = mediaFor(a),
+          mediaIndexes = [];
+        for (const url of turnMedia.mediaUrls) {
+          if (!urls.includes(url) && urls.length < 4) urls.push(url);
+          if (urls.includes(url)) mediaIndexes.push(urls.indexOf(url) + 1);
+        }
+        return {
+          turn: index + 1,
+          author: urlPath(link?.href).split("/")[1] || "",
+          text: originalTextNode(a).innerText.trim(),
+          media_count: turnMedia.mediaCount,
+          media_indexes: mediaIndexes,
+        };
+      })
+      .filter((t) => t.text);
+    if (
+      !text &&
+      !ownMedia.mediaCount &&
+      !ownMedia.mediaUrls.length &&
+      !embedded.length &&
+      !turns.length
+    )
+      return null;
+    return {
+      url: `https://x.com/${author}/status/${id}`,
+      postId: id,
+      username: author,
+      text,
+      context: JSON.stringify({
+        order: "oldest_to_newest",
+        instruction: text
+          ? "Reply to target_text as the next turn. If target_text is a short reaction/comment, use the nearest ancestor/root post as the main topic and write a reply that connects the comment to that original context; do not answer the short comment in isolation."
+          : "The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview or visible ancestor/root posts as the context being reacted to.",
+        turns,
+        embedded,
+      }).slice(0, 3000),
+      conversationDepth: turns.length + 1,
+      lang: text ? scriptLanguage(text, node?.lang || "") : "",
+      mediaUrls: urls,
+      mediaCount:
+        ownMedia.mediaCount + turns.reduce((sum, t) => sum + t.media_count, 0),
+      mediaKind:
+        ownMedia.mediaKind === "video_thumbnail"
+          ? "video_thumbnail"
+          : urls.length
+            ? "images"
+            : "none",
+    };
+  }
+  async function readOriginalPost() {
+    const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
+      article = currentArticle(id),
+      control = originalControl(article);
+    if (control) {
+      (control.closest('button,[role="button"],a') || control).click();
+      for (let i = 0; i < 15 && originalControl(article); i++)
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      if (originalControl(article))
+        throw new Error(
+          "Không chuyển được về nội dung gốc. Hãy bấm “Hiện bản gốc” rồi thử lại.",
+        );
+    }
+    let post = targetPost();
+    if (post) {
+      const preferences = await safeGet(["fastReplyMode"]),
+        fast = true;
+      let captured = {};
+      for (let attempt = 0; attempt < 3; attempt++) {
+        captured = await globalThis.XReplyMedia.capture(article, fast);
+        const refreshed = targetPost();
+        if (refreshed) post = { ...post, ...refreshed };
+        if (
+          !post.mediaCount ||
+          captured.mediaInline?.length ||
+          post.mediaUrls?.length
+        )
+          break;
+        await new Promise((resolve) =>
+          setTimeout(resolve, 250 * (attempt + 1)),
+        );
+      }
+      Object.assign(post, captured);
+      post.publishedAt = article.querySelector("time")?.dateTime || "";
+      post.generatedAt = new Date().toISOString();
+      post.clientTimezone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      post.clientLocalHour = new Date().getHours();
+    }
+    return post;
+  }
+  function postFromArticle(article) {
+    const link = ownPermalink(article),
+      id = link?.href.match(/\/status\/(\d+)/)?.[1],
+      author = urlPath(link?.href || "").split("/")[1] || "",
+      node = originalTextNode(article),
+      text = node?.innerText?.trim() || "",
+      ownMedia = mediaFor(article),
+      embedded = embeddedContext(article).embedded,
+      authorNode = article.querySelector('[data-testid="User-Name"]'),
+      authorName = (
+        authorNode?.querySelector('[dir="ltr"] span')?.textContent ||
+        authorNode?.querySelector("span")?.textContent ||
+        author
+      ).trim(),
+      avatar = (() => {
+        const scopes = [
+          article,
+          article.parentElement,
+          article.closest('[data-testid="cellInnerDiv"]') || null,
+        ].filter(Boolean);
+        for (const scope of scopes) {
+          const found = [
+            ...scope.querySelectorAll(
+              '[data-testid^="UserAvatar-Container"] img,[data-testid*="Avatar"] img,img[src*="profile_images"],img[src*="pbs.twimg.com/profile_images"],img[alt*="avatar" i]',
+            ),
+          ].find((x) => x);
+          if (found) return found;
+          const small = [...scope.querySelectorAll("img")].find((x) => {
+            const src =
+              x.currentSrc || x.src || x.getAttribute("data-src") || "";
+            const r = x.getBoundingClientRect?.();
+            return (
+              /profile_images|pbs\\.twimg\\.com/i.test(src) ||
+              ((r?.width || 0) <= 80 && (r?.height || 0) <= 80)
+            );
+          });
+          if (small) return small;
+        }
+        return null;
+      })(),
+      avatarUrl =
+        avatar?.getAttribute("src") ||
+        avatar?.getAttribute("data-src") ||
+        avatar?.currentSrc ||
+        avatar?.src ||
+        avatar
+          ?.closest('[style*="background-image"]')
+          ?.style?.backgroundImage?.match(
+            /url\\(["']?([^"')]+)["']?\\)/i,
+          )?.[1] ||
+        "";
+    if (!id || !article) return null;
+    if (
+      !text &&
+      !ownMedia.mediaCount &&
+      !ownMedia.mediaUrls.length &&
+      !embedded.length
+    )
+      return null;
+    return {
+      url: `https://x.com/${author}/status/${id}`,
+      postId: id,
+      username: author,
+      authorName,
+      handle: "@" + author,
+      avatarUrl,
+      text,
+      context: JSON.stringify({
+        instruction: text
+          ? "Write a quote-post analysis about target_text and its media."
+          : "The target post has no caption or only an icon. Use its own media first; if absent, use quoted_post/link_preview context.",
+        embedded,
+      }).slice(0, 3000),
+      conversationDepth: 1,
+      lang: text ? scriptLanguage(text, node?.lang || "") : "",
+      mediaUrls: ownMedia.mediaUrls,
+      mediaCount: ownMedia.mediaCount,
+      mediaKind: ownMedia.mediaKind,
+    };
+  }
+  async function readQuotePost(article) {
+    let post = postFromArticle(article);
+    if (!post) return null;
+    const mediaUrls = post.mediaUrls || [],
+      needsCapture = !mediaUrls.length || mediaUrls.some(isVideoMedia);
+    let captured = {};
+    if (needsCapture) {
+      const fast = true;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        captured = await globalThis.XReplyMedia.capture(article, fast);
+        const refreshed = postFromArticle(article);
+        if (refreshed) post = { ...post, ...refreshed };
+        if (captured.mediaInline?.length || post.mediaUrls?.length) break;
+        if (attempt === 0)
+          await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+      Object.assign(post, captured);
+    }
+    post.publishedAt = article.querySelector("time")?.dateTime || "";
+    post.generatedAt = new Date().toISOString();
+    post.clientTimezone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    post.clientLocalHour = new Date().getHours();
+    return post;
+  }
+  async function composeQuoteFromArticle(article, button) {
+    button.disabled = true;
+    button.classList.add("xra-quote-loading");
+    try {
+      safeMessage({ type: "openPanel" }).catch(() => {});
+      const post = await readQuotePost(article);
+      if (!post) throw new Error("Không đọc được bài viết để phân tích.");
+      if (
+        !(await safeSet({
+          quoteAnalysisState: {
+            status: "loading",
+            postUrl: post.url,
+            updatedAt: Date.now(),
+            draft: "",
+            quotePost: { ...post, mediaInline: [] },
+          },
+        }))
+      )
+        return;
+      const s = await safeGet([
+        "provider",
+        "apiKey",
+        "apiModel",
+        "geminiKey",
+        "geminiKeys",
+        "geminiModel",
+        "deepseekKey",
+        "deepseekModel",
+        "fastReplyMode",
+        "quoteExtraPrompt",
+      ]);
+      const provider = s.provider || "gemini",
+        model =
+          provider === "gemini"
+            ? s.geminiModel || "gemini-3.1-flash-lite"
+            : provider === "deepseek"
+              ? s.deepseekModel || "deepseek-flash"
+              : s.apiModel || "gpt-4.1-mini",
+        extraInstruction = String(s.quoteExtraPrompt || "").trim();
+      const r = await safeMessage({
+        type: "composeQuotePost",
+        provider,
+        model,
+        apiKey: s.apiKey,
+        geminiKey: s.geminiKey,
+        geminiKeys: s.geminiKeys,
+        deepseekKey: s.deepseekKey,
+        extraInstruction,
+        post: { ...post, fastMode: true },
+      });
+      if (invalid || !r) return;
+      if (!r?.ok) throw new Error(r?.error || "Không tạo được bài trích dẫn.");
+      await safeSet({
+        quoteAnalysisState: {
+          status: "ready",
+          postUrl: post.url,
+          updatedAt: Date.now(),
+          draft: r.data.draft,
+          model: r.data.model,
+          quotePost: { ...post, mediaInline: [] },
+        },
+      });
+    } catch (error) {
+      if (contextError(error)) return;
+      await safeSet({
+        quoteAnalysisState: {
+          status: "error",
+          updatedAt: Date.now(),
+          error: discreet(error.message),
+        },
+      });
+    } finally {
+      button.disabled = false;
+      button.classList.remove("xra-quote-loading");
+    }
+  }
+  function topActionRow(anchor, article) {
+    for (
+      let node = anchor?.parentElement, depth = 0;
+      node && node !== article && depth < 6;
+      depth++, node = node.parentElement
+    ) {
+      const ownButtons = [
+          ...node.querySelectorAll('button,[role="button"],a'),
+        ].filter(
+          (el) =>
+            el.closest("article") === article && !insideQuote(el, article),
+        ),
+        hasMenu = ownButtons.some(
+          (el) =>
+            el.matches('[data-testid="caret"]') ||
+            /more|thêm|khác|more options/i.test(
+              (el.getAttribute("aria-label") || "").trim(),
+            ),
+        ),
+        hasAnchor = ownButtons.some(
+          (el) => el === anchor || el.contains(anchor) || anchor?.contains(el),
+        );
+      if (hasAnchor && hasMenu && ownButtons.length <= 8) return node;
+    }
+    return anchor?.parentElement || null;
+  }
+  function clearQuoteButtons() {
+    document
+      .querySelectorAll(".xra-quote-top-wrap,.xra-quote-floating")
+      .forEach((node) => node.remove());
+    document
+      .querySelectorAll('article[data-testid="tweet"]')
+      .forEach((article) => delete article.dataset.xraQuoteButton);
+  }
+  function injectQuoteButtons() {
+    const id = location.pathname.match(/^\/[^/]+\/status\/(\d+)/)?.[1];
+    if (!id) {
+      clearQuoteButtons();
+      return;
+    }
+    const target = articleFor(id);
+    if (!target) {
+      clearQuoteButtons();
+      return;
+    }
+    for (const article of document.querySelectorAll(
+      'article[data-testid="tweet"]',
+    )) {
+      if (article !== target) {
+        article
+          .querySelectorAll(".xra-quote-top-wrap,.xra-quote-floating")
+          .forEach((node) => node.remove());
+        delete article.dataset.xraQuoteButton;
+        continue;
+      }
+      if (article.dataset.xraQuoteButton) continue;
+      const link = ownPermalink(article);
+      if (!link) continue;
+      const own = (el) =>
+          el.closest("article") === article && !insideQuote(el, article),
+        controls = [
+          ...article.querySelectorAll('button,[role="button"],a'),
+        ].filter(own),
+        subscribe = controls.find(
+          (el) =>
+            /^\d+-subscribe$/.test(el.getAttribute("data-testid") || "") ||
+            /subscribe|đăng ký/i.test(
+              (el.getAttribute("aria-label") || el.textContent || "").trim(),
+            ),
+        ),
+        grok = controls.find((el) =>
+          /grok|phân tích|analy/i.test(
+            (el.getAttribute("aria-label") || el.textContent || "").trim(),
+          ),
+        ),
+        caret = controls.find(
+          (el) =>
+            el.matches('[data-testid="caret"]') ||
+            /more|thêm|khác|more options/i.test(
+              (el.getAttribute("aria-label") || "").trim(),
+            ),
+        );
+      const anchor = subscribe || grok || caret,
+        row = topActionRow(anchor, article),
+        host =
+          row ||
+          (subscribe
+            ? subscribe.parentElement?.parentElement
+            : anchor?.parentElement) ||
+          article;
+      article.dataset.xraQuoteButton = "1";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "xra-quote-action xra-quote-top-action";
+      button.title = "Viết bài trích dẫn phân tích góc nhìn";
+      button.setAttribute(
+        "aria-label",
+        "Viết bài trích dẫn phân tích góc nhìn",
+      );
+      button.innerHTML =
+        globalThis.AssistantIcons?.svg("quote") ||
+        '<span class="ai-icon" aria-hidden="true"></span>';
+      button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        composeQuoteFromArticle(article, button);
+      };
+      const wrap = document.createElement("span");
+      wrap.className = "xra-quote-top-wrap";
+      wrap.append(button);
+      if (anchor) {
+        const slot = [...host.children].find(
+          (child) => child === anchor || child.contains(anchor),
+        );
+        (slot || anchor).insertAdjacentElement("beforebegin", wrap);
+      } else {
+        article.classList.add("xra-quote-anchor");
+        button.classList.add("xra-quote-floating");
+        host.append(button);
+      }
+    }
+  }
+  const editor = () =>
+    document.querySelector('[data-testid="tweetTextarea_0"]');
+  function activate() {
+    const e = editor();
+    if (e) {
+      e.click();
+      e.focus();
+    }
+  }
+  function fillOnce(text) {
+    const e = editor();
+    if (!e) return;
+    activate();
+    if ((e.innerText || "").trim()) document.execCommand("selectAll", false);
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", text);
+    const event = new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: transfer,
+      }),
+      dispatched = e.dispatchEvent(event);
+    if (dispatched && !event.defaultPrevented)
+      document.execCommand("insertText", false, text);
+  }
+  function fill(text, auto) {
+    fillOnce(text);
+    if (auto)
+      setTimeout(
+        () =>
+          document.querySelector('[data-testid="tweetButtonInline"]')?.click(),
+        90,
+      );
+  }
+  async function openMediaPicker(query, kind = "gif") {
+    const visible = (e) => {
+        const r = e.getBoundingClientRect(),
+          s = getComputedStyle(e);
+        return (
+          r.width > 0 &&
+          r.height > 0 &&
+          s.visibility !== "hidden" &&
+          s.display !== "none"
+        );
+      },
+      label = (e) =>
+        `${e.getAttribute("aria-label") || ""} ${e.getAttribute("data-testid") || ""} ${e.textContent || ""}`.toLowerCase(),
+      buttons = [...document.querySelectorAll('button,[role="button"]')].filter(
+        visible,
+      ),
+      picker = buttons.find((e) => /(?:gif|media|ảnh|image)/i.test(label(e)));
+    if (!picker)
+      throw new Error("Không tìm thấy bộ chọn GIF/ảnh trong ô trả lời.");
+    picker.click();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const dialog = document.querySelector('[role="dialog"]') || document.body,
+      input = [...dialog.querySelectorAll("input")].find(
+        (e) =>
+          visible(e) &&
+          /(?:search|tìm)/i.test(
+            `${e.getAttribute("placeholder") || ""} ${e.getAttribute("aria-label") || ""}`,
+          ),
+      );
+    if (input && query) {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      if (setter) setter.call(input, String(query));
+      else input.value = String(query);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          bubbles: true,
+        }),
+      );
+    }
+    return { ok: true, kind, query };
+  }
+  try {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type === "panelState") {
+        const b = document.querySelector(".xra-assistant-fab");
+        if (b) b.hidden = !!message.open;
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (message?.type === "usageMode") {
+        document.querySelectorAll(".xra-box").forEach((e) => e.remove());
+        if (message.mode === "x") safeMount();
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (message?.type === "mountAssistant") {
+        chrome.storage.local.set({ usageMode: "x" }).then(safeMount);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (message?.type === "readQuotePost") {
+        const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
+          article = currentArticle(id);
+        readQuotePost(article).then(
+          (post) =>
+            sendResponse({
+              ok: !!post,
+              post: post ? { ...post, mediaInline: [] } : null,
+              error: post ? null : "Không đọc được bài viết để phân tích.",
+            }),
+          (e) => sendResponse({ ok: false, error: e.message }),
+        );
+        return true;
+      }
+      if (message?.type === "openMediaPicker") {
+        openMediaPicker(String(message.query || ""), message.kind).then(
+          sendResponse,
+          (e) => sendResponse({ ok: false, error: e.message }),
+        );
+        return true;
+      }
+      if (message?.type !== "fillReply") return false;
+      try {
+        fill(String(message.text || ""), !!message.submit);
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message });
+      }
+      return false;
+    });
+  } catch {}
+  function mountAssistantButton() {
+    if (document.querySelector(".xra-assistant-fab")) return;
+    const button = document.createElement("button");
+    button.className = "xra-assistant-fab";
+    button.title = "Mở X Assistant";
+    button.setAttribute("aria-label", "Mở X Assistant");
+    button.innerHTML = `<img class="xra-assistant-logo" src="${chrome.runtime.getURL("assets/logo.svg")}" alt="">`;
+    let dragging = false,
+      moved = false,
+      startX = 0,
+      startY = 0,
+      startLeft = 0,
+      startTop = 0;
+    const clamp = () => {
+      const r = button.getBoundingClientRect();
+      button.style.left =
+        Math.max(4, Math.min(window.innerWidth - r.width - 4, r.left)) + "px";
+      button.style.top =
+        Math.max(4, Math.min(window.innerHeight - r.height - 4, r.top)) + "px";
+      button.style.right = "auto";
+    };
+    button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      dragging = true;
+      moved = false;
+      startX = event.clientX;
+      startY = event.clientY;
+      const r = button.getBoundingClientRect();
+      startLeft = r.left;
+      startTop = r.top;
+      button.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+    button.addEventListener("pointermove", (event) => {
+      if (!dragging) return;
+      const dx = event.clientX - startX,
+        dy = event.clientY - startY;
+      if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+      if (moved) {
+        button.style.left = startLeft + dx + "px";
+        button.style.top = startTop + dy + "px";
+        button.style.right = "auto";
+      }
+    });
+    button.addEventListener("pointerup", (event) => {
+      if (!dragging) return;
+      dragging = false;
+      button.releasePointerCapture?.(event.pointerId);
+      if (moved) {
+        clamp();
+        event.preventDefault();
+      }
+    });
+    button.onclick = async (event) => {
+      if (moved) {
+        moved = false;
+        event.preventDefault();
+        return;
+      }
+      button.disabled = true;
+      try {
+        const result = await chrome.runtime.sendMessage({ type: "openPanel" });
+        if (!result?.ok)
+          throw new Error(result?.error || "Không mở được side panel.");
+        button.hidden = true;
+      } catch (error) {
+        button.hidden = false;
+        button.title = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    };
+    document.body.append(button);
+  }
+
+  let lastScrollY = scrollY;
+  function updateStickyUser() {
+    let card = document.querySelector(".xra-sticky-user");
+    const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
+      article = articleFor(id),
+      identity = article?.querySelector('[data-testid="User-Name"]'),
+      goingDown = scrollY >= lastScrollY;
+    lastScrollY = scrollY;
+    if (
+      !document.querySelector(".xra-box") ||
+      !identity ||
+      identity.getBoundingClientRect().bottom >= 8 ||
+      !goingDown
+    ) {
+      if (card) card.hidden = true;
+      return;
+    }
+    if (!card) {
+      card = document.createElement("div");
+      card.className = "xra-sticky-user";
+      document.body.append(card);
+    }
+    const avatar = article.querySelector(
+        '[data-testid="Tweet-User-Avatar"] img,div[data-testid="Tweet-User-Avatar"] img',
+      ),
+      lines = (identity.innerText || "")
+        .split("\n")
+        .map((x) => x.trim())
+        .filter(Boolean);
+    card.replaceChildren();
+    if (avatar) {
+      const img = document.createElement("img");
+      img.src = avatar.currentSrc || avatar.src;
+      card.append(img);
+    }
+    const text = document.createElement("span"),
+      name = document.createElement("b"),
+      handle = document.createElement("small");
+    name.textContent = lines.find((x) => !x.startsWith("@")) || lines[0] || "";
+    handle.textContent = lines.find((x) => x.startsWith("@")) || "";
+    text.append(name, handle);
+    card.append(text);
+    card.hidden = false;
+  }
+  addEventListener("scroll", () => requestAnimationFrame(updateStickyUser), {
+    passive: true,
+  });
+  function likePost() {
+    if (state.liked) return;
+    const b = articleFor(state.postId)?.querySelector('[data-testid="like"]');
+    if (b) {
+      b.click();
+      state.liked = true;
+    }
+  }
+  function render(box) {
+    const results = box.querySelector(".xra-results");
+    results.replaceChildren();
+    if (!state.replies.length) return;
+    state.replies.sort(
+      (a, b) => (b.relevance_score || 0) - (a.relevance_score || 0),
+    );
+    const picks = document.createElement("div");
+    picks.className = "xra-pick";
+    state.replies.forEach((item, i) => {
+      const wrap = document.createElement("div");
+      wrap.className = "xra-suggestion-wrap";
+      const b = document.createElement("button");
+      b.className = "xra-chip";
+      b.classList.toggle("selected", state.selected === i);
+      const row = document.createElement("span"),
+        t = document.createElement("span"),
+        score = document.createElement("span");
+      row.className = "xra-chip-main";
+      t.textContent = item.reply;
+      score.className = "xra-relevance";
+      score.textContent = Number.isFinite(item.relevance_score)
+        ? `${item.relevance_score}%`
+        : "";
+      row.append(t, score);
+      b.append(row);
+      if (item.translation_vi) {
+        const s = document.createElement("small");
+        s.className = "xra-translation";
+        s.textContent = item.translation_vi;
+        b.append(s);
+      }
+      b.onclick = () => {
+        state.selected = i;
+        fill(
+          item.reply,
+          box.querySelector(".xra-auto-reply").classList.contains("active"),
+        );
+        render(box);
+      };
+      wrap.append(b);
+      if (item.media_suggestion?.query) {
+        const media = document.createElement("button");
+        media.type = "button";
+        media.className = "xra-media-suggestion";
+        media.textContent = `${item.media_suggestion.kind === "gif" ? "GIF" : "Ảnh/meme"} · ${item.media_suggestion.query}`;
+        media.title =
+          item.media_suggestion.reason || "Mở bộ chọn media với gợi ý này";
+        media.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openMediaPicker(
+            item.media_suggestion.query,
+            item.media_suggestion.kind,
+          ).catch((error) => {
+            media.title = error.message;
+          });
+        };
+        wrap.append(media);
+      }
+      picks.append(wrap);
+    });
+    results.append(picks);
+    if (Number.isFinite(state.elapsedMs)) {
+      const timing = document.createElement("small");
+      timing.className = "xra-generation-time";
+      timing.textContent =
+        new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(
+          state.elapsedMs / 1000,
+        ) + " giây";
+      timing.title =
+        "Thời gian đọc bài và nhận đầy đủ gợi ý, gồm bản dịch nếu cần";
+      results.append(timing);
+    }
+  }
+  async function mount() {
+    if (invalid || mounting) return;
+    mounting = true;
+    const saved = await safeGet([
+      "autoReply",
+      "autoReplyFlow",
+      "autoSuggest",
+      "autoLike",
+      "usageMode",
+      "replyCount",
+      "fastReplyMode",
+      "replyMediaSuggestions",
+    ]);
+    if (!saved) {
+      mounting = false;
+      return;
+    }
+    if (saved.usageMode === "panel") {
+      document.querySelectorAll(".xra-box").forEach((e) => e.remove());
+      mounting = false;
+      return;
+    }
+    if (!/^\/[^/]+\/status\/\d+/.test(location.pathname)) {
+      document.querySelectorAll(".xra-box").forEach((e) => e.remove());
+      mounting = false;
+      return;
+    }
+    const existing = document.querySelector(".xra-box"),
+      currentId = location.pathname.match(/\/status\/(\d+)/)?.[1];
+    if (existing && existing.dataset.postId !== currentId) existing.remove();
+    else if (existing) {
+      mounting = false;
+      return;
+    }
+    if (saved.autoSuggest && !saved.autoReplyFlow)
+      globalThis.XReplyMedia?.prime(
+        currentArticle(currentId),
+        !!saved.fastReplyMode,
+      );
+    let e = editor();
+    if (!e) {
+      const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
+        reply = articleFor(id)?.querySelector('[data-testid="reply"]');
+      if (reply && !reply.dataset.xraOpened) {
+        reply.dataset.xraOpened = "1";
+        reply.click();
+        setTimeout(safeMount, 250);
+      }
+      mounting = false;
+      return;
+    }
+    const post = targetPost();
+    if (post?.postId !== state.postId)
+      state = {
+        postId: post?.postId || null,
+        replies: [],
+        replyHistory: [],
+        selected: null,
+        generated: false,
+        liked: false,
+      };
+    activate();
+    const host =
+        e.closest('[data-testid="tweetTextarea_0_label"]')?.parentElement
+          ?.parentElement || e.parentElement,
+      box = document.createElement("div");
+    box.className = "xra-box";
+    box.dataset.postId = post?.postId || "";
+    box.innerHTML =
+      '<div class="xra-tools"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v6h-6"/></svg></button><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><span class="xra-spacer"></span><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></button><button class="xra-button xra-auto-like" title="Tự like khi mở bài"><svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.9-8.6a5.5 5.5 0 0 0-.1-7.8Z"/></svg></button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4 20-7Z"/></svg></button></div><div class="xra-results"></div>';
+    const generate = box.querySelector(".xra-generate"),
+      sync = box.querySelector(".xra-sync");
+    sync.innerHTML =
+      globalThis.AssistantIcons?.svg("refresh") || sync.innerHTML;
+    let run,
+      running = false,
+      pending = false;
+    const pairIcon = (selector, path) => {
+      const button = box.querySelector(selector),
+        outline = button.querySelector("svg"),
+        filled = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      outline.classList.add("xra-icon-outline");
+      filled.classList.add("xra-icon-filled");
+      filled.setAttribute("viewBox", "0 0 24 24");
+      filled.innerHTML = `<path d="${path}"/>`;
+      button.append(filled);
+    };
+    pairIcon(
+      ".xra-auto-suggest",
+      "M12 2.5l2.2 6.1 6.3 2.2-6.3 2.2-2.2 6.2-2.2-6.2-6.3-2.2 6.3-2.2L12 2.5Zm7 12.5.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z",
+    );
+    pairIcon(
+      ".xra-auto-like",
+      "M12 21 3.1 12.4a5.5 5.5 0 0 1 7.8-7.8L12 5.7l1-1.1a5.5 5.5 0 0 1 7.8 7.8L12 21Z",
+    );
+    pairIcon(
+      ".xra-auto-reply",
+      "M21.7 2.3a1 1 0 0 0-1-.24l-18 7a1 1 0 0 0 .08 1.89l7.35 2.45 2.45 7.35a1 1 0 0 0 1.89.08l7-18a1 1 0 0 0-.24-1.04ZM12 11.59 7.2 10 18 5.8 12 11.59Z",
+    );
+    let replyCount = Math.min(10, Math.max(1, Number(saved.replyCount) || 2));
+    const countButton = box.querySelector(".xra-count"),
+      countMenu = box.querySelector(".xra-count-menu");
+    countButton.textContent = replyCount;
+    for (let i = 1; i <= 10; i++) {
+      const button = document.createElement("button");
+      button.textContent = i;
+      button.onclick = () => {
+        replyCount = i;
+        countButton.textContent = i;
+        countMenu.hidden = true;
+        chrome.storage.local.set({ replyCount: i }).catch(() => {});
+      };
+      countMenu.append(button);
+    }
+    countButton.onclick = () => {
+      countMenu.hidden = !countMenu.hidden;
+    };
+    const toggle = (button, key, value) => {
+      button.classList.toggle("active", value);
+      button.setAttribute("aria-pressed", String(value));
+      button.onclick = () => {
+        const next = !button.classList.contains("active");
+        button.classList.toggle("active", next);
+        button.setAttribute("aria-pressed", String(next));
+        try {
+          chrome.storage.local.set({ [key]: next }).catch(() => {});
+        } catch {}
+        if (key === "autoLike" && next) likePost();
+        if (key === "autoSuggest" && next && !saved.autoReplyFlow && !state.generated) run(false);
+      };
+    };
+    toggle(
+      box.querySelector(".xra-auto-reply"),
+      "autoReply",
+      !!saved.autoReply,
+    );
+    toggle(
+      box.querySelector(".xra-auto-suggest"),
+      "autoSuggest",
+      !!saved.autoSuggest,
+    );
+    toggle(box.querySelector(".xra-auto-like"), "autoLike", !!saved.autoLike);
+    const gear = document.createElement("button");
+    gear.className = "xra-button xra-settings";
+    gear.title = "Cài đặt tự động";
+    gear.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z" stroke="currentColor" stroke-width="1.5"/></svg>';
+    const tools = box.querySelector(".xra-tools");
+    tools.append(gear);
+    tools.insertBefore(box.querySelector(".xra-count-wrap"), gear);
+    const autoPanel = document.createElement("div");
+    autoPanel.className = "xra-auto-panel";
+    autoPanel.hidden = true;
+    autoPanel.innerHTML =
+      '<label><span><b>Tự động gợi ý</b><small>Tạo khi mở bài</small></span><input type="checkbox" data-key="autoSuggest"></label><label><span><b>Tự thả like</b><small>Like khi mở bài</small></span><input type="checkbox" data-key="autoLike"></label><label><span><b>Tự đăng trả lời</b><small>Đăng khi chọn gợi ý</small></span><input type="checkbox" data-key="autoReply"></label><label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
+    box.querySelector(".xra-results").before(autoPanel);
+    for (const input of autoPanel.querySelectorAll("input")) {
+      input.checked = !!saved[input.dataset.key];
+      input.onchange = () => {
+        const key = input.dataset.key,
+          value = input.checked;
+        chrome.storage.local.set({ [key]: value }).catch(() => {});
+        box
+          .querySelector(
+            `.xra-${key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}`,
+          )
+          ?.classList.toggle("active", value);
+        if (key === "autoLike" && value) likePost();
+        if (key === "autoSuggest" && value && !saved.autoReplyFlow && !state.generated) run(false);
+      };
+    }
+    gear.onclick = () => {
+      autoPanel.hidden = !autoPanel.hidden;
+      gear.classList.toggle("active", !autoPanel.hidden);
+    };
+    run = async (force) => {
+      if (running) {
+        pending = true;
+        return;
+      }
+      const started = performance.now();
+      running = true;
+      state.generated = true;
+      generate.disabled = sync.disabled = true;
+      const results = box.querySelector(".xra-results");
+      results.classList.remove("xra-error");
+      results.innerHTML =
+        '<span class="xra-loading"></span><span class="xra-loading-label">Đang viết gợi ý…</span>';
+      try {
+        const post = await readOriginalPost();
+        if (!post) throw new Error("Chưa đọc được bài viết gốc.");
+        const s = await safeGet([
+          "provider",
+          "apiKey",
+          "apiModel",
+          "chatgptModel",
+          "geminiKey",
+          "geminiKeys",
+          "geminiModel",
+          "deepseekKey",
+          "deepseekModel",
+          "stylePrompt",
+          "replyTone",
+          "replyMediaSuggestions",
+        ]);
+        if (!s) throw new Error("Hãy tải lại trang X.");
+        const provider = s.provider || "gemini";
+        if (
+          provider === "api" &&
+          !/^sk-[A-Za-z0-9_-]{20,}$/.test(s.apiKey || "")
+        )
+          throw new Error("Mở side panel và nhập API key.");
+        if (provider === "chatgpt" && !s.chatgptModel)
+          throw new Error("Kết nối ChatGPT và chọn model.");
+        if (provider === "gemini" && !s.geminiKey)
+          throw new Error("Nhập Gemini API key trong cài đặt.");
+        if (provider === "deepseek" && !s.deepseekKey)
+          throw new Error("Nhập DeepSeek API key trong cài đặt.");
+        const model =
+          provider === "chatgpt"
+            ? s.chatgptModel
+            : provider === "gemini"
+              ? s.geminiModel || "gemini-3.1-flash-lite"
+              : provider === "deepseek"
+                ? s.deepseekModel || "deepseek-flash"
+                : s.apiModel || "gpt-4.1-mini";
+        const data = await request({
+          provider,
+          apiKey: s.apiKey,
+          geminiKey: s.geminiKey,
+          geminiKeys: s.geminiKeys,
+          deepseekKey: s.deepseekKey,
+          model,
+          force,
+          post: {
+            ...post,
+            style:
+              (s.stylePrompt || "") +
+              " " +
+              (s.replyTone === "male"
+                ? "Use a natural masculine Vietnamese voice; do not mention gender."
+                : s.replyTone === "female"
+                  ? "Use a natural feminine Vietnamese voice; do not mention gender."
+                  : ""),
+            replyCount,
+            excludeReplies: force ? state.replyHistory : [],
+            replyMediaSuggestions: !!s.replyMediaSuggestions,
+          },
+        });
+        if (
+          !pending &&
+          box.isConnected &&
+          location.pathname.match(/\/status\/(\d+)/)?.[1] === box.dataset.postId
+        ) {
+          state.replies = data.result.replies;
+          state.replyHistory = [
+            ...new Set([
+              ...state.replyHistory,
+              ...(state.replies || []).map((x) => x.reply).filter(Boolean),
+            ]),
+          ].slice(-30);
+          state.selected = null;
+          state.elapsedMs = performance.now() - started;
+          render(box);
+        }
+      } catch (err) {
+        results.textContent = err.message;
+        results.classList.add("xra-error");
+      } finally {
+        running = false;
+        generate.disabled = sync.disabled = false;
+        if (pending && box.isConnected) {
+          pending = false;
+          run(true);
+        }
+      }
+    };
+    document.addEventListener("xra-style-changed", () => {
+      if (box.isConnected && (running || state.replies.length)) run(true);
+    });
+    generate.onclick = () => run(false);
+    sync.onclick = () => run(true);
+    host.insertAdjacentElement("afterend", box);
+    render(box);
+    applyAiIconMask(box);
+    if (saved.autoLike) likePost();
+    if (saved.autoSuggest && !saved.autoReplyFlow && !state.generated) run(false);
+    mounting = false;
+  }
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (
+        !event.target.closest?.('[data-testid="tweetButtonInline"]') ||
+        state.selected === null
+      )
+        return;
+      const used = state.selected;
+      setTimeout(() => {
+        state.replies.splice(used, 1);
+        state.selected = null;
+        const box = document.querySelector(".xra-box");
+        if (box) render(box);
+      }, 0);
+    },
+    true,
+  );
+  let mountTimer = 0;
+  const safeMount = () => {
+    applyAdHiding();
+    injectQuoteButtons();
+    mountAssistantButton();
+    applyAiIconMask();
+    const launcher = document.querySelector(".xra-assistant-fab");
+    if (launcher) {
+      launcher.title = "Mở Assistant";
+      launcher.setAttribute("aria-label", "Mở Assistant");
+    }
+    mount().catch((e) => {
+      mounting = false;
+      if (contextError(e)) {
+        invalid = true;
+        observer?.disconnect();
+      } else console.error("Assistant:", discreet(e.message));
+    });
+  };
+  const scheduleMount = () => {
+    clearTimeout(mountTimer);
+    mountTimer = setTimeout(() => {
+      mountTimer = 0;
+      safeMount();
+    }, 120);
+  };
+  observer = new MutationObserver(scheduleMount);
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+  safeGet(["hideAds"]).then((s) => {
+    hideAdsEnabled = !!s?.hideAds;
+    applyAdHiding();
+  });
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && Object.hasOwn(changes, "hideAds")) {
+        hideAdsEnabled = !!changes.hideAds.newValue;
+        applyAdHiding();
+      }
+      scheduleMount();
+    });
+  } catch {}
+  safeMount();
+  // Cho phép nút Phân tích chuyển thành nút dừng trong lúc chờ mô hình, không khoá nút.
+  async function composeQuoteFromArticle(article, button) {
+    if (button.dataset.xraQuoteRunning === "1") {
+      button.dataset.xraQuoteCancel = "1";
+      button.title = "Đang dừng phân tích…";
+      button.setAttribute("aria-label", "Đang dừng phân tích…");
+      return;
+    }
+    button.dataset.xraQuoteRunning = "1";
+    button.dataset.xraQuoteCancel = "0";
+    button.classList.add("xra-quote-loading");
+    button.title = "Dừng phân tích";
+    button.setAttribute("aria-label", "Dừng phân tích");
+    const cancelled = () => button.dataset.xraQuoteCancel === "1";
+    try {
+      safeMessage({ type: "openPanel" }).catch(() => {});
+      const post = await readQuotePost(article);
+      if (cancelled()) return;
+      if (!post) throw new Error("Không đọc được bài viết để phân tích.");
+      if (
+        !(await safeSet({
+          quoteAnalysisState: {
+            status: "loading",
+            postUrl: post.url,
+            updatedAt: Date.now(),
+            draft: "",
+            quotePost: { ...post, mediaInline: [] },
+          },
+        })) ||
+        cancelled()
+      )
+        return;
+      const s = await safeGet([
+        "provider",
+        "apiKey",
+        "apiModel",
+        "geminiKey",
+        "geminiKeys",
+        "geminiModel",
+        "deepseekKey",
+        "deepseekModel",
+        "fastReplyMode",
+        "quoteExtraPrompt",
+      ]);
+      if (cancelled()) return;
+      const provider = s.provider || "gemini",
+        model =
+          provider === "gemini"
+            ? s.geminiModel || "gemini-3.1-flash-lite"
+            : provider === "deepseek"
+              ? s.deepseekModel || "deepseek-flash"
+              : s.apiModel || "gpt-4.1-mini",
+        extraInstruction = String(s.quoteExtraPrompt || "").trim();
+      const request = safeMessage({
+          type: "composeQuotePost",
+          provider,
+          model,
+          apiKey: s.apiKey,
+          geminiKey: s.geminiKey,
+          geminiKeys: s.geminiKeys,
+          deepseekKey: s.deepseekKey,
+          extraInstruction,
+          post: { ...post, fastMode: true },
+        }),
+        timeout = new Promise((_, reject) =>
+          setTimeout(
+            () =>
+              reject(new Error("Phân tích quá lâu, hãy bấm lại để thử lại.")),
+            30000,
+          ),
+        );
+      const r = await Promise.race([request, timeout]);
+      if (cancelled()) return;
+      if (invalid || !r) return;
+      if (!r?.ok) throw new Error(r?.error || "Không tạo được bài trích dẫn.");
+      await safeSet({
+        quoteAnalysisState: {
+          status: "ready",
+          postUrl: post.url,
+          updatedAt: Date.now(),
+          draft: r.data.draft,
+          model: r.data.model,
+          quotePost: { ...post, mediaInline: [] },
+        },
+      });
+    } catch (error) {
+      if (contextError(error) || cancelled()) return;
+      await safeSet({
+        quoteAnalysisState: {
+          status: "error",
+          updatedAt: Date.now(),
+          error: discreet(error.message),
+        },
+      });
+    } finally {
+      const wasCancelled = cancelled();
+      button.dataset.xraQuoteRunning = "0";
+      button.dataset.xraQuoteCancel = "0";
+      button.classList.remove("xra-quote-loading");
+      button.disabled = false;
+      button.title = "Viết bài trích dẫn phân tích góc nhìn";
+      button.setAttribute(
+        "aria-label",
+        "Viết bài trích dẫn phân tích góc nhìn",
+      );
+      if (wasCancelled)
+        await safeSet({
+          quoteAnalysisState: {
+            status: "error",
+            updatedAt: Date.now(),
+            error: "Đã dừng phân tích.",
+          },
+        });
+    }
+  }
 })();
 
-
-
-
-
-
-
-
-
-
-
-
+// Scope reply-editor detection to the active status article; never mount into X's global post composer.
+globalThis.__xraScopedEditorFix = true;

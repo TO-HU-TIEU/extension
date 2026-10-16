@@ -1,4 +1,7 @@
 (function(){
+  // This workaround is only for X's Following/Followers virtual list.
+  // Never alter scrolling on profiles, posts, media, home, or search pages.
+  if(!/^\/[^/]+\/(?:following|followers)\/?$/i.test(location.pathname))return;
   if(globalThis.__assistantFollowScrollFixed)return;
   globalThis.__assistantFollowScrollFixed=true;
   const nativeScrollBy=window.scrollBy.bind(window);
