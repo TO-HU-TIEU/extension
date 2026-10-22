@@ -313,7 +313,7 @@
       fast.classList.toggle("active", !!settings.fastReplyMode);
       fast.setAttribute("aria-pressed", String(!!settings.fastReplyMode));
       fast.title = settings.fastReplyMode ? "Gợi ý nhanh: đang bật" : "Bật gợi ý nhanh";
-      globalThis.ReplyLayout.apply(box, settings.replyLayout);
+      globalThis.ReplyLayout.apply(box);
     }
   }
   function theme() {
@@ -366,7 +366,6 @@
       "customStyles",
       "personalReplyStyles",
       "fastReplyMode",
-      "replyLayout",
     ];
     if (!keys.some((key) => changes[key])) return;
     for (const key of keys) if (changes[key]) settings[key] = changes[key].newValue;
@@ -383,7 +382,6 @@
       "customStyles",
       "personalReplyStyles",
       "fastReplyMode",
-      "replyLayout",
     ])
     .then((s) => {
       settings = s;

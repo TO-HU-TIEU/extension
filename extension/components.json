@@ -16,6 +16,12 @@
       "contexts": ["content"]
     },
     {
+      "id": "automation.auto-selection",
+      "path": "auto-selection.js",
+      "domain": "automation",
+      "contexts": ["content"]
+    },
+    {
       "id": "shell.background",
       "path": "background.js",
       "domain": "shell",
@@ -72,15 +78,9 @@
     { "id": "reply.extract", "path": "extract.js", "domain": "reply", "contexts": ["dynamic"] },
     {
       "id": "automation.comment-runner",
-      "path": "comment-automation.js",
+      "path": "feedback.js",
       "domain": "automation",
       "contexts": ["content", "dynamic"]
-    },
-    {
-      "id": "reply.learning-feedback",
-      "path": "learning-feedback.js",
-      "domain": "reply",
-      "contexts": ["content", "panel"]
     },
     { "id": "follow.panel", "path": "follow-panel.js", "domain": "follow", "contexts": ["panel"] },
     {
@@ -127,31 +127,9 @@
     },
     {
       "id": "core.language",
-      "path": "shared/language.js",
-      "source": "../shared/language.js",
+      "path": "language.js",
       "domain": "core",
       "contexts": ["background-import", "content", "panel", "dynamic"]
-    },
-    {
-      "id": "core.prompt-policy",
-      "path": "shared/prompt-policy.js",
-      "source": "../shared/prompt-policy.js",
-      "domain": "core",
-      "contexts": ["background-import"]
-    },
-    {
-      "id": "core.reply-quality",
-      "path": "shared/reply-quality.js",
-      "source": "../shared/reply-quality.js",
-      "domain": "core",
-      "contexts": ["background-import"]
-    },
-    {
-      "id": "core.reply-contract",
-      "path": "shared/reply-contract.js",
-      "source": "../shared/reply-contract.js",
-      "domain": "core",
-      "contexts": ["background-import"]
     },
     { "id": "shell.panel", "path": "panel.js", "domain": "shell", "contexts": ["panel"] },
     {
@@ -161,16 +139,10 @@
       "contexts": ["background-import", "panel", "dynamic"]
     },
     {
-      "id": "shell.panel-entry",
-      "path": "panel-entry.js",
-      "domain": "shell",
-      "contexts": ["background-import"]
-    },
-    {
       "id": "reply.layout",
       "path": "reply-layout.js",
       "domain": "reply",
-      "contexts": ["content"]
+      "contexts": ["content", "panel"]
     },
     {
       "id": "reply.preferences",
@@ -197,18 +169,6 @@
       "domain": "core",
       "contexts": ["content", "panel"]
     },
-    {
-      "id": "shell.panel-icons",
-      "path": "panel-icons.js",
-      "domain": "shell",
-      "contexts": ["panel"]
-    },
-    {
-      "id": "core.webview-demo",
-      "path": "webview-demo.js",
-      "domain": "core",
-      "contexts": ["panel"]
-    },
     { "id": "update.panel", "path": "updates-panel.js", "domain": "update", "contexts": ["panel"] },
     {
       "id": "reply.content-fix",
@@ -224,6 +184,12 @@
       "contexts": ["content", "dynamic"]
     },
     {
+      "id": "reply.article-content",
+      "path": "x-article-content.js",
+      "domain": "reply",
+      "contexts": ["content"]
+    },
+    {
       "id": "reply.personalization",
       "path": "x-personalization.js",
       "domain": "reply",
@@ -231,17 +197,12 @@
     }
   ],
   "loadOrder": {
-    "styles": ["panel-ui.css"],
     "backgroundImports": [
-      "shared/reply-contract.js",
-      "shared/language.js",
-      "shared/prompt-policy.js",
-      "shared/reply-quality.js",
+      "language.js",
       "reply-time.js",
       "reply-preferences.js",
       "content-presets.js",
       "remote-config.js",
-      "panel-entry.js",
       "content-core.js",
       "content-reader.js",
       "content-background.js"
@@ -249,35 +210,34 @@
     "content": [
       "ui-icons.js",
       "theme.js",
-      "shared/language.js",
+      "language.js",
       "reply-preferences.js",
       "reply-layout.js",
       "x-media.js",
+      "x-article-content.js",
       "x-content.js",
       "x-content-fix.js",
+      "auto-selection.js",
       "auto-flow.js",
-      "comment-automation.js",
-      "learning-feedback.js",
+      "feedback.js",
       "x-personalization.js",
       "follow.js",
       "follow-speed-content.js",
       "follow-scroll-fix.js"
     ],
     "panel": [
-      "webview-demo.js",
       "activation.js",
       "ui-icons.js",
-      "panel-icons.js",
       "theme.js",
       "reply-preferences.js",
       "remote-config.js",
-      "shared/language.js",
+      "language.js",
       "content-core.js",
       "content-reader.js",
       "panel.js",
-      "learning-feedback.js",
       "tone-controls.js",
       "content-panel.js",
+      "reply-layout.js",
       "extension-updates.js",
       "updates-panel.js",
       "follow-target-panel.js",

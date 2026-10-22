@@ -1,5 +1,4 @@
 (() => {
-  if (globalThis.XRA_DEMO_MODE) return;
   const SUPABASE = "https://gmwyhzbtrtpwpwssqync.supabase.co/functions/v1/admin-keys";
   const hash = async (value) =>
     Array.from(

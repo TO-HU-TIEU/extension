@@ -1,0 +1,542 @@
+/* Side-panel spacing and typography contract.
+   Keep this stylesheet last in panel.html; injected X reply UI uses its own styles. */
+:root {
+  --panel-space-1: 4px;
+  --panel-space-2: 8px;
+  --panel-space-3: 12px;
+  --panel-space-4: 16px;
+  --panel-space-5: 20px;
+  --panel-font-xs: 11px;
+  --panel-font-sm: 12px;
+  --panel-font-body: 13px;
+  --panel-font-title: 14px;
+  --panel-font-app-title: 16px;
+  --panel-line-tight: 16px;
+  --panel-line-body: 19px;
+  --panel-control-height: 36px;
+  --panel-card-padding: 12px;
+  --panel-row-height: 44px;
+}
+
+/* Reusable layout roles for panel markup; avoid styling anonymous nested divs. */
+.panel-card {
+  margin: 0 0 var(--panel-space-3);
+  padding: var(--panel-card-padding);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.setup-card.panel-card,
+.settings-card.panel-card {
+  padding: 0;
+}
+
+.panel-stack {
+  display: grid;
+  gap: var(--panel-space-2);
+  min-width: 0;
+}
+
+.panel-stack[hidden],
+.panel-row[hidden],
+.panel-field[hidden],
+.panel-actions[hidden] {
+  display: none !important;
+}
+
+.panel-stack > p {
+  margin: 0;
+}
+
+.panel-stack > label {
+  margin: 0;
+}
+
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: var(--panel-space-2);
+  min-width: 0;
+}
+
+.panel-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--panel-space-1);
+  min-width: 0;
+}
+
+.panel-copy > :is(h1, h2, h3, p, small, b) {
+  margin-block: 0;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--panel-space-2);
+  min-width: 0;
+}
+
+.panel-field {
+  display: grid;
+  gap: var(--panel-space-2);
+  min-width: 0;
+}
+
+.panel-field > label {
+  margin: 0;
+}
+
+.panel-field > :is(input, select, textarea, button) {
+  width: 100%;
+}
+
+body {
+  padding: var(--panel-space-3);
+  font-size: var(--panel-font-body);
+  line-height: 1.45;
+}
+
+header {
+  gap: var(--panel-space-2);
+  margin: 0 0 var(--panel-space-3);
+  padding: var(--panel-space-2);
+}
+
+header h1 {
+  font-size: var(--panel-font-app-title);
+  line-height: 20px;
+}
+
+header .app-version {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+header p {
+  margin: 2px 0 0;
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+header .icon,
+header button.theme-button,
+header button.settings-button {
+  width: var(--panel-control-height);
+  height: var(--panel-control-height);
+  min-height: var(--panel-control-height);
+  flex: 0 0 var(--panel-control-height);
+}
+
+.module-nav {
+  gap: var(--panel-space-1);
+  margin: 0 0 var(--panel-space-3);
+  padding: var(--panel-space-1);
+}
+
+.module-nav button {
+  min-height: 48px;
+  padding: var(--panel-space-2) var(--panel-space-1);
+  gap: var(--panel-space-1);
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+.module-nav button.active,
+.module-nav button:not(.active) {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+.module-nav .panel-nav-label {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+.module-nav .panel-nav-icon,
+.module-nav .panel-nav-icon .ui-icon {
+  width: 18px;
+  height: 18px;
+}
+
+#workspace,
+#xWorkspace,
+#contentWorkspace,
+#quoteWorkspace,
+#followWorkspace,
+#feedbackWorkspace,
+#settingsArea,
+#replySettings {
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+}
+
+#workspace > section,
+#workspace > details,
+#xWorkspace > section,
+#contentWorkspace > section,
+#quoteWorkspace > section,
+#followWorkspace > section,
+#feedbackWorkspace > section,
+#settingsArea > section,
+#replySettings > .config-card,
+#replySettings > [data-reply-preferences] {
+  margin-top: 0;
+  margin-bottom: var(--panel-space-3);
+}
+
+.module-settings {
+  margin: var(--panel-space-3) 0 0;
+  padding: 0;
+}
+
+.setup-card {
+  margin: 0 0 var(--panel-space-3);
+  padding: 0;
+  border-radius: 12px;
+}
+
+.setup-card summary {
+  min-height: var(--panel-row-height);
+  padding: var(--panel-space-2) var(--panel-card-padding);
+  font-size: var(--panel-font-title);
+  line-height: 20px;
+}
+
+.setup-body {
+  padding: 0 var(--panel-card-padding) var(--panel-card-padding);
+}
+
+.post-card,
+.results-compact,
+.x-mode-card,
+.config-card,
+.content-card,
+.quote-card,
+.follow-card,
+.settings-card,
+.feedback-card {
+  margin: 0 0 var(--panel-space-3);
+  padding: var(--panel-card-padding);
+  border-radius: 12px;
+}
+
+.section-head,
+.config-card .section-head,
+.content-card .section-head,
+.quote-card .section-head,
+.follow-card .section-head {
+  min-height: var(--panel-row-height);
+  gap: var(--panel-space-2);
+}
+
+.config-card > .section-head,
+.content-card > .section-head,
+.quote-card > .section-head,
+.follow-card > .section-head {
+  margin: 0 0 var(--panel-space-3);
+  padding: 0 0 var(--panel-space-2);
+}
+
+h1,
+h2,
+h3,
+.section-head h2,
+.config-card h2,
+.content-card h2,
+.quote-card h2,
+.follow-card h2 {
+  line-height: 20px;
+}
+
+.config-card h2,
+.content-card h2,
+.quote-card h2,
+.follow-card h2,
+.section-head h2,
+.results-compact > h2 {
+  margin: 0;
+  font-size: var(--panel-font-title);
+  font-weight: 700;
+}
+
+.config-card h3,
+.content-card h3,
+.quote-card h3,
+.follow-card h3,
+.feedback-methods h3,
+.feedback-quantity h3,
+.feedback-posts-title {
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+}
+
+.config-card > label,
+.config-card .label-line,
+.config-card #stylePickerField > label,
+.config-card .inline-tone-field > label,
+.content-card > label,
+.quote-card > label,
+.follow-card > label,
+.field-label,
+.style-field > span {
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+}
+
+#workspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#workspace select,
+#workspace textarea,
+#xWorkspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#xWorkspace select,
+#xWorkspace textarea,
+#contentWorkspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#contentWorkspace select,
+#contentWorkspace textarea,
+#quoteWorkspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#quoteWorkspace select,
+#quoteWorkspace textarea,
+#followWorkspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#followWorkspace select,
+#followWorkspace textarea,
+#feedbackWorkspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#feedbackWorkspace select,
+#feedbackWorkspace textarea,
+#settingsArea input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#settingsArea select,
+#settingsArea textarea,
+#replySettings input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#replySettings select,
+#replySettings textarea {
+  min-height: var(--panel-control-height);
+  padding: var(--panel-space-2) 10px;
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+}
+
+#workspace textarea,
+#xWorkspace textarea,
+#contentWorkspace textarea,
+#quoteWorkspace textarea,
+#followWorkspace textarea,
+#feedbackWorkspace textarea,
+#settingsArea textarea,
+#replySettings textarea {
+  min-height: 72px;
+}
+
+#workspace
+  button:not(.icon):not(.switch):not(.auto-exclusion-toggle):not(.auto-exclusion-chip button),
+#xWorkspace
+  button:not(.icon):not(.switch):not(.auto-exclusion-toggle):not(.auto-exclusion-chip button),
+#contentWorkspace button:not(.icon):not(.switch),
+#quoteWorkspace button:not(.icon):not(.switch),
+#followWorkspace button:not(.icon):not(.switch),
+#feedbackWorkspace button:not(.icon):not(.switch),
+#settingsArea button:not(.icon):not(.switch),
+#replySettings button:not(.icon):not(.switch) {
+  min-height: var(--panel-control-height);
+  padding: var(--panel-space-2) 10px;
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+}
+
+button.icon,
+button.content-icon,
+button.follow-help,
+button.recent-remove,
+button.key-remove,
+button.key-drag,
+button.settings-button,
+button.theme-button,
+button.release-icon {
+  width: var(--panel-control-height);
+  height: var(--panel-control-height);
+  min-height: var(--panel-control-height);
+  padding: 0;
+}
+
+label.switch {
+  margin: 0;
+  line-height: 1;
+}
+
+.toggle-row {
+  min-height: var(--panel-row-height);
+  padding: var(--panel-space-2) 0;
+  gap: var(--panel-space-3);
+}
+
+.toggle-row b {
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+}
+
+.toggle-row > .panel-copy {
+  flex: 1 1 auto;
+}
+
+.toggle-row small,
+.hint,
+.help,
+.setup-body small,
+.config-card small,
+.content-card small,
+.quote-card small,
+.follow-card small {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+.reply-live-preview {
+  padding: var(--panel-card-padding);
+}
+
+.reply-live-preview > .section-head,
+.reply-live-preview > .toggle-row,
+.reply-live-preview .toggle-row > .panel-copy:first-child,
+.reply-live-preview .auto-flow-row > .auto-flow-actions {
+  box-sizing: border-box;
+  min-height: var(--panel-row-height);
+}
+
+.x-mode-card.reply-live-preview > .section-head,
+.x-mode-card.reply-live-preview > .toggle-row.compact-row {
+  min-height: var(--panel-row-height);
+  padding-block: 0;
+}
+
+.reply-live-preview .section-head h2,
+.reply-live-preview .toggle-row b {
+  font-size: var(--panel-font-title);
+  line-height: 20px;
+}
+
+.reply-live-preview > .toggle-row + .toggle-row,
+.reply-live-preview > #autoExcludedAuthorsBody + .toggle-row {
+  border-top: 1px solid var(--line);
+}
+
+.reply-live-preview > .section-head > h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.reply-live-preview > .toggle-row > b {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.reply-live-preview #autoExcludedAuthorsBody:not([hidden]) {
+  gap: var(--panel-space-2);
+  padding: var(--panel-space-2) 0 var(--panel-space-3);
+}
+
+.auto-exclusion-entry input {
+  min-height: var(--panel-control-height);
+  font-size: var(--panel-font-body);
+}
+
+.auto-exclusion-entry button {
+  width: var(--panel-control-height);
+  height: var(--panel-control-height);
+  min-height: var(--panel-control-height);
+  padding: 0;
+}
+
+.auto-exclusion-chip {
+  min-height: 28px;
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+.auto-exclusion-chip button {
+  width: 19px;
+  height: 19px;
+  min-height: 19px;
+  padding: 0;
+}
+
+.style-dialog-head h2 {
+  font-size: var(--panel-font-app-title);
+}
+
+.inline-tone-field {
+  gap: var(--panel-space-2);
+  margin: 0 0 var(--panel-space-3);
+}
+
+.style-tone-card > #stylePickerField,
+.style-tone-card > .inline-tone-field {
+  padding: 10px;
+}
+
+.style-tone-card > #stylePickerField > label,
+.style-tone-card > .inline-tone-field > label {
+  margin: 0 0 var(--panel-space-2);
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+}
+
+.tone-choice {
+  gap: var(--panel-space-2);
+}
+
+.tone-choice button,
+.style-open {
+  min-height: var(--panel-control-height);
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+}
+
+.feedback-toolbar,
+.feedback-posts,
+.feedback-speed,
+.feedback-extra,
+.feedback-method {
+  gap: var(--panel-space-2);
+}
+
+.feedback-post-row {
+  gap: var(--panel-space-2);
+  padding: 10px;
+}
+
+.feedback-post-body b,
+.feedback-post-body span,
+.feedback-method,
+.feedback-speed,
+.feedback-extra label {
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+}
+
+.feedback-post-body small,
+.feedback-speed small {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+.settings-title {
+  margin-bottom: var(--panel-space-3);
+}
+
+@media (max-width: 360px) {
+  body {
+    padding: var(--panel-space-2);
+  }
+
+  .post-card,
+  .results-compact,
+  .x-mode-card,
+  .config-card,
+  .content-card,
+  .quote-card,
+  .follow-card,
+  .settings-card,
+  .feedback-card {
+    padding: 10px;
+  }
+}

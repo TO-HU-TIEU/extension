@@ -187,6 +187,7 @@ function geminiModelOptions(models = []) {
     (a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99) || a.name.localeCompare(b.name),
   );
 }
+const MAX_GEMINI_KEYS = 20;
 function normalizeGeminiKeys(value) {
   const seen = new Set();
   return (Array.isArray(value) ? value : [])
@@ -208,7 +209,7 @@ function normalizeGeminiKeys(value) {
       };
     })
     .filter((x) => looksLikeApiKey(x.key) && !seen.has(x.key) && seen.add(x.key))
-    .slice(0, 10);
+    .slice(0, MAX_GEMINI_KEYS);
 }
 function displayGeminiKeys(keys = []) {
   const backups = normalizeGeminiKeys(keys).filter((x) => x.key !== geminiPrimaryKey);
@@ -403,6 +404,7 @@ async function activeTab() {
 let panelTargetTabId = null;
 let panelWindowId = null;
 let panelTargets = [];
+let selectedAutoFlowRunning = false;
 async function resolvePanelTarget() {
   const currentWindow = await chrome.windows.getCurrent().catch(() => null);
   if (!currentWindow?.id) return null;
@@ -412,6 +414,21 @@ async function resolvePanelTarget() {
     .catch(() => null);
   panelTargetTabId = Number(response?.data?.tabId) || null;
   return panelTargetTabId;
+}
+async function syncPanelAutoModeControls(running = selectedAutoFlowRunning) {
+  const stored = await chrome.storage.local.get(["panelAutoSuggest", "autoReply"]),
+    controls = [
+      [$("panelAutoSuggest"), !!stored.panelAutoSuggest],
+      [$("panelAutoReply"), !!stored.autoReply],
+    ];
+  for (const [input, savedValue] of controls) {
+    if (!input) continue;
+    input.disabled = !!running;
+    input.checked = running ? false : savedValue;
+    input.title = running ? "Tạm tắt trong tab đang chạy tự động" : "";
+  }
+  const actions = document.querySelector(".post-card .actions");
+  if (actions) actions.hidden = running || !!stored.panelAutoSuggest;
 }
 function ensurePanelTargetUi() {
   if (document.getElementById("panelTargetBar")) return;
@@ -490,7 +507,9 @@ async function refreshPanelTargets() {
   );
   const selected = panelTargets.find((item) => item.tab.id === panelTargetTabId);
   const autoToggle = document.getElementById("autoReplyFlow");
-  if (autoToggle && selected?.identity) autoToggle.checked = !!selected.identity.running;
+  selectedAutoFlowRunning = !!selected?.identity?.running;
+  if (autoToggle) autoToggle.checked = selectedAutoFlowRunning;
+  syncPanelAutoModeControls(selectedAutoFlowRunning);
 }
 let currentModule = "reply";
 function showModule(module) {
@@ -519,9 +538,8 @@ function showModule(module) {
     $("workspace").hidden = true;
     $("xWorkspace").hidden = true;
   } else showMode("x");
-  if (follow) globalThis.refreshFollowPage?.();
+  if (follow) refreshFollowPage();
   if (feedback) renderFeedbackState();
-  globalThis.scrollTo?.(0, 0);
 }
 const FEEDBACK_STATE_KEY = "feedbackStateV1";
 let feedbackState = {
@@ -704,10 +722,7 @@ function updateFeedbackStart() {
 }
 async function feedbackEnsureScript(tabId) {
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ["comment-automation.js"],
-    });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["feedback.js"] });
   } catch {}
 }
 function feedbackWaitForTab(tabId, timeout = 15000) {
@@ -1048,7 +1063,9 @@ function feedbackWire() {
     'input[name="feedbackMethod"][value="continuous"]',
   )?.nextElementSibling;
   if (continuousLabel) {
-    continuousLabel.replaceChildren(document.createTextNode("Chạy liên tục · lặp lại sau "));
+    continuousLabel.replaceChildren(
+      document.createTextNode("Kiểm tra và chạy liên tục (khởi động lại sau: "),
+    );
     const waitInput = document.createElement("input");
     waitInput.id = "feedbackContinuousWait";
     waitInput.type = "number";
@@ -1056,7 +1073,7 @@ function feedbackWire() {
     waitInput.max = "1440";
     waitInput.value = String(feedbackState.continuousWaitMinutes || 30);
     waitInput.setAttribute("aria-label", "Số phút chờ kiểm tra lại");
-    continuousLabel.append(waitInput, document.createTextNode(" phút"));
+    continuousLabel.append(waitInput, document.createTextNode(" phút)"));
   }
   const randomText = document.querySelector(
     'input[name="feedbackMethod"][value="random"]',
@@ -1077,9 +1094,9 @@ function feedbackWire() {
   }
   if (status && !$("feedbackExtraContext")) {
     const wrap = document.createElement("div");
-    wrap.className = "feedback-extra";
+    wrap.className = "feedback-extra panel-stack";
     wrap.innerHTML =
-      '<label for="feedbackExtraContext">Ngữ cảnh bổ sung</label><div class="feedback-extra-input"><textarea id="feedbackExtraContext" rows="2" maxlength="500" placeholder="Ví dụ: phản hồi ngắn khoảng 5–8 từ…"></textarea><button id="feedbackExtraClear" class="clear-url" type="button" title="Xoá ngữ cảnh bổ sung" aria-label="Xoá ngữ cảnh bổ sung" hidden>×</button></div>';
+      '<label for="feedbackExtraContext">Ngữ cảnh bổ sung</label><div class="feedback-extra-input panel-row"><textarea id="feedbackExtraContext" rows="2" maxlength="500" placeholder="Ví dụ: phản hồi ngắn khoảng 5–8 từ…"></textarea><button id="feedbackExtraClear" class="clear-url" type="button" title="Xoá ngữ cảnh bổ sung" aria-label="Xoá ngữ cảnh bổ sung" hidden>×</button></div>';
     status.insertAdjacentElement("afterend", wrap);
   }
   const extra = $("feedbackExtraContext"),
@@ -1184,7 +1201,7 @@ async function readNews() {
     target: { tabId: tab.id },
     files: [
       "remote-config.js",
-      "shared/language.js",
+      "language.js",
       "content-core.js",
       "content-reader.js",
       "content-extractor.js",
@@ -1267,7 +1284,7 @@ async function readPost() {
       throw new Error("Mở permalink bài X hoặc dán link hợp lệ.");
     const [x] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["shared/language.js", "x-media.js", "extract.js"],
+      files: ["language.js", "x-media.js", "extract.js"],
     });
     if (!x?.result || x.result.error) throw new Error(x?.result?.error || "Không đọc được bài.");
     post = { ...x.result, tabId: tab.id };
@@ -1334,6 +1351,7 @@ async function generate(force) {
     "deepseekKey",
     "deepseekModel",
     "stylePrompt",
+    "replyTone",
     "fastReplyMode",
   ]);
   const provider = s.provider || "gemini";
@@ -1371,7 +1389,7 @@ async function generate(force) {
     post: {
       ...post,
       text: $("postText").value,
-      style,
+      style: toneStyle(style, s.replyTone),
       replyCount: Number($("panelReplyCount").value) || 2,
       fastMode: !!s.fastReplyMode,
       context: $("quickContext").value,
@@ -1424,10 +1442,16 @@ function render(data) {
       text = document.createElement("span"),
       score = document.createElement("span");
     wrap.className = "suggestion-wrap";
+    const issues = Array.isArray(item.quality_issues) ? item.quality_issues : [];
+    if (issues.length) wrap.classList.add("quality-flagged");
     b.className = "suggestion-card reply-suggestion";
     row.className = "suggestion-main";
-    text.textContent = item.reply;
+    appendReplyQualityText(text, item.reply, issues);
     score.className = "relevance-score";
+    if (issues.length) {
+      score.classList.add("quality-low");
+      score.title = "Điểm phù hợp đã giảm do có cụm từ sáo cần cân nhắc.";
+    }
     score.textContent = `${item.relevance_score}%`;
     row.append(text, score);
     b.append(row);
@@ -1456,6 +1480,36 @@ function render(data) {
   });
   status("");
 }
+function appendReplyQualityText(target, value, issues) {
+  const text = String(value || ""),
+    phrases = [...new Set((Array.isArray(issues) ? issues : []).map((x) => String(x).trim()))]
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+  if (!phrases.length) {
+    target.textContent = text;
+    return;
+  }
+  const escaped = phrases.map((phrase) =>
+    [...phrase]
+      .map((character) => {
+        const special = ".^$|?*+()[]{}";
+        return special.includes(character) ? "\\" + character : character;
+      })
+      .join(""),
+  );
+  const matcher = new RegExp(escaped.join("|"), "giu");
+  let cursor = 0;
+  for (const match of text.matchAll(matcher)) {
+    target.append(document.createTextNode(text.slice(cursor, match.index)));
+    const highlight = document.createElement("mark");
+    highlight.className = "reply-quality-highlight";
+    highlight.textContent = match[0];
+    highlight.title = "Cụm sáo bị đánh dấu; điểm phù hợp đã giảm.";
+    target.append(highlight);
+    cursor = match.index + match[0].length;
+  }
+  target.append(document.createTextNode(text.slice(cursor)));
+}
 let usageMode = "x";
 async function showMode(_mode = "x") {
   usageMode = "x";
@@ -1482,9 +1536,7 @@ function showSettings(value) {
     $("contentWorkspace").hidden = true;
     $("quoteWorkspace").hidden = true;
     $("followWorkspace").hidden = true;
-    $("feedbackWorkspace").hidden = true;
     document.querySelector(".mode-tabs").hidden = true;
-    globalThis.scrollTo?.(0, 0);
   } else showModule(currentModule);
 }
 function connectionState(ok) {
@@ -1561,7 +1613,7 @@ function renderStyles(selected) {
   $("style").value = value;
   $("panelQuickStyle").value = value;
   selectStyle();
-  updateReplyPreview();
+  updateStylePreview();
   renderStyleButtons();
 }
 function stylePreviewText(style, prompt) {
@@ -1653,35 +1705,7 @@ function closeStyleModal() {
   $("styleModal").hidden = true;
   document.body.classList.remove("style-modal-open");
 }
-function updateReplyPreview() {
-  const selected =
-      styles.find((x) => x.id === $("panelQuickStyle")?.value) ||
-      styles.find((x) => x.id === $("style")?.value) ||
-      styles[0],
-    prompt = $("quickContext")?.value || $("stylePrompt")?.value || selected?.prompt || "",
-    items = stylePreviewText(selected, prompt),
-    name = styleName(selected);
-  if ($("replyPreviewSuggestions")) {
-    $("replyPreviewSuggestions").replaceChildren(
-      ...items.map((text, index) => {
-        const row = document.createElement("div");
-        row.className = "reply-preview-suggestion";
-        const span = document.createElement("span");
-        span.textContent = text;
-        const score = document.createElement("small");
-        score.textContent = index ? "90%" : "95%";
-        row.append(span, score);
-        return row;
-      }),
-    );
-  } else if ($("replyPreviewText")) $("replyPreviewText").textContent = items[0];
-  if ($("replyPreviewStyle")) $("replyPreviewStyle").textContent = name;
-  document
-    .querySelectorAll('.reply-preview-button[data-control=\"style\"]')
-    .forEach(
-      (button) =>
-        (button.innerHTML = `<span>${name}</span><b class="dropdown-icon" aria-hidden="true">${DROPDOWN_SVG}</b>`),
-    );
+function updateStylePreview() {
   renderStyleButtons();
   if (!$("styleModal")?.hidden) renderStyleModal();
 }
@@ -1702,7 +1726,7 @@ function selectStyle() {
     $("cancelStyle").hidden = true;
     editingCustom = custom;
   }
-  updateReplyPreview();
+  updateStylePreview();
   validateStyleDraft();
 }
 function lockConfig() {
@@ -1830,13 +1854,6 @@ $("closeStyleModal").onclick = closeStyleModal;
 document.querySelectorAll("[data-close-style]").forEach((node) => (node.onclick = closeStyleModal));
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !$("styleModal").hidden) closeStyleModal();
-});
-document.addEventListener("click", (event) => {
-  const button = event.target.closest?.('.reply-preview-button[data-control="style"]');
-  if (button) {
-    event.preventDefault();
-    openStyleModal();
-  }
 });
 $("read").onclick = () => safely(readPost);
 $("clearUrl").onclick = () => {
@@ -2048,8 +2065,8 @@ function ensureGeminiQueueLabel() {
   return input;
 }
 $("addGeminiQueueKey").onclick = () => {
-  if (displayGeminiKeys(geminiStoredKeys).length >= 10) {
-    status("API Key tối đa 10 key.", true);
+  if (displayGeminiKeys(geminiStoredKeys).length >= MAX_GEMINI_KEYS) {
+    status(`API Key tối đa ${MAX_GEMINI_KEYS} key.`, true);
     return;
   }
   ensureGeminiQueueLabel();
@@ -2072,7 +2089,7 @@ $("saveGeminiQueueKey").onclick = () =>
     geminiStoredKeys = normalizeGeminiKeys(stored.geminiKeys || []);
     const list = displayGeminiKeys(geminiStoredKeys);
     if (!looksLikeApiKey(key)) throw new Error("API key không hợp lệ.");
-    if (list.length >= 10) throw new Error("API Key tối đa 10 key.");
+    if (list.length >= MAX_GEMINI_KEYS) throw new Error(`API Key tối đa ${MAX_GEMINI_KEYS} key.`);
     if (list.some((x) => x.key === key)) throw new Error("Key này đã có trong danh sách.");
     await saveGeminiKeyList([...list, { id: `gk-${Date.now()}`, key, label, enabled: true }]);
     $("geminiQueueKey").value = "";
@@ -2180,8 +2197,8 @@ const quickStyle = (id) => {
 $("panelQuickStyle").onchange = () => quickStyle("panelQuickStyle");
 $("panelReplyCount").onchange = () =>
   chrome.storage.local.set({ replyCount: Number($("panelReplyCount").value) });
-$("quickContext").oninput = updateReplyPreview;
-$("stylePrompt").oninput = updateReplyPreview;
+$("quickContext").oninput = updateStylePreview;
+$("stylePrompt").oninput = updateStylePreview;
 function validateStyleDraft() {
   const input = $("styleName"),
     save = $("saveSettings");
@@ -2415,6 +2432,72 @@ function renderQuoteState(state = {}) {
     status.textContent = discreet(state.error || "Không tạo được nội dung trích dẫn.");
   } else status.textContent = "";
 }
+function normalizeAutoExcludedAuthor(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const linkMatch = raw.match(
+    /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/([A-Za-z0-9_]{1,15})(?:\/|$)/iu,
+  );
+  const handle = (linkMatch?.[1] || raw.replace(/^@/u, "")).toLowerCase();
+  return /^[a-z0-9_]{1,15}$/u.test(handle) ? handle : "";
+}
+function renderAutoExcludedAuthors(handles = []) {
+  const list = $("autoExcludedAuthorsList");
+  if (!list) return;
+  const normalized = [
+    ...new Set(
+      (Array.isArray(handles) ? handles : []).map(normalizeAutoExcludedAuthor).filter(Boolean),
+    ),
+  ].sort();
+  list.replaceChildren();
+  if (!normalized.length) {
+    const empty = document.createElement("small");
+    empty.className = "auto-exclusion-empty";
+    empty.textContent = "Chưa có tài khoản nào.";
+    list.append(empty);
+    return;
+  }
+  for (const handle of normalized) {
+    const chip = document.createElement("span");
+    chip.className = "auto-exclusion-chip";
+    const name = document.createElement("span");
+    name.textContent = `@${handle}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.title = `Bỏ @${handle} khỏi danh sách`;
+    remove.setAttribute("aria-label", remove.title);
+    remove.addEventListener("click", () =>
+      safely(async () => {
+        const stored = await chrome.storage.local.get("autoReplyExcludedAuthors"),
+          next = (stored.autoReplyExcludedAuthors || []).filter(
+            (item) => normalizeAutoExcludedAuthor(item) !== handle,
+          );
+        await chrome.storage.local.set({ autoReplyExcludedAuthors: next });
+        renderAutoExcludedAuthors(next);
+      }),
+    );
+    chip.append(name, remove);
+    list.append(chip);
+  }
+}
+function setAutoExcludedAuthorsCollapsed(collapsed, persist = true) {
+  const toggle = $("autoExcludedAuthorsToggle"),
+    body = $("autoExcludedAuthorsBody");
+  if (!toggle || !body) return;
+  const isCollapsed = !!collapsed;
+  body.hidden = isCollapsed;
+  toggle.setAttribute("aria-expanded", String(!isCollapsed));
+  toggle.title = `${isCollapsed ? "Mở" : "Thu gọn"} tài khoản tự động bỏ qua`;
+  toggle.setAttribute("aria-label", toggle.title);
+  toggle.classList.toggle("is-expanded", !isCollapsed);
+  if (persist)
+    chrome.storage.local.set({ autoExcludedAuthorsCollapsed: isCollapsed }).catch(() => {});
+}
+$("autoExcludedAuthorsToggle")?.addEventListener("click", () => {
+  const isExpanded = $("autoExcludedAuthorsToggle")?.getAttribute("aria-expanded") === "true";
+  setAutoExcludedAuthorsCollapsed(isExpanded);
+});
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.geminiKey || changes.geminiKeyLabel || changes.geminiKeys)) {
     if (changes.geminiKey) {
@@ -2428,6 +2511,14 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   if (area === "local" && changes.quoteAnalysisState)
     renderQuoteState(changes.quoteAnalysisState.newValue || {});
+  if (area === "local" && changes.replyTone && $("replyTone"))
+    $("replyTone").value = changes.replyTone.newValue || "";
+  if (area === "local" && changes.autoReplyExcludedAuthors)
+    renderAutoExcludedAuthors(changes.autoReplyExcludedAuthors.newValue || []);
+  if (area === "local" && changes.autoExcludedAuthorsCollapsed)
+    setAutoExcludedAuthorsCollapsed(changes.autoExcludedAuthorsCollapsed.newValue, false);
+  if (area === "local" && (changes.panelAutoSuggest || changes.autoReply))
+    syncPanelAutoModeControls();
 });
 safely(async () => {
   const s = await chrome.storage.local.get([
@@ -2445,11 +2536,13 @@ safely(async () => {
     "autoReply",
     "usageMode",
     "styleId",
+    "replyTone",
     "customStyles",
     "replyCount",
     "configSaved",
     "hideAds",
-    "autoReplyFlow",
+    "autoReplyExcludedAuthors",
+    "autoExcludedAuthorsCollapsed",
     "quoteAnalysisState",
     "quoteExtraPrompt",
   ]);
@@ -2473,7 +2566,12 @@ safely(async () => {
   await showMode("x");
   quoteExtraPrompt.value = s.quoteExtraPrompt || "";
   renderQuoteState(s.quoteAnalysisState || {});
+  $("replyTone").value = s.replyTone || "";
+  $("replyTone").dispatchEvent(new Event("change", { bubbles: true }));
+  if (!s.replyTone) setTimeout(highlightTone, 500);
   styles = [...(await loadDefaultStyles()), ...(s.customStyles || [])];
+  renderAutoExcludedAuthors(s.autoReplyExcludedAuthors || []);
+  setAutoExcludedAuthorsCollapsed(s.autoExcludedAuthorsCollapsed ?? true, false);
   renderStyles(s.styleId);
   setProvider(s.provider || "gemini", false);
   lockConfig();
@@ -2507,8 +2605,8 @@ const toneInstruction = (tone) =>
     : tone === "female"
       ? " Người dùng chọn tone Nữ: xưng hô tự nhiên theo ngữ cảnh nữ, không phô trương hay suy diễn giới tính người khác."
       : "";
-function toneStyle(style) {
-  return String(style || "") + toneInstruction($("replyTone")?.value);
+function toneStyle(style, tone = $("replyTone")?.value) {
+  return String(style || "") + toneInstruction(tone);
 }
 function highlightTone() {
   const field = $("toneSettings");
@@ -2523,23 +2621,9 @@ if (versionLabel) versionLabel.textContent = chrome.runtime.getManifest().versio
 (() => {
   const tone = $("replyTone");
   if (!tone) return;
-  const apply = () => {
-    styles.forEach((s) => {
-      s._basePrompt ??= s.prompt;
-      s.prompt = s._basePrompt + toneInstruction(tone.value);
-    });
-    renderStyleButtons();
-    updateReplyPreview();
-  };
-  chrome.storage.local.get("replyTone").then(({ replyTone }) => {
-    tone.value = replyTone || "";
-    apply();
-    if (!replyTone) setTimeout(highlightTone, 500);
-  });
   tone.addEventListener("change", () => {
     tone.classList.remove("tone-required");
-    chrome.storage.local.set({ replyTone: tone.value });
-    apply();
+    chrome.storage.local.set({ replyTone: tone.value }).catch(() => {});
   });
   $("settingsToggle")?.addEventListener("click", () => {
     if (!tone.value) setTimeout(highlightTone, 150);
@@ -2720,11 +2804,6 @@ $("clearQuotePost")?.addEventListener("click", async () => {
 document.getElementById("autoReplyFlow")?.addEventListener("change", async () => {
   const enabled = document.getElementById("autoReplyFlow").checked;
   const active = await activeTab();
-  await chrome.storage.local.set({
-    autoReplyFlow: enabled,
-    autoReply: enabled,
-    autoReplyFlowTargetUrl: active?.url || "",
-  });
   const targets =
     active && /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//.test(active.url || "")
       ? [active]
@@ -2741,6 +2820,33 @@ document.getElementById("autoReplyFlow")?.addEventListener("change", async () =>
   status(
     enabled ? `Tự động đã bật (${targets.length} tab X trong cửa sổ này).` : "Tự động đã tắt.",
   );
+  refreshPanelTargets();
+});
+async function addAutoExcludedAuthor() {
+  const input = $("autoExcludedAuthorInput"),
+    handle = normalizeAutoExcludedAuthor(input?.value);
+  if (!handle) {
+    status("Nhập @username hoặc liên kết hồ sơ X hợp lệ.");
+    input?.focus();
+    return;
+  }
+  const stored = await chrome.storage.local.get("autoReplyExcludedAuthors"),
+    current = Array.isArray(stored.autoReplyExcludedAuthors)
+      ? stored.autoReplyExcludedAuthors.map(normalizeAutoExcludedAuthor).filter(Boolean)
+      : [],
+    next = [...new Set([...current, handle])];
+  await chrome.storage.local.set({ autoReplyExcludedAuthors: next });
+  renderAutoExcludedAuthors(next);
+  input.value = "";
+  input.focus();
+  status(`Đã thêm @${handle} vào danh sách tự động bỏ qua.`);
+}
+$("addAutoExcludedAuthor")?.addEventListener("click", () => safely(addAutoExcludedAuthor));
+$("autoExcludedAuthorInput")?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    safely(addAutoExcludedAuthor);
+  }
 });
 chrome.runtime.onMessage.addListener((message, sender) => {
   const sourceTabId = Number(sender?.tab?.id) || null;
@@ -2752,6 +2858,8 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== "autoFlowState") return;
   const toggle = document.getElementById("autoReplyFlow");
   if (toggle) toggle.checked = !!message.enabled;
+  selectedAutoFlowRunning = !!message.enabled;
+  syncPanelAutoModeControls(selectedAutoFlowRunning);
   if (!message.enabled) status("Tự động đã dừng.");
 });
 function syncReplySettingsVisibility() {
