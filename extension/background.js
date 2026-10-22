@@ -13,7 +13,7 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(consol
 const LOCAL = globalThis.X_REPLY_CONFIG;
 const AUTO_FLOW_COORDINATION_KEY = "autoFlowCoordinationV1";
 const AUTO_FLOW_LEASE_MS = 90_000;
-const AUTO_FLOW_COMMENT_GAP_MS = 9_734;
+const AUTO_FLOW_COMMENT_GAP_MS = 10_707;
 // A side panel is opened by a specific X tab, but Chrome can show several
 // split tabs at once. Keep that binding so panel actions never fan out to the
 // wrong tab.

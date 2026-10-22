@@ -246,7 +246,9 @@
   const flowDelay = (ms) => {
     const speed = Number(memory.speed || 0);
     const jitter = 0.86 + Math.random() * 0.28;
-    return Math.max(350, Math.round(ms * 1.071 * (1 - speed * 0.12) * jitter));
+    // Slow the baseline by another 10%; the slider still applies its relative
+    // adjustment on top of this baseline.
+    return Math.max(350, Math.round(ms * 1.1781 * (1 - speed * 0.12) * jitter));
   };
   const domHasOwnReply = (handle) => {
     if (!handle) return false;
