@@ -702,7 +702,7 @@
       const muted = autoFlowMutedSetting(key),
         savedValue = control.dataset.savedEnabled === "true",
         value = muted ? false : savedValue;
-      control.disabled = muted;
+      control.disabled = false;
       if (control.matches("button")) {
         control.classList.toggle("active", value);
         control.setAttribute("aria-pressed", String(value));
@@ -1348,9 +1348,8 @@
       button.dataset.savedEnabled = String(!!value);
       button.classList.toggle("active", !!value && !autoFlowMutedSetting(key));
       button.setAttribute("aria-pressed", String(!!value && !autoFlowMutedSetting(key)));
-      button.disabled = autoFlowMutedSetting(key);
+      button.disabled = false;
       button.onclick = () => {
-        if (autoFlowMutedSetting(key)) return;
         const next = !button.classList.contains("active");
         button.dataset.savedEnabled = String(next);
         button.classList.toggle("active", next);
@@ -1388,14 +1387,10 @@
     for (const input of autoPanel.querySelectorAll("input")) {
       input.dataset.savedEnabled = String(!!saved[input.dataset.key]);
       input.checked = !!saved[input.dataset.key] && !autoFlowMutedSetting(input.dataset.key);
-      input.disabled = autoFlowMutedSetting(input.dataset.key);
+      input.disabled = false;
       input.onchange = () => {
         const key = input.dataset.key,
           value = input.checked;
-        if (autoFlowMutedSetting(key)) {
-          syncAutoFlowSettingUi();
-          return;
-        }
         input.dataset.savedEnabled = String(value);
         chrome.storage.local.set({ [key]: value }).catch(() => {});
         box

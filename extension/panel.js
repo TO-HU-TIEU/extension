@@ -415,7 +415,9 @@ async function syncPanelAutoModeControls(running = selectedAutoFlowRunning) {
     ];
   for (const [input, savedValue] of controls) {
     if (!input) continue;
-    input.disabled = !!running;
+    // Auto flow temporarily clears these options, but they remain editable.
+    // The panel restores the saved values when the run ends.
+    input.disabled = false;
     input.checked = running ? false : savedValue;
     input.title = running ? "Tạm tắt trong tab đang chạy tự động" : "";
   }
@@ -2508,7 +2510,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
     renderAutoExcludedAuthors(changes.autoReplyExcludedAuthors.newValue || []);
   if (area === "local" && changes.autoExcludedAuthorsCollapsed)
     setAutoExcludedAuthorsCollapsed(changes.autoExcludedAuthorsCollapsed.newValue, false);
-  if (area === "local" && (changes.panelAutoSuggest || changes.autoReply))
+  if (
+    area === "local" &&
+    (changes.panelAutoSuggest || changes.autoReply) &&
+    !selectedAutoFlowRunning
+  )
     syncPanelAutoModeControls();
 });
 safely(async () => {

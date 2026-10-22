@@ -259,6 +259,40 @@
           .includes(handle.toLowerCase()),
       );
   };
+  async function submitSelectedReply(expectedText, handle) {
+    const normalize = (value) =>
+      String(value || "")
+        .replace(/\s+/gu, " ")
+        .trim();
+    const expected = normalize(expectedText);
+    let editor = null;
+    let send = null;
+    for (let attempt = 0; attempt < 30 && running; attempt++) {
+      if (domHasOwnReply(handle)) return true;
+      editor = document.querySelector('[data-testid^="tweetTextarea_"][contenteditable="true"]');
+      const editorText = normalize(editor?.innerText || editor?.textContent);
+      if (editor && expected && editorText.includes(expected)) {
+        const scope = editor.closest('[role="dialog"]') || editor.closest("article") || document;
+        send = scope.querySelector(
+          '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
+        );
+        if (!send)
+          send = document.querySelector(
+            '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
+          );
+        if (send && !send.disabled) break;
+      }
+      await pauseSleep(250);
+    }
+    if (!running || !editor || !send || send.disabled) return false;
+    send.click();
+    for (let attempt = 0; attempt < 32 && running; attempt++) {
+      await pauseSleep(250);
+      const remaining = normalize(editor.innerText || editor.textContent);
+      if (!remaining || domHasOwnReply(handle)) return true;
+    }
+    return false;
+  }
   async function returnHome() {
     if (location.href.includes("/home") || location.pathname === "/") return true;
     const home = document.querySelector('a[data-testid="AppTabBar_Home_Link"]');
@@ -932,7 +966,23 @@
             await coordinate("release", item);
             return;
           }
+          const selectedReply =
+            suggestion.querySelector(":scope > span:first-child")?.textContent?.trim() ||
+            suggestion.textContent?.trim() ||
+            "";
           suggestion.click();
+          const submitted = await submitSelectedReply(selectedReply, myHandle);
+          if (!submitted) {
+            const reason = "Không xác nhận được nút Trả lời sau khi chọn gợi ý";
+            log(`Lỗi: ${reason}`);
+            await coordinate("release", item);
+            s.push({ ...item, reason });
+            save(skippedKey, s);
+            await returnHome();
+            clearCurrentProcessing();
+            dashboard();
+            break;
+          }
           await coordinate("release", item);
           memory.consecutiveFailures = 0;
           p.push({ ...item, completedAt: Date.now() });
