@@ -37,6 +37,7 @@
     button.style.background = memory.isPaused ? "#20c997" : "#d64555";
     button.setAttribute("aria-label", memory.isPaused ? "Tiếp tục" : "Tạm dừng");
     button.title = memory.isPaused ? "Tiếp tục" : "Tạm dừng";
+    button.dataset.autoPauseState = memory.isPaused ? "paused" : "running";
   };
   const setPaused = (paused) => {
     const nextPaused = !!paused;
@@ -447,6 +448,7 @@
     let box = document.getElementById("assistant-auto-dashboard");
     if (box) {
       configureSpeedControl(box);
+      syncPauseButton();
       return box;
     }
     box = document.createElement("aside");
@@ -618,6 +620,7 @@
       event.preventDefault();
       event.stopPropagation();
       globalThis.toggleAutoBotPause?.();
+      syncPauseButton();
       log(memory.isPaused ? "Đã tạm dừng" : "Đã tiếp tục");
     };
     box.querySelector("[data-auto-close]").onclick = () => {
