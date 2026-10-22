@@ -1412,6 +1412,12 @@
     };
     syncAutoFlowSettingUi();
     run = async (force) => {
+      // Auto-flow owns the single generation request for the current post.
+      // Other triggers (autoSuggest, style changes, or a second click) must
+      // not start a competing request while that flow is active. The auto
+      // loop sets this short-lived flag only for its deliberate click.
+      if (globalThis.__assistantAutoFlowRunning === true && !globalThis.__assistantAutoFlowRequest)
+        return;
       if (running) {
         pending = true;
         return;

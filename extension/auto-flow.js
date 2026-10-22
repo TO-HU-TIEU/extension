@@ -868,16 +868,25 @@
           await coordinate("release", item);
           return;
         }
-        button.click();
-        console.log("[Assistant Auto] Status: Normal (đã yêu cầu tạo gợi ý)");
-        let suggestion = null;
+        let suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
         let providerError = "";
-        while (running && !suggestion) {
-          await pauseSleep(flowDelay(700));
-          suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
-          const errorNode = document.querySelector(".xra-error,[role=alert],.xra-status-error");
-          providerError = errorNode?.textContent?.trim() || "";
-          if (providerError) break;
+        if (suggestion) {
+          log("Đã có gợi ý sẵn · dùng lại, không gọi gợi ý lần hai");
+        } else {
+          globalThis.__assistantAutoFlowRequest = true;
+          try {
+            button.click();
+          } finally {
+            globalThis.__assistantAutoFlowRequest = false;
+          }
+          console.log("[Assistant Auto] Status: Normal (đã yêu cầu tạo gợi ý)");
+          while (running && !suggestion) {
+            await pauseSleep(flowDelay(700));
+            suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
+            const errorNode = document.querySelector(".xra-error,[role=alert],.xra-status-error");
+            providerError = errorNode?.textContent?.trim() || "";
+            if (providerError) break;
+          }
         }
         if (providerError) {
           const retryButton = document.querySelector(
@@ -889,7 +898,12 @@
               await coordinate("release", item);
               return;
             }
-            retryButton.click();
+            globalThis.__assistantAutoFlowRequest = true;
+            try {
+              retryButton.click();
+            } finally {
+              globalThis.__assistantAutoFlowRequest = false;
+            }
             providerError = "";
             for (let retryWait = 0; retryWait < 60 && running; retryWait++) {
               await pauseSleep(flowDelay(500));
