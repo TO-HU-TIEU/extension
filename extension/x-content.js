@@ -30,8 +30,7 @@
       icon.style.opacity = "1";
     });
   }
-  const contextError = (e) =>
-    /Extension context invalidated/i.test(e?.message || "");
+  const contextError = (e) => /Extension context invalidated/i.test(e?.message || "");
   const safeGet = async (keys) => {
     try {
       return await chrome.storage.local.get(keys);
@@ -74,8 +73,7 @@
       if (!r?.ok) throw new Error(r?.error || "Không tạo được gợi ý.");
       return r.data;
     } catch (e) {
-      if (contextError(e))
-        throw new Error("Extension vừa cập nhật. Hãy tải lại trang X.");
+      if (contextError(e)) throw new Error("Extension vừa cập nhật. Hãy tải lại trang X.");
       throw e;
     }
   };
@@ -86,14 +84,9 @@
       return null;
     }
   };
-  const urlPath = (value, base = location.origin) =>
-    safeUrl(value, base)?.pathname || "";
+  const urlPath = (value, base = location.origin) => safeUrl(value, base)?.pathname || "";
   function insideQuote(element, article) {
-    for (
-      let node = element?.parentElement;
-      node && node !== article;
-      node = node.parentElement
-    )
+    for (let node = element?.parentElement; node && node !== article; node = node.parentElement)
       if (
         node.dataset.testid === "quoteTweet" ||
         (node.tagName !== "A" && node.getAttribute?.("role") === "link")
@@ -119,9 +112,7 @@
   }
   function currentArticle(id) {
     const e = document.querySelector('[data-testid="tweetTextarea_0"]'),
-      articles = [
-        ...document.querySelectorAll('main article[data-testid="tweet"]'),
-      ];
+      articles = [...document.querySelectorAll('main article[data-testid="tweet"]')];
     if (e) {
       const inside = e.closest('article[data-testid="tweet"]');
       if (inside) return inside;
@@ -134,13 +125,12 @@
     if (exact) return exact;
     return articles.at(-1) || null;
   }
-  const originalLabel =
-      /^(?:hiện|xem) bản gốc$|^show original$|^view original$/i,
+  const originalLabel = /^(?:hiện|xem) bản gốc$|^show original$|^view original$/i,
     scriptLanguage = globalThis.X_REPLY_LANGUAGE;
   function originalControl(article) {
-    return [
-      ...(article?.querySelectorAll('button,[role="button"],a,span') || []),
-    ].find((el) => originalLabel.test((el.textContent || "").trim()));
+    return [...(article?.querySelectorAll('button,[role="button"],a,span') || [])].find((el) =>
+      originalLabel.test((el.textContent || "").trim()),
+    );
   }
   function promotedArticle(article) {
     if (!article) return false;
@@ -154,21 +144,12 @@
         /^(?:promoted|sponsored|ad|advertisement|quảng cáo|được quảng cáo|được tài trợ|tài trợ)$/iu,
       contains =
         /(?:promoted|sponsored|advertisement|được\s+quảng\s+cáo|quảng\s+cáo|được\s+tài\s+trợ|tài\s+trợ)/iu,
-      translation =
-        /được\s+dịch\s+từ|translated\s+from|hiện\s+bản\s+gốc|show\s+original/iu,
-      markers = [
-        ...article.querySelectorAll(
-          '[data-testid="socialContext"],[aria-label],span,div',
-        ),
-      ]
-        .filter(
-          (e) => e.closest("article") === article && !insideQuote(e, article),
-        )
-        .slice(0, 320);
+      translation = /được\s+dịch\s+từ|translated\s+from|hiện\s+bản\s+gốc|show\s+original/iu,
+      markers = [...article.querySelectorAll('[data-testid="socialContext"],[aria-label],span,div')]
+        .filter((e) => e.closest("article") === article && !insideQuote(e, article))
+        .slice(0, 1200);
     return markers.some((e) => {
-      const label = (e.getAttribute("aria-label") || "")
-          .trim()
-          .replace(/\s+/g, " "),
+      const label = (e.getAttribute("aria-label") || "").trim().replace(/\s+/g, " "),
         text = (e.textContent || "").trim().replace(/\s+/g, " "),
         short = text.slice(0, 220),
         compact = short.replace(translation, " ").replace(/\s+/g, " ").trim();
@@ -181,19 +162,14 @@
     });
   }
   function applyAdHiding() {
-    document.documentElement.classList.toggle(
-      "xra-hide-ads-enabled",
-      hideAdsEnabled,
-    );
+    document.documentElement.classList.toggle("xra-hide-ads-enabled", hideAdsEnabled);
     // Never remove articles from profile, post, replies, or media pages.
     // X reuses article markup there for pinned/media content and false positives
     // would otherwise delete real user posts from the DOM.
     if (!/^\/(?:home|explore|search)(?:\/|$)/i.test(location.pathname)) return;
     const currentId = location.pathname.match(/\/status\/(\d+)/)?.[1],
       root = currentId ? articleFor(currentId) : null;
-    for (const article of [
-      ...document.querySelectorAll('article[data-testid="tweet"]'),
-    ]) {
+    for (const article of [...document.querySelectorAll('article[data-testid="tweet"]')]) {
       if (article === root || !promotedArticle(article)) continue;
       if (hideAdsEnabled) {
         article.remove();
@@ -201,26 +177,24 @@
     }
   }
   function originalTextNode(article) {
-    const nodes = [
-        ...(article?.querySelectorAll('[data-testid="tweetText"]') || []),
-      ].filter(
+    const nodes = [...(article?.querySelectorAll('[data-testid="tweetText"]') || [])].filter(
         (n) => n.closest("article") === article && !insideQuote(n, article),
       ),
+      // X can leave the original-language node in the DOM while showing a
+      // translated sibling. Prefer that node even before the translation
+      // toggle finishes updating its labels.
+      originalForeign = nodes.find((n) => n.lang && !/^vi(?:-|$)/i.test(n.lang)),
       notTranslated = nodes.find((n) => {
         let p = n.parentElement,
           depth = 0;
         while (p && p !== article && depth++ < 4) {
-          if (
-            /translated from|dịch từ|bản dịch/i.test(
-              p.getAttribute("aria-label") || "",
-            )
-          )
+          if (/translated from|dịch từ|bản dịch/i.test(p.getAttribute("aria-label") || ""))
             return false;
           p = p.parentElement;
         }
         return true;
       });
-    return notTranslated || nodes[0] || null;
+    return originalForeign || notTranslated || nodes[0] || null;
   }
   function mediaFor(article) {
     if (!article) return { mediaUrls: [], mediaCount: 0, mediaKind: "none" };
@@ -237,18 +211,13 @@
         e.currentSrc,
         e.src,
         e.poster,
-        ...(e.getAttribute("srcset") || "")
-          .split(",")
-          .map((part) => part.trim().split(/\s+/)[0]),
+        ...(e.getAttribute("srcset") || "").split(",").map((part) => part.trim().split(/\s+/)[0]),
       ]);
     for (const el of article.querySelectorAll(
       '[style*="pbs.twimg.com"],[style*="video.twimg.com"]',
     ))
       if (own(el))
-        urls.push(
-          ...((el.getAttribute("style") || "").match(/https:\/\/[^"')]+/g) ||
-            []),
-        );
+        urls.push(...((el.getAttribute("style") || "").match(/https:\/\/[^"')]+/g) || []));
     const valid = (u) => {
         try {
           const x = new URL(u);
@@ -265,13 +234,9 @@
         }
       },
       mediaUrls = [...new Set(urls.filter(valid))].slice(0, 4),
-      hasVideo = !![
-        ...article.querySelectorAll('[data-testid="videoPlayer"],video'),
-      ].find(own),
+      hasVideo = !![...article.querySelectorAll('[data-testid="videoPlayer"],video')].find(own),
       mediaCount = [
-        ...article.querySelectorAll(
-          '[data-testid="tweetPhoto"],[data-testid="videoPlayer"],video',
-        ),
+        ...article.querySelectorAll('[data-testid="tweetPhoto"],[data-testid="videoPlayer"],video'),
       ].filter(own).length;
     return {
       mediaUrls,
@@ -285,10 +250,7 @@
         .slice(0, 2)
         .map((q) => ({
           type: "quoted_post",
-          text: (q.innerText || q.textContent || "")
-            .trim()
-            .replace(/\s+/g, " ")
-            .slice(0, 1200),
+          text: (q.innerText || q.textContent || "").trim().replace(/\s+/g, " ").slice(0, 1200),
         }))
         .filter((x) => x.text),
       cards = [
@@ -296,18 +258,11 @@
           '[data-testid^="card."], [data-testid="card.layoutLarge.media"], [data-testid="card.layoutSmall.media"]',
         ),
       ]
-        .filter(
-          (c) =>
-            c.closest("article") === article &&
-            !c.closest('[data-testid="quoteTweet"]'),
-        )
+        .filter((c) => c.closest("article") === article && !c.closest('[data-testid="quoteTweet"]'))
         .slice(0, 2)
         .map((c) => ({
           type: "link_preview",
-          text: (c.innerText || c.textContent || "")
-            .trim()
-            .replace(/\s+/g, " ")
-            .slice(0, 800),
+          text: (c.innerText || c.textContent || "").trim().replace(/\s+/g, " ").slice(0, 800),
         }))
         .filter((x) => x.text);
     return { embedded: [...quoted, ...cards] };
@@ -322,9 +277,7 @@
     if (!id || !article) return null;
     const ownMedia = mediaFor(article),
       embedded = embeddedContext(article).embedded,
-      articles = [
-        ...document.querySelectorAll('main article[data-testid="tweet"]'),
-      ],
+      articles = [...document.querySelectorAll('main article[data-testid="tweet"]')],
       before = articles
         .slice(0, articles.indexOf(article))
         .filter((a) => !promotedArticle(a) && originalTextNode(a))
@@ -363,8 +316,10 @@
       text,
       context: JSON.stringify({
         order: "oldest_to_newest",
+        target_author: author,
+        target_turn: { author, text },
         instruction: text
-          ? "Reply to target_text as the next turn. If target_text is a short reaction/comment, use the nearest ancestor/root post as the main topic and write a reply that connects the comment to that original context; do not answer the short comment in isolation."
+          ? "Reply directly to target_text, which is the exact latest comment/post being answered. If it is a comment, answer its claim or tone first; use the nearest ancestor/root post only as background to resolve references. Do not reply to the root post instead of the target comment, and do not repeat the root caption."
           : "The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview or visible ancestor/root posts as the context being reacted to.",
         turns,
         embedded,
@@ -372,8 +327,7 @@
       conversationDepth: turns.length + 1,
       lang: text ? scriptLanguage(text, node?.lang || "") : "",
       mediaUrls: urls,
-      mediaCount:
-        ownMedia.mediaCount + turns.reduce((sum, t) => sum + t.media_count, 0),
+      mediaCount: ownMedia.mediaCount + turns.reduce((sum, t) => sum + t.media_count, 0),
       mediaKind:
         ownMedia.mediaKind === "video_thumbnail"
           ? "video_thumbnail"
@@ -391,9 +345,7 @@
       for (let i = 0; i < 15 && originalControl(article); i++)
         await new Promise((resolve) => setTimeout(resolve, 100));
       if (originalControl(article))
-        throw new Error(
-          "Không chuyển được về nội dung gốc. Hãy bấm “Hiện bản gốc” rồi thử lại.",
-        );
+        throw new Error("Không chuyển được về nội dung gốc. Hãy bấm “Hiện bản gốc” rồi thử lại.");
     }
     let post = targetPost();
     if (post) {
@@ -404,21 +356,13 @@
         captured = await globalThis.XReplyMedia.capture(article, fast);
         const refreshed = targetPost();
         if (refreshed) post = { ...post, ...refreshed };
-        if (
-          !post.mediaCount ||
-          captured.mediaInline?.length ||
-          post.mediaUrls?.length
-        )
-          break;
-        await new Promise((resolve) =>
-          setTimeout(resolve, 250 * (attempt + 1)),
-        );
+        if (!post.mediaCount || captured.mediaInline?.length || post.mediaUrls?.length) break;
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
       }
       Object.assign(post, captured);
       post.publishedAt = article.querySelector("time")?.dateTime || "";
       post.generatedAt = new Date().toISOString();
-      post.clientTimezone =
-        Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      post.clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
       post.clientLocalHour = new Date().getHours();
     }
     return post;
@@ -451,8 +395,7 @@
           ].find((x) => x);
           if (found) return found;
           const small = [...scope.querySelectorAll("img")].find((x) => {
-            const src =
-              x.currentSrc || x.src || x.getAttribute("data-src") || "";
+            const src = x.currentSrc || x.src || x.getAttribute("data-src") || "";
             const r = x.getBoundingClientRect?.();
             return (
               /profile_images|pbs\\.twimg\\.com/i.test(src) ||
@@ -470,17 +413,10 @@
         avatar?.src ||
         avatar
           ?.closest('[style*="background-image"]')
-          ?.style?.backgroundImage?.match(
-            /url\\(["']?([^"')]+)["']?\\)/i,
-          )?.[1] ||
+          ?.style?.backgroundImage?.match(/url\\(["']?([^"')]+)["']?\\)/i)?.[1] ||
         "";
     if (!id || !article) return null;
-    if (
-      !text &&
-      !ownMedia.mediaCount &&
-      !ownMedia.mediaUrls.length &&
-      !embedded.length
-    )
+    if (!text && !ownMedia.mediaCount && !ownMedia.mediaUrls.length && !embedded.length)
       return null;
     return {
       url: `https://x.com/${author}/status/${id}`,
@@ -516,15 +452,13 @@
         const refreshed = postFromArticle(article);
         if (refreshed) post = { ...post, ...refreshed };
         if (captured.mediaInline?.length || post.mediaUrls?.length) break;
-        if (attempt === 0)
-          await new Promise((resolve) => setTimeout(resolve, 120));
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 120));
       }
       Object.assign(post, captured);
     }
     post.publishedAt = article.querySelector("time")?.dateTime || "";
     post.generatedAt = new Date().toISOString();
-    post.clientTimezone =
-      Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    post.clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
     post.clientLocalHour = new Date().getHours();
     return post;
   }
@@ -610,18 +544,13 @@
       node && node !== article && depth < 6;
       depth++, node = node.parentElement
     ) {
-      const ownButtons = [
-          ...node.querySelectorAll('button,[role="button"],a'),
-        ].filter(
-          (el) =>
-            el.closest("article") === article && !insideQuote(el, article),
+      const ownButtons = [...node.querySelectorAll('button,[role="button"],a')].filter(
+          (el) => el.closest("article") === article && !insideQuote(el, article),
         ),
         hasMenu = ownButtons.some(
           (el) =>
             el.matches('[data-testid="caret"]') ||
-            /more|thêm|khác|more options/i.test(
-              (el.getAttribute("aria-label") || "").trim(),
-            ),
+            /more|thêm|khác|more options/i.test((el.getAttribute("aria-label") || "").trim()),
         ),
         hasAnchor = ownButtons.some(
           (el) => el === anchor || el.contains(anchor) || anchor?.contains(el),
@@ -649,9 +578,7 @@
       clearQuoteButtons();
       return;
     }
-    for (const article of document.querySelectorAll(
-      'article[data-testid="tweet"]',
-    )) {
+    for (const article of document.querySelectorAll('article[data-testid="tweet"]')) {
       if (article !== target) {
         article
           .querySelectorAll(".xra-quote-top-wrap,.xra-quote-floating")
@@ -662,11 +589,8 @@
       if (article.dataset.xraQuoteButton) continue;
       const link = ownPermalink(article);
       if (!link) continue;
-      const own = (el) =>
-          el.closest("article") === article && !insideQuote(el, article),
-        controls = [
-          ...article.querySelectorAll('button,[role="button"],a'),
-        ].filter(own),
+      const own = (el) => el.closest("article") === article && !insideQuote(el, article),
+        controls = [...article.querySelectorAll('button,[role="button"],a')].filter(own),
         subscribe = controls.find(
           (el) =>
             /^\d+-subscribe$/.test(el.getAttribute("data-testid") || "") ||
@@ -682,27 +606,20 @@
         caret = controls.find(
           (el) =>
             el.matches('[data-testid="caret"]') ||
-            /more|thêm|khác|more options/i.test(
-              (el.getAttribute("aria-label") || "").trim(),
-            ),
+            /more|thêm|khác|more options/i.test((el.getAttribute("aria-label") || "").trim()),
         );
       const anchor = subscribe || grok || caret,
         row = topActionRow(anchor, article),
         host =
           row ||
-          (subscribe
-            ? subscribe.parentElement?.parentElement
-            : anchor?.parentElement) ||
+          (subscribe ? subscribe.parentElement?.parentElement : anchor?.parentElement) ||
           article;
       article.dataset.xraQuoteButton = "1";
       const button = document.createElement("button");
       button.type = "button";
       button.className = "xra-quote-action xra-quote-top-action";
       button.title = "Viết bài trích dẫn phân tích góc nhìn";
-      button.setAttribute(
-        "aria-label",
-        "Viết bài trích dẫn phân tích góc nhìn",
-      );
+      button.setAttribute("aria-label", "Viết bài trích dẫn phân tích góc nhìn");
       button.innerHTML =
         globalThis.AssistantIcons?.svg("quote") ||
         '<span class="ai-icon" aria-hidden="true"></span>';
@@ -715,9 +632,7 @@
       wrap.className = "xra-quote-top-wrap";
       wrap.append(button);
       if (anchor) {
-        const slot = [...host.children].find(
-          (child) => child === anchor || child.contains(anchor),
-        );
+        const slot = [...host.children].find((child) => child === anchor || child.contains(anchor));
         (slot || anchor).insertAdjacentElement("beforebegin", wrap);
       } else {
         article.classList.add("xra-quote-anchor");
@@ -726,8 +641,7 @@
       }
     }
   }
-  const editor = () =>
-    document.querySelector('[data-testid="tweetTextarea_0"]');
+  const editor = () => document.querySelector('[data-testid="tweetTextarea_0"]');
   function activate() {
     const e = editor();
     if (e) {
@@ -748,37 +662,24 @@
         clipboardData: transfer,
       }),
       dispatched = e.dispatchEvent(event);
-    if (dispatched && !event.defaultPrevented)
-      document.execCommand("insertText", false, text);
+    if (dispatched && !event.defaultPrevented) document.execCommand("insertText", false, text);
   }
   function fill(text, auto) {
     fillOnce(text);
     if (auto)
-      setTimeout(
-        () =>
-          document.querySelector('[data-testid="tweetButtonInline"]')?.click(),
-        90,
-      );
+      setTimeout(() => document.querySelector('[data-testid="tweetButtonInline"]')?.click(), 90);
   }
   async function openMediaPicker(query, kind = "gif") {
     const visible = (e) => {
         const r = e.getBoundingClientRect(),
           s = getComputedStyle(e);
-        return (
-          r.width > 0 &&
-          r.height > 0 &&
-          s.visibility !== "hidden" &&
-          s.display !== "none"
-        );
+        return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
       },
       label = (e) =>
         `${e.getAttribute("aria-label") || ""} ${e.getAttribute("data-testid") || ""} ${e.textContent || ""}`.toLowerCase(),
-      buttons = [...document.querySelectorAll('button,[role="button"]')].filter(
-        visible,
-      ),
+      buttons = [...document.querySelectorAll('button,[role="button"]')].filter(visible),
       picker = buttons.find((e) => /(?:gif|media|ảnh|image)/i.test(label(e)));
-    if (!picker)
-      throw new Error("Không tìm thấy bộ chọn GIF/ảnh trong ô trả lời.");
+    if (!picker) throw new Error("Không tìm thấy bộ chọn GIF/ảnh trong ô trả lời.");
     picker.click();
     await new Promise((resolve) => setTimeout(resolve, 350));
     const dialog = document.querySelector('[role="dialog"]') || document.body,
@@ -790,10 +691,7 @@
           ),
       );
     if (input && query) {
-      const setter = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value",
-      )?.set;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
       if (setter) setter.call(input, String(query));
       else input.value = String(query);
       input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -841,9 +739,8 @@
         return true;
       }
       if (message?.type === "openMediaPicker") {
-        openMediaPicker(String(message.query || ""), message.kind).then(
-          sendResponse,
-          (e) => sendResponse({ ok: false, error: e.message }),
+        openMediaPicker(String(message.query || ""), message.kind).then(sendResponse, (e) =>
+          sendResponse({ ok: false, error: e.message }),
         );
         return true;
       }
@@ -872,10 +769,8 @@
       startTop = 0;
     const clamp = () => {
       const r = button.getBoundingClientRect();
-      button.style.left =
-        Math.max(4, Math.min(window.innerWidth - r.width - 4, r.left)) + "px";
-      button.style.top =
-        Math.max(4, Math.min(window.innerHeight - r.height - 4, r.top)) + "px";
+      button.style.left = Math.max(4, Math.min(window.innerWidth - r.width - 4, r.left)) + "px";
+      button.style.top = Math.max(4, Math.min(window.innerHeight - r.height - 4, r.top)) + "px";
       button.style.right = "auto";
     };
     button.addEventListener("pointerdown", (event) => {
@@ -919,8 +814,7 @@
       button.disabled = true;
       try {
         const result = await chrome.runtime.sendMessage({ type: "openPanel" });
-        if (!result?.ok)
-          throw new Error(result?.error || "Không mở được side panel.");
+        if (!result?.ok) throw new Error(result?.error || "Không mở được side panel.");
         button.hidden = true;
       } catch (error) {
         button.hidden = false;
@@ -991,9 +885,7 @@
     const results = box.querySelector(".xra-results");
     results.replaceChildren();
     if (!state.replies.length) return;
-    state.replies.sort(
-      (a, b) => (b.relevance_score || 0) - (a.relevance_score || 0),
-    );
+    state.replies.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
     const picks = document.createElement("div");
     picks.className = "xra-pick";
     state.replies.forEach((item, i) => {
@@ -1008,9 +900,7 @@
       row.className = "xra-chip-main";
       t.textContent = item.reply;
       score.className = "xra-relevance";
-      score.textContent = Number.isFinite(item.relevance_score)
-        ? `${item.relevance_score}%`
-        : "";
+      score.textContent = Number.isFinite(item.relevance_score) ? `${item.relevance_score}%` : "";
       row.append(t, score);
       b.append(row);
       if (item.translation_vi) {
@@ -1021,10 +911,7 @@
       }
       b.onclick = () => {
         state.selected = i;
-        fill(
-          item.reply,
-          box.querySelector(".xra-auto-reply").classList.contains("active"),
-        );
+        fill(item.reply, box.querySelector(".xra-auto-reply").classList.contains("active"));
         render(box);
       };
       wrap.append(b);
@@ -1033,17 +920,15 @@
         media.type = "button";
         media.className = "xra-media-suggestion";
         media.textContent = `${item.media_suggestion.kind === "gif" ? "GIF" : "Ảnh/meme"} · ${item.media_suggestion.query}`;
-        media.title =
-          item.media_suggestion.reason || "Mở bộ chọn media với gợi ý này";
+        media.title = item.media_suggestion.reason || "Mở bộ chọn media với gợi ý này";
         media.onclick = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          openMediaPicker(
-            item.media_suggestion.query,
-            item.media_suggestion.kind,
-          ).catch((error) => {
-            media.title = error.message;
-          });
+          openMediaPicker(item.media_suggestion.query, item.media_suggestion.kind).catch(
+            (error) => {
+              media.title = error.message;
+            },
+          );
         };
         wrap.append(media);
       }
@@ -1057,8 +942,7 @@
         new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(
           state.elapsedMs / 1000,
         ) + " giây";
-      timing.title =
-        "Thời gian đọc bài và nhận đầy đủ gợi ý, gồm bản dịch nếu cần";
+      timing.title = "Thời gian đọc bài và nhận đầy đủ gợi ý, gồm bản dịch nếu cần";
       results.append(timing);
     }
   }
@@ -1076,6 +960,15 @@
       "replyMediaSuggestions",
     ]);
     if (!saved) {
+      mounting = false;
+      return;
+    }
+    // Never mount or activate reply UI inside X's global composer route. A
+    // navigation to /compose/post can be caused by X while opening a post,
+    // comment, or reply; letting the assistant click again here creates a
+    // compose loop and steals the original target.
+    if (/^\/compose\/post(?:\/|$)/i.test(location.pathname)) {
+      document.querySelectorAll(".xra-box,.xra-sticky-user").forEach((e) => e.remove());
       mounting = false;
       return;
     }
@@ -1097,15 +990,15 @@
       return;
     }
     if (saved.autoSuggest && !saved.autoReplyFlow)
-      globalThis.XReplyMedia?.prime(
-        currentArticle(currentId),
-        !!saved.fastReplyMode,
-      );
+      globalThis.XReplyMedia?.prime(currentArticle(currentId), !!saved.fastReplyMode);
     let e = editor();
     if (!e) {
       const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
         reply = articleFor(id)?.querySelector('[data-testid="reply"]');
-      if (reply && !reply.dataset.xraOpened) {
+      // Opening the native Reply button is only part of an explicitly
+      // enabled automatic run. Normal navigation must not activate the
+      // Reply tab/editor by itself.
+      if (globalThis.__assistantAutoFlowRunning === true && reply && !reply.dataset.xraOpened) {
         reply.dataset.xraOpened = "1";
         reply.click();
         setTimeout(safeMount, 250);
@@ -1125,8 +1018,8 @@
       };
     activate();
     const host =
-        e.closest('[data-testid="tweetTextarea_0_label"]')?.parentElement
-          ?.parentElement || e.parentElement,
+        e.closest('[data-testid="tweetTextarea_0_label"]')?.parentElement?.parentElement ||
+        e.parentElement,
       box = document.createElement("div");
     box.className = "xra-box";
     box.dataset.postId = post?.postId || "";
@@ -1134,8 +1027,7 @@
       '<div class="xra-tools"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v6h-6"/></svg></button><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><span class="xra-spacer"></span><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></button><button class="xra-button xra-auto-like" title="Tự like khi mở bài"><svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.9-8.6a5.5 5.5 0 0 0-.1-7.8Z"/></svg></button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4 20-7Z"/></svg></button></div><div class="xra-results"></div>';
     const generate = box.querySelector(".xra-generate"),
       sync = box.querySelector(".xra-sync");
-    sync.innerHTML =
-      globalThis.AssistantIcons?.svg("refresh") || sync.innerHTML;
+    sync.innerHTML = globalThis.AssistantIcons?.svg("refresh") || sync.innerHTML;
     let run,
       running = false,
       pending = false;
@@ -1193,16 +1085,8 @@
         if (key === "autoSuggest" && next && !saved.autoReplyFlow && !state.generated) run(false);
       };
     };
-    toggle(
-      box.querySelector(".xra-auto-reply"),
-      "autoReply",
-      !!saved.autoReply,
-    );
-    toggle(
-      box.querySelector(".xra-auto-suggest"),
-      "autoSuggest",
-      !!saved.autoSuggest,
-    );
+    toggle(box.querySelector(".xra-auto-reply"), "autoReply", !!saved.autoReply);
+    toggle(box.querySelector(".xra-auto-suggest"), "autoSuggest", !!saved.autoSuggest);
     toggle(box.querySelector(".xra-auto-like"), "autoLike", !!saved.autoLike);
     const gear = document.createElement("button");
     gear.className = "xra-button xra-settings";
@@ -1225,9 +1109,7 @@
           value = input.checked;
         chrome.storage.local.set({ [key]: value }).catch(() => {});
         box
-          .querySelector(
-            `.xra-${key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}`,
-          )
+          .querySelector(`.xra-${key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}`)
           ?.classList.toggle("active", value);
         if (key === "autoLike" && value) likePost();
         if (key === "autoSuggest" && value && !saved.autoReplyFlow && !state.generated) run(false);
@@ -1266,13 +1148,11 @@
           "stylePrompt",
           "replyTone",
           "replyMediaSuggestions",
+          "feedbackExtraContext",
         ]);
         if (!s) throw new Error("Hãy tải lại trang X.");
         const provider = s.provider || "gemini";
-        if (
-          provider === "api" &&
-          !/^sk-[A-Za-z0-9_-]{20,}$/.test(s.apiKey || "")
-        )
+        if (provider === "api" && !/^sk-[A-Za-z0-9_-]{20,}$/.test(s.apiKey || ""))
           throw new Error("Mở side panel và nhập API key.");
         if (provider === "chatgpt" && !s.chatgptModel)
           throw new Error("Kết nối ChatGPT và chọn model.");
@@ -1300,11 +1180,14 @@
             ...post,
             style:
               (s.stylePrompt || "") +
+              (s.feedbackExtraContext
+                ? ` Additional feedback context from the user: ${String(s.feedbackExtraContext).slice(0, 500)}`
+                : "") +
               " " +
               (s.replyTone === "male"
-                ? "Use a natural masculine Vietnamese voice; do not mention gender."
+                ? "The reply author is male. Use a natural masculine voice while preserving the post's original language; do not mention gender."
                 : s.replyTone === "female"
-                  ? "Use a natural feminine Vietnamese voice; do not mention gender."
+                  ? "The reply author is female. Use a natural feminine voice while preserving the post's original language; do not mention gender."
                   : ""),
             replyCount,
             fastMode: !!s.fastReplyMode,
@@ -1355,10 +1238,7 @@
   document.addEventListener(
     "click",
     (event) => {
-      if (
-        !event.target.closest?.('[data-testid="tweetButtonInline"]') ||
-        state.selected === null
-      )
+      if (!event.target.closest?.('[data-testid="tweetButtonInline"]') || state.selected === null)
         return;
       const used = state.selected;
       setTimeout(() => {
@@ -1393,6 +1273,10 @@
     clearTimeout(mountTimer);
     mountTimer = setTimeout(() => {
       mountTimer = 0;
+      // Ads are injected lazily as the feed streams in. Re-run the ad pass
+      // on every DOM batch instead of checking only during initial load or a
+      // settings change.
+      applyAdHiding();
       safeMount();
     }, 120);
   };
@@ -1480,11 +1364,7 @@
           post: { ...post, fastMode: true },
         }),
         timeout = new Promise((_, reject) =>
-          setTimeout(
-            () =>
-              reject(new Error("Phân tích quá lâu, hãy bấm lại để thử lại.")),
-            30000,
-          ),
+          setTimeout(() => reject(new Error("Phân tích quá lâu, hãy bấm lại để thử lại.")), 30000),
         );
       const r = await Promise.race([request, timeout]);
       if (cancelled()) return;
@@ -1516,10 +1396,7 @@
       button.classList.remove("xra-quote-loading");
       button.disabled = false;
       button.title = "Viết bài trích dẫn phân tích góc nhìn";
-      button.setAttribute(
-        "aria-label",
-        "Viết bài trích dẫn phân tích góc nhìn",
-      );
+      button.setAttribute("aria-label", "Viết bài trích dẫn phân tích góc nhìn");
       if (wasCancelled)
         await safeSet({
           quoteAnalysisState: {

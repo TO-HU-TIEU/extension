@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "domains": ["core", "reply", "automation", "content", "follow", "update", "shell"],
+  "components": [
+    { "id": "core.activation", "path": "activation.js", "domain": "core", "contexts": ["panel"] },
+    {
+      "id": "content.article-extract",
+      "path": "article-extract.js",
+      "domain": "content",
+      "contexts": ["dynamic"]
+    },
+    {
+      "id": "automation.auto-flow",
+      "path": "auto-flow.js",
+      "domain": "automation",
+      "contexts": ["content"]
+    },
+    {
+      "id": "shell.background",
+      "path": "background.js",
+      "domain": "shell",
+      "contexts": ["background"]
+    },
+    {
+      "id": "content.background",
+      "path": "content-background.js",
+      "domain": "content",
+      "contexts": ["background-import"]
+    },
+    {
+      "id": "content.core",
+      "path": "content-core.js",
+      "domain": "content",
+      "contexts": ["background-import", "panel", "dynamic"]
+    },
+    {
+      "id": "content.extractor",
+      "path": "content-extractor.js",
+      "domain": "content",
+      "contexts": ["dynamic"]
+    },
+    {
+      "id": "content.panel",
+      "path": "content-panel.js",
+      "domain": "content",
+      "contexts": ["panel"]
+    },
+    {
+      "id": "content.presets",
+      "path": "content-presets.js",
+      "domain": "content",
+      "contexts": ["background-import"]
+    },
+    {
+      "id": "content.reader",
+      "path": "content-reader.js",
+      "domain": "content",
+      "contexts": ["background-import", "panel", "dynamic"]
+    },
+    {
+      "id": "content.scanner",
+      "path": "content-scanner.js",
+      "domain": "content",
+      "contexts": ["dynamic"]
+    },
+    {
+      "id": "update.core",
+      "path": "extension-updates.js",
+      "domain": "update",
+      "contexts": ["panel"]
+    },
+    { "id": "reply.extract", "path": "extract.js", "domain": "reply", "contexts": ["dynamic"] },
+    {
+      "id": "automation.comment-runner",
+      "path": "comment-automation.js",
+      "domain": "automation",
+      "contexts": ["content", "dynamic"]
+    },
+    {
+      "id": "reply.learning-feedback",
+      "path": "learning-feedback.js",
+      "domain": "reply",
+      "contexts": ["content", "panel"]
+    },
+    { "id": "follow.panel", "path": "follow-panel.js", "domain": "follow", "contexts": ["panel"] },
+    {
+      "id": "follow.scroll-fix",
+      "path": "follow-scroll-fix.js",
+      "domain": "follow",
+      "contexts": ["content"]
+    },
+    {
+      "id": "follow.speed-content",
+      "path": "follow-speed-content.js",
+      "domain": "follow",
+      "contexts": ["content"]
+    },
+    {
+      "id": "follow.speed-panel",
+      "path": "follow-speed-panel.js",
+      "domain": "follow",
+      "contexts": ["panel"]
+    },
+    {
+      "id": "follow.tab-icons",
+      "path": "follow-tab-icons.js",
+      "domain": "follow",
+      "contexts": ["panel"]
+    },
+    {
+      "id": "follow.tabs-layout",
+      "path": "follow-tabs-layout.js",
+      "domain": "follow",
+      "contexts": ["panel"]
+    },
+    {
+      "id": "follow.target-panel",
+      "path": "follow-target-panel.js",
+      "domain": "follow",
+      "contexts": ["panel"]
+    },
+    {
+      "id": "follow.content",
+      "path": "follow.js",
+      "domain": "follow",
+      "contexts": ["content", "dynamic"]
+    },
+    {
+      "id": "core.language",
+      "path": "shared/language.js",
+      "source": "../shared/language.js",
+      "domain": "core",
+      "contexts": ["background-import", "content", "panel", "dynamic"]
+    },
+    {
+      "id": "core.prompt-policy",
+      "path": "shared/prompt-policy.js",
+      "source": "../shared/prompt-policy.js",
+      "domain": "core",
+      "contexts": ["background-import"]
+    },
+    {
+      "id": "core.reply-quality",
+      "path": "shared/reply-quality.js",
+      "source": "../shared/reply-quality.js",
+      "domain": "core",
+      "contexts": ["background-import"]
+    },
+    {
+      "id": "core.reply-contract",
+      "path": "shared/reply-contract.js",
+      "source": "../shared/reply-contract.js",
+      "domain": "core",
+      "contexts": ["background-import"]
+    },
+    { "id": "shell.panel", "path": "panel.js", "domain": "shell", "contexts": ["panel"] },
+    {
+      "id": "core.remote-config",
+      "path": "remote-config.js",
+      "domain": "core",
+      "contexts": ["background-import", "panel", "dynamic"]
+    },
+    {
+      "id": "shell.panel-entry",
+      "path": "panel-entry.js",
+      "domain": "shell",
+      "contexts": ["background-import"]
+    },
+    {
+      "id": "reply.layout",
+      "path": "reply-layout.js",
+      "domain": "reply",
+      "contexts": ["content"]
+    },
+    {
+      "id": "reply.preferences",
+      "path": "reply-preferences.js",
+      "domain": "reply",
+      "contexts": ["background-import", "content", "panel"]
+    },
+    {
+      "id": "reply.time",
+      "path": "reply-time.js",
+      "domain": "reply",
+      "contexts": ["background-import"]
+    },
+    { "id": "core.theme", "path": "theme.js", "domain": "core", "contexts": ["content", "panel"] },
+    {
+      "id": "reply.tone-controls",
+      "path": "tone-controls.js",
+      "domain": "reply",
+      "contexts": ["panel"]
+    },
+    {
+      "id": "core.ui-icons",
+      "path": "ui-icons.js",
+      "domain": "core",
+      "contexts": ["content", "panel"]
+    },
+    {
+      "id": "shell.panel-icons",
+      "path": "panel-icons.js",
+      "domain": "shell",
+      "contexts": ["panel"]
+    },
+    {
+      "id": "core.webview-demo",
+      "path": "webview-demo.js",
+      "domain": "core",
+      "contexts": ["panel"]
+    },
+    { "id": "update.panel", "path": "updates-panel.js", "domain": "update", "contexts": ["panel"] },
+    {
+      "id": "reply.content-fix",
+      "path": "x-content-fix.js",
+      "domain": "reply",
+      "contexts": ["content"]
+    },
+    { "id": "reply.content", "path": "x-content.js", "domain": "reply", "contexts": ["content"] },
+    {
+      "id": "reply.media",
+      "path": "x-media.js",
+      "domain": "reply",
+      "contexts": ["content", "dynamic"]
+    },
+    {
+      "id": "reply.personalization",
+      "path": "x-personalization.js",
+      "domain": "reply",
+      "contexts": ["content"]
+    }
+  ],
+  "loadOrder": {
+    "styles": ["panel-ui.css"],
+    "backgroundImports": [
+      "shared/reply-contract.js",
+      "shared/language.js",
+      "shared/prompt-policy.js",
+      "shared/reply-quality.js",
+      "reply-time.js",
+      "reply-preferences.js",
+      "content-presets.js",
+      "remote-config.js",
+      "panel-entry.js",
+      "content-core.js",
+      "content-reader.js",
+      "content-background.js"
+    ],
+    "content": [
+      "ui-icons.js",
+      "theme.js",
+      "shared/language.js",
+      "reply-preferences.js",
+      "reply-layout.js",
+      "x-media.js",
+      "x-content.js",
+      "x-content-fix.js",
+      "auto-flow.js",
+      "comment-automation.js",
+      "learning-feedback.js",
+      "x-personalization.js",
+      "follow.js",
+      "follow-speed-content.js",
+      "follow-scroll-fix.js"
+    ],
+    "panel": [
+      "webview-demo.js",
+      "activation.js",
+      "ui-icons.js",
+      "panel-icons.js",
+      "theme.js",
+      "reply-preferences.js",
+      "remote-config.js",
+      "shared/language.js",
+      "content-core.js",
+      "content-reader.js",
+      "panel.js",
+      "learning-feedback.js",
+      "tone-controls.js",
+      "content-panel.js",
+      "extension-updates.js",
+      "updates-panel.js",
+      "follow-target-panel.js",
+      "follow-tabs-layout.js",
+      "follow-panel.js",
+      "follow-tab-icons.js",
+      "follow-speed-panel.js"
+    ]
+  }
+}

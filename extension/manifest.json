@@ -4,17 +4,8 @@
   "description": "Trợ lý nội dung theo ngữ cảnh, hỗ trợ phản hồi và tạo bài từ nhiều nguồn.",
   "version": "1.5.22",
   "minimum_chrome_version": "116",
-  "permissions": [
-    "sidePanel",
-    "scripting",
-    "storage",
-    "clipboardWrite",
-    "activeTab",
-    "alarms"
-  ],
-  "optional_host_permissions": [
-    "https://*/*"
-  ],
+  "permissions": ["sidePanel", "scripting", "storage", "clipboardWrite", "activeTab", "alarms"],
+  "optional_host_permissions": ["https://*/*"],
   "host_permissions": [
     "https://x.com/*",
     "https://www.x.com/*",
@@ -58,22 +49,21 @@
       "js": [
         "ui-icons.js",
         "theme.js",
-        "language.js",
+        "shared/language.js",
         "reply-preferences.js",
         "reply-layout.js",
         "x-media.js",
-          "x-content.js",
-          "x-content-fix.js",
-          "auto-flow.js",
+        "x-content.js",
+        "x-content-fix.js",
+        "auto-flow.js",
+        "comment-automation.js",
+        "learning-feedback.js",
         "x-personalization.js",
         "follow.js",
         "follow-speed-content.js",
         "follow-scroll-fix.js"
       ],
-      "css": [
-        "x-content.css",
-        "reply-ui.css"
-      ],
+      "css": ["x-content.css", "reply-ui.css"],
       "run_at": "document_idle"
     }
   ],
@@ -82,10 +72,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": [
-        "assets/ai-generate.png",
-        "assets/logo.svg"
-      ],
+      "resources": ["assets/ai-generate.png", "assets/logo.svg"],
       "matches": [
         "https://x.com/*",
         "https://www.x.com/*",

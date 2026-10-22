@@ -25,8 +25,7 @@ const discreet = (text) =>
 const DROPDOWN_SVG =
     '<svg class="dropdown-icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7071 14.7071C12.3166 15.0976 11.6834 15.0976 11.2929 14.7071L6.29289 9.70711C5.90237 9.31658 5.90237 8.68342 6.29289 8.29289C6.68342 7.90237 7.31658 7.90237 7.70711 8.29289L12 12.5858L16.2929 8.29289C16.6834 7.90237 17.3166 7.90237 17.7071 8.29289C18.0976 8.68342 18.0976 9.31658 17.7071 9.70711L12.7071 14.7071Z" fill="currentColor"/></svg>',
   ICON = {
-    refresh:
-      '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v6h-6"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v6h-6"/></svg>',
     plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
     copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="10" height="10" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>',
     eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>',
@@ -115,6 +114,7 @@ let styles = [],
   currentProvider = "gemini",
   connected = false,
   geminiPrimaryKey = "",
+  geminiPrimaryKeyLabel = "",
   geminiStoredKeys = [];
 const PRESET_SOURCE =
   "https://raw.githubusercontent.com/TO-HU-TIEU/configs/main/presets/reply-styles.json";
@@ -125,8 +125,7 @@ chrome.storage.local.get("customStyles").then(({ customStyles = [] }) => {
         .trim()
         .toLocaleLowerCase() !== "tự nhiên trên x (copy)",
   );
-  if (clean.length !== customStyles.length)
-    chrome.storage.local.set({ customStyles: clean });
+  if (clean.length !== customStyles.length) chrome.storage.local.set({ customStyles: clean });
 });
 function validRemotePresets(value) {
   return (
@@ -151,9 +150,10 @@ async function loadDefaultStyles() {
   await globalThis.RemoteConfig.ready;
   await globalThis.RemoteConfig.refresh();
   const presets = globalThis.RemoteConfig.get("styles");
-  return (validRemotePresets(presets) ? presets.styles : DEFAULT_STYLES).map(
-    (s) => ({ ...s, name: ReplyPreferences.label(s) }),
-  );
+  return (validRemotePresets(presets) ? presets.styles : DEFAULT_STYLES).map((s) => ({
+    ...s,
+    name: ReplyPreferences.label(s),
+  }));
 }
 function status(text, error = false) {
   $("status").textContent = discreet(text);
@@ -166,9 +166,9 @@ async function safely(fn) {
     status(e.message, true);
   }
 }
-const maskKey = (key) => (key ? `${key.slice(0, 6)}…${key.slice(-4)}` : "");
-const looksLikeApiKey = (key) =>
-  /^[A-Za-z0-9_.-]{20,}$/.test(String(key || "").trim());
+const maskKey = (key) =>
+  key ? (key.length > 10 ? `${key.slice(0, 2)}.${key.slice(2, 5)}.....${key.slice(-4)}` : key) : "";
+const looksLikeApiKey = (key) => /^[A-Za-z0-9_.-]{20,}$/.test(String(key || "").trim());
 const GEMINI_MODEL_FALLBACKS = [
   { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite" },
   { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash-Lite" },
@@ -181,13 +181,10 @@ function geminiModelOptions(models = []) {
   const map = new Map();
   for (const m of models) if (m?.id) map.set(m.id, { ...m, extra: false });
   for (const m of GEMINI_MODEL_FALLBACKS)
-    if (!map.has(m.id))
-      map.set(m.id, { ...m, name: `${m.name} · thử`, extra: true });
+    if (!map.has(m.id)) map.set(m.id, { ...m, name: `${m.name} · thử`, extra: true });
   const order = new Map(GEMINI_MODEL_FALLBACKS.map((m, i) => [m.id, i]));
   return [...map.values()].sort(
-    (a, b) =>
-      (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99) ||
-      a.name.localeCompare(b.name),
+    (a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99) || a.name.localeCompare(b.name),
   );
 }
 function normalizeGeminiKeys(value) {
@@ -197,10 +194,12 @@ function normalizeGeminiKeys(value) {
     .map((x) => {
       const key = String(x.key || "").trim();
       return {
-        id:
-          x.id || `gk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: x.id || `gk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         key,
-        label: maskKey(key),
+        label:
+          String(x.label || "")
+            .trim()
+            .slice(0, 40) || maskKey(key),
         enabled: x.enabled !== false,
         quotaLimited: !!x.quotaLimited,
         quotaAt: x.quotaAt || "",
@@ -208,35 +207,37 @@ function normalizeGeminiKeys(value) {
         invalidAt: x.invalidAt || "",
       };
     })
-    .filter(
-      (x) => looksLikeApiKey(x.key) && !seen.has(x.key) && seen.add(x.key),
-    )
+    .filter((x) => looksLikeApiKey(x.key) && !seen.has(x.key) && seen.add(x.key))
     .slice(0, 10);
 }
 function displayGeminiKeys(keys = []) {
-  const backups = normalizeGeminiKeys(keys).filter(
-    (x) => x.key !== geminiPrimaryKey,
-  );
+  const backups = normalizeGeminiKeys(keys).filter((x) => x.key !== geminiPrimaryKey);
   return normalizeGeminiKeys(
     geminiPrimaryKey
-      ? [{ id: "primary", key: geminiPrimaryKey, enabled: true }, ...backups]
+      ? [
+          {
+            id: "primary",
+            key: geminiPrimaryKey,
+            label: geminiPrimaryKeyLabel,
+            enabled: true,
+          },
+          ...backups,
+        ]
       : backups,
   );
 }
 async function saveGeminiKeyList(list) {
   const clean = normalizeGeminiKeys(list),
-    active = clean.find(
-      (x) => x.enabled !== false && !x.quotaLimited && !x.invalidKey,
-    );
+    active = clean.find((x) => x.enabled !== false && !x.quotaLimited && !x.invalidKey);
   geminiPrimaryKey = active?.key || "";
-  const ordered = active
-      ? [active, ...clean.filter((x) => x.key !== active.key)]
-      : clean,
+  geminiPrimaryKeyLabel = active?.label || "";
+  const ordered = active ? [active, ...clean.filter((x) => x.key !== active.key)] : clean,
     backups = active ? ordered.slice(1) : ordered;
   geminiStoredKeys = backups;
   $("geminiKey").value = geminiPrimaryKey;
   await chrome.storage.local.set({
     geminiKey: geminiPrimaryKey,
+    geminiKeyLabel: geminiPrimaryKeyLabel,
     geminiKeys: backups,
   });
   renderGeminiKeys(backups);
@@ -247,9 +248,7 @@ async function saveGeminiKeys(keys) {
   return saveGeminiKeyList(displayGeminiKeys(keys));
 }
 async function promoteGeminiBackup(keys = []) {
-  return saveGeminiKeyList(
-    displayGeminiKeys(keys).filter((x) => x.key !== geminiPrimaryKey),
-  );
+  return saveGeminiKeyList(displayGeminiKeys(keys).filter((x) => x.key !== geminiPrimaryKey));
 }
 function closeKeyMenus() {
   document.querySelectorAll(".key-menu").forEach((x) => (x.hidden = true));
@@ -257,9 +256,7 @@ function closeKeyMenus() {
 function renderGeminiKeys(keys = []) {
   const box = $("geminiKeyQueue");
   if (!box) return;
-  geminiStoredKeys = normalizeGeminiKeys(keys).filter(
-    (x) => x.key !== geminiPrimaryKey,
-  );
+  geminiStoredKeys = normalizeGeminiKeys(keys).filter((x) => x.key !== geminiPrimaryKey);
   const list = displayGeminiKeys(geminiStoredKeys);
   box.replaceChildren();
   if (!list.length) {
@@ -275,11 +272,14 @@ function renderGeminiKeys(keys = []) {
       drag = document.createElement("span"),
       label = document.createElement("label"),
       checkbox = document.createElement("input"),
+      keyText = document.createElement("span"),
       code = document.createElement("code"),
+      keyMask = document.createElement("small"),
       tag = document.createElement("small"),
       copy = document.createElement("button"),
       more = document.createElement("button"),
       menu = document.createElement("div"),
+      edit = document.createElement("button"),
       del = document.createElement("button");
     row.className = `key-row${item.key === geminiPrimaryKey ? " primary" : ""}${item.quotaLimited ? " quota" : ""}${item.invalidKey ? " invalid" : ""}`;
     row.draggable = true;
@@ -311,7 +311,17 @@ function renderGeminiKeys(keys = []) {
             : x,
         ),
       );
-    code.textContent = maskKey(item.key);
+    keyText.className = "key-text";
+    code.className = "key-name";
+    code.textContent = item.label || maskKey(item.key);
+    code.title = maskKey(item.key);
+    if (item.label !== maskKey(item.key)) {
+      keyMask.className = "key-mask";
+      keyMask.textContent = maskKey(item.key);
+      keyText.append(code, keyMask);
+    } else {
+      keyText.append(code);
+    }
     tag.className = "key-tag";
     tag.textContent =
       item.key === geminiPrimaryKey
@@ -321,7 +331,7 @@ function renderGeminiKeys(keys = []) {
           : item.quotaLimited
             ? "Hết hạn mức"
             : "";
-    label.append(checkbox, code, tag);
+    label.append(checkbox, keyText, tag);
     copy.type = "button";
     copy.className = "key-copy";
     copy.innerHTML = ICON.copy;
@@ -343,11 +353,22 @@ function renderGeminiKeys(keys = []) {
     };
     menu.className = "key-menu";
     menu.hidden = true;
+    edit.type = "button";
+    edit.textContent = "Đổi tên";
+    edit.onclick = () => {
+      const nextLabel = window.prompt(
+        "Tên hiển thị cho API key (để trống dùng tên mặc định):",
+        item.label === maskKey(item.key) ? "" : item.label,
+      );
+      if (nextLabel === null) return;
+      const label = nextLabel.trim().slice(0, 40);
+      saveGeminiKeyList(list.map((x) => (x.key === item.key ? { ...x, label } : x)));
+      menu.hidden = true;
+    };
     del.type = "button";
     del.textContent = "Xoá";
-    del.onclick = () =>
-      saveGeminiKeyList(list.filter((x) => x.key !== item.key));
-    menu.append(del);
+    del.onclick = () => saveGeminiKeyList(list.filter((x) => x.key !== item.key));
+    menu.append(edit, del);
     row.ondragstart = (event) => {
       event.dataTransfer.setData("text/plain", item.key);
       row.classList.add("dragging");
@@ -369,34 +390,784 @@ function renderGeminiKeys(keys = []) {
   });
 }
 async function activeTab() {
-  return (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+  if (panelTargetTabId) {
+    const target = await chrome.tabs.get(panelTargetTabId).catch(() => null);
+    if (target?.id && (!panelWindowId || target.windowId === panelWindowId)) return target;
+    panelTargetTabId = null;
+  }
+  const query = panelWindowId
+    ? { active: true, windowId: panelWindowId }
+    : { active: true, currentWindow: true };
+  return (await chrome.tabs.query(query))[0];
+}
+let panelTargetTabId = null;
+let panelWindowId = null;
+let panelTargets = [];
+async function resolvePanelTarget() {
+  const currentWindow = await chrome.windows.getCurrent().catch(() => null);
+  if (!currentWindow?.id) return null;
+  panelWindowId = currentWindow.id;
+  const response = await chrome.runtime
+    .sendMessage({ type: "panelTarget", windowId: currentWindow.id })
+    .catch(() => null);
+  panelTargetTabId = Number(response?.data?.tabId) || null;
+  return panelTargetTabId;
+}
+function ensurePanelTargetUi() {
+  if (document.getElementById("panelTargetBar")) return;
+  const header = document.querySelector("body > header");
+  if (!header) return;
+  const bar = document.createElement("div");
+  bar.id = "panelTargetBar";
+  bar.hidden = true;
+  bar.style.cssText =
+    "align-items:center;gap:8px;margin:0 0 10px;padding:7px 10px;border:1px solid var(--panel-border,#2f3336);border-radius:10px;background:transparent;color:var(--panel-muted,#8b98a5);font-size:12px";
+  const radios = document.createElement("div");
+  radios.id = "panelTargetRadios";
+  radios.setAttribute("role", "radiogroup");
+  radios.setAttribute("aria-label", "Chọn tab X mà side panel điều khiển");
+  radios.style.cssText = "display:flex;flex:1;flex-wrap:wrap;gap:0;min-width:0";
+  bar.append(radios);
+  header.after(bar);
+}
+async function refreshPanelTargets() {
+  ensurePanelTargetUi();
+  const bar = document.getElementById("panelTargetBar");
+  const radios = document.getElementById("panelTargetRadios");
+  if (!bar || !radios) return;
+  const currentWindow = await chrome.windows.getCurrent().catch(() => null);
+  if (!currentWindow?.id) return;
+  panelWindowId = currentWindow.id;
+  const tabs = (await chrome.tabs.query({ windowId: currentWindow.id })).filter((tab) =>
+    /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i.test(tab.url || ""),
+  );
+  panelTargets = await Promise.all(
+    tabs.map(async (tab, index) => {
+      const identity = await chrome.tabs
+        .sendMessage(tab.id, { type: "autoFlowIdentity" })
+        .catch(() => null);
+      return { tab, identity, index };
+    }),
+  );
+  if (!panelTargetTabId || !panelTargets.some((item) => item.tab.id === panelTargetTabId)) {
+    const active = panelTargets.find((item) => item.tab.active);
+    panelTargetTabId = active?.tab.id || panelTargets[0]?.tab.id || null;
+  }
+  bar.hidden = panelTargets.length < 2;
+  bar.style.display = bar.hidden ? "none" : "flex";
+  radios.replaceChildren(
+    ...panelTargets.map(({ tab, identity, index }) => {
+      const item = document.createElement("label");
+      item.style.cssText =
+        "display:inline-flex;align-items:center;justify-content:center;gap:5px;flex:1 1 0;min-width:0;padding:5px 8px;border:0;border-radius:0;color:var(--panel-text,#e7e9ea);cursor:pointer;font:600 13px/1.2 system-ui";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "panelTargetTab";
+      radio.value = String(tab.id);
+      radio.checked = tab.id === panelTargetTabId;
+      radio.style.accentColor = "var(--panel-accent,#1d9bf0)";
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        panelTargetTabId = tab.id;
+        notifyPanel(true);
+        refreshPanelTargets();
+      });
+      const isRunning = !!identity?.running;
+      const status = isRunning ? (identity.paused ? "Tạm dừng" : "Đang chạy") : "Chưa chạy";
+      const statusDot = document.createElement("span");
+      statusDot.setAttribute("aria-hidden", "true");
+      statusDot.style.cssText = `width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:${isRunning ? "#20c997" : "#e05257"}`;
+      statusDot.title = status;
+      const text = document.createElement("span");
+      const tabLabel =
+        panelTargets.length === 2 ? `TAB ${index + 1}` : `TAB ${String.fromCharCode(65 + index)}`;
+      text.textContent = tabLabel;
+      item.title = status;
+      item.setAttribute("aria-label", `${tabLabel} · ${status}`);
+      item.append(radio, text, statusDot);
+      return item;
+    }),
+  );
+  const selected = panelTargets.find((item) => item.tab.id === panelTargetTabId);
+  const autoToggle = document.getElementById("autoReplyFlow");
+  if (autoToggle && selected?.identity) autoToggle.checked = !!selected.identity.running;
 }
 let currentModule = "reply";
 function showModule(module) {
   if (module === "quote") module = "reply";
   $("settingsArea").hidden = true;
   $("settingsToggle").hidden = false;
+  document.body.classList.remove("settings-open");
   document.querySelector("header")?.classList.remove("settings-open");
-  $("settingsToggle").innerHTML =
-    globalThis.AssistantIcons?.svg("setting") || ICON.setting;
+  $("settingsToggle").innerHTML = globalThis.AssistantIcons?.svg("setting") || ICON.setting;
   currentModule = module;
   document.body.dataset.module = module;
   const content = module === "content",
-    follow = module === "follow";
-  replySettings.hidden = content || follow;
-  replyModule.classList.toggle("active", !content && !follow);
+    follow = module === "follow",
+    feedback = module === "feedback";
+  replySettings.hidden = content || follow || feedback;
+  replyModule.classList.toggle("active", !content && !follow && !feedback);
   contentModule.classList.toggle("active", content);
   followModule.classList.toggle("active", follow);
+  $("feedbackModule")?.classList.toggle("active", feedback);
   contentWorkspace.hidden = !content;
   quoteWorkspace.hidden = true;
   followWorkspace.hidden = !follow;
+  $("feedbackWorkspace")?.toggleAttribute("hidden", !feedback);
   document.querySelector(".mode-tabs").hidden = true;
-  if (content || follow) {
+  if (content || follow || feedback) {
     $("workspace").hidden = true;
     $("xWorkspace").hidden = true;
   } else showMode("x");
-  if (follow) refreshFollowPage();
+  if (follow) globalThis.refreshFollowPage?.();
+  if (feedback) renderFeedbackState();
+  globalThis.scrollTo?.(0, 0);
 }
+const FEEDBACK_STATE_KEY = "feedbackStateV1";
+let feedbackState = {
+  handle: "",
+  posts: [],
+  method: "random",
+  replyMin: 3,
+  replyMax: 5,
+  randomMin: 3,
+  randomMax: 5,
+  newMin: 3,
+  newMax: 5,
+  continuousWaitMinutes: 30,
+  speed: 0,
+};
+let feedbackScanRunning = false;
+let feedbackScanAbort = false;
+let feedbackScanTabId = null;
+let feedbackRunRunning = false;
+let feedbackRunAbort = false;
+let feedbackRunTabId = null;
+let feedbackExtraContext = "";
+function feedbackSave() {
+  return chrome.storage.local.set({ [FEEDBACK_STATE_KEY]: feedbackState });
+}
+function feedbackMethodValues() {
+  feedbackState.method =
+    document.querySelector('input[name="feedbackMethod"]:checked')?.value || "random";
+  const min = Math.max(
+    1,
+    Number($("feedbackReplyMin")?.value) || feedbackState.replyMin || feedbackState.randomMin || 3,
+  );
+  const max = Math.max(
+    min,
+    Number($("feedbackReplyMax")?.value) || feedbackState.replyMax || feedbackState.randomMax || 5,
+  );
+  feedbackState.replyMin = min;
+  feedbackState.replyMax = max;
+  // Keep the legacy keys in sync for profiles saved by older builds.
+  feedbackState.randomMin = min;
+  feedbackState.randomMax = max;
+  feedbackState.newMin = min;
+  feedbackState.newMax = max;
+  feedbackState.continuousWaitMinutes = Math.max(
+    1,
+    Math.min(1440, Number($("feedbackContinuousWait")?.value) || 30),
+  );
+  const continuousWait = $("feedbackContinuousWait");
+  if (continuousWait) continuousWait.value = String(feedbackState.continuousWaitMinutes);
+}
+function feedbackSpeedValue() {
+  feedbackState.speed = Math.max(-3, Math.min(3, Number($("feedbackSpeed")?.value) || 0));
+  const output = $("feedbackSpeedValue");
+  if (output) output.textContent = String(feedbackState.speed);
+  return feedbackState.speed;
+}
+function feedbackDelayMs() {
+  const speed = feedbackSpeedValue();
+  const base = 1035;
+  const speedFactor = 1 - speed * 0.1;
+  const jitter = 0.88 + Math.random() * 0.24;
+  return Math.max(650, Math.round(base * speedFactor * jitter));
+}
+function feedbackEmojiOnly(value) {
+  const input = String(value || "").trim();
+  if (!input || !/[\p{Extended_Pictographic}\p{Emoji_Presentation}]/u.test(input)) return false;
+  return (
+    input.replace(
+      /[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Emoji_Modifier}\uFE0F\u200D\u20E3\s]/gu,
+      "",
+    ) === ""
+  );
+}
+function feedbackInteractionRequest(value) {
+  const input = String(value || "")
+    .trim()
+    .toLocaleLowerCase("vi");
+  if (!input) return false;
+  return /(?:chéo\s*(?:follow|fl|f)|follow\s*(?:back|lại|mình|nhau|chéo)|(?:fl|f)\s*(?:back|chéo|nhau)|theo\s*dõi\s*(?:mình|nhau|lại)|kết\s*bạn|làm\s*bạn\s*(?:với\s*mình|nhé|nha|đi)?|\bkb\b|\bfl\b|tương\s*tác\s*(?:chéo|qua\s*lại)|giao\s*lưu\s*(?:với\s*mình|nhé|nha|đi)|ib\s*(?:mình|nhé|nha)|dm\s*(?:mình|nhé|nha)|follow\s*for\s*follow|f4f|l4l)/iu.test(
+    input,
+  );
+}
+function renderFeedbackState() {
+  const list = $("feedbackPosts");
+  if (!list) return;
+  let groupSelect = $("feedbackGroupSelect");
+  if (!groupSelect) {
+    const group = document.createElement("label");
+    group.className = "feedback-group-select";
+    groupSelect = document.createElement("input");
+    groupSelect.id = "feedbackGroupSelect";
+    groupSelect.type = "checkbox";
+    const groupText = document.createElement("span");
+    groupText.textContent = "Chọn nhóm có thể phản hồi";
+    group.append(groupSelect, groupText);
+    list.before(group);
+    groupSelect.onchange = () => {
+      const checked = groupSelect.checked;
+      (feedbackState.posts || []).forEach((post) => {
+        const eligible = (post.comments || []).filter(
+          (comment) =>
+            !comment.feedbackSkipped &&
+            !feedbackEmojiOnly(comment.text) &&
+            !feedbackInteractionRequest(comment.text),
+        );
+        const completed = eligible.length > 0 && eligible.every((comment) => comment.responded);
+        if (eligible.length && !completed) post.selected = checked;
+      });
+      feedbackSave();
+      renderFeedbackState();
+    };
+  }
+  const title = $("feedbackPostsTitle");
+  if (title)
+    title.textContent =
+      feedbackState.handle && (feedbackState.posts || []).length
+        ? `Danh sách bài đăng của @${feedbackState.handle}`
+        : "Danh sách bài đăng";
+  const posts = (feedbackState.posts || []).filter((post) => post && !post.feedbackRejected);
+  list.replaceChildren(
+    ...posts.map((post) => {
+      const row = document.createElement("label");
+      row.className = "feedback-post-row";
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.checked = !!post.selected;
+      check.onchange = () => {
+        post.selected = check.checked;
+        feedbackSave();
+        updateFeedbackStart();
+      };
+      const body = document.createElement("span");
+      body.className = "feedback-post-body";
+      const title = document.createElement("b");
+      const eligibleComments = (post.comments || []).filter(
+        (comment) =>
+          !comment.feedbackSkipped &&
+          !feedbackEmojiOnly(comment.text) &&
+          !feedbackInteractionRequest(comment.text),
+      );
+      title.textContent = `${post.name || "Bài viết"} · ${eligibleComments.length} cmt`;
+      const excerpt = document.createElement("span");
+      excerpt.textContent = `${String(post.text || "")
+        .replace(/\s+/g, " ")
+        .slice(0, 150)}${String(post.text || "").length > 150 ? "…" : ""}`;
+      const meta = document.createElement("small");
+      const replied = eligibleComments.filter((comment) => comment.responded).length;
+      meta.textContent = `${replied}/${eligibleComments.length} đã phản hồi · ${post.id}`;
+      const completed = replied >= eligibleComments.length;
+      check.disabled = completed;
+      if (completed) {
+        post.selected = false;
+        check.checked = false;
+        check.title = "Bài viết đã phản hồi đủ comment";
+      }
+      body.append(title, excerpt, meta);
+      row.append(check, body);
+      return row;
+    }),
+  );
+  const selectable = posts.filter((post) => {
+    const eligible = (post.comments || []).filter(
+      (comment) =>
+        !comment.feedbackSkipped &&
+        !feedbackEmojiOnly(comment.text) &&
+        !feedbackInteractionRequest(comment.text),
+    );
+    return eligible.length > 0 && !eligible.every((comment) => comment.responded);
+  });
+  groupSelect.checked = selectable.length > 0 && selectable.every((post) => post.selected);
+  groupSelect.indeterminate = selectable.some((post) => post.selected) && !groupSelect.checked;
+  groupSelect.disabled = selectable.length === 0;
+  updateFeedbackStart();
+}
+function updateFeedbackStart() {
+  const button = $("feedbackStart");
+  if (button)
+    button.disabled =
+      feedbackRunRunning || !(feedbackState.posts || []).some((post) => post.selected);
+}
+async function feedbackEnsureScript(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["comment-automation.js"],
+    });
+  } catch {}
+}
+function feedbackWaitForTab(tabId, timeout = 15000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    };
+    const listener = (id, change) => {
+      if (id === tabId && change.status === "complete") finish();
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    setTimeout(finish, timeout);
+  });
+}
+async function feedbackRefreshPost(tabId, post) {
+  if (!post?.url) return 0;
+  await chrome.tabs.update(tabId, { url: post.url });
+  await feedbackWaitForTab(tabId);
+  await feedbackEnsureScript(tabId);
+  const inspected = await chrome.tabs
+    .sendMessage(tabId, {
+      type: "feedbackInspectPost",
+      expectedPostId: post.id,
+      ownHandleOverride: feedbackState.handle,
+    })
+    .catch(() => null);
+  if (!inspected?.ok) return 0;
+  const existing = new Map((post.comments || []).map((comment) => [String(comment.id), comment]));
+  let added = 0;
+  for (const comment of inspected.comments || []) {
+    const key = String(comment.id);
+    const previous = existing.get(key);
+    if (previous) existing.set(key, { ...comment, ...previous });
+    else {
+      existing.set(key, comment);
+      added++;
+    }
+  }
+  post.comments = [...existing.values()];
+  return added;
+}
+async function feedbackScan() {
+  if (feedbackScanRunning) {
+    feedbackScanAbort = true;
+    if (feedbackScanTabId)
+      chrome.tabs.sendMessage(feedbackScanTabId, { type: "feedbackStopScan" }).catch(() => {});
+    return;
+  }
+  const tab = await activeTab();
+  if (!tab?.id || !/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i.test(tab.url || ""))
+    throw new Error("Hãy mở một tab X trước khi kiểm tra dữ liệu.");
+  const status = $("feedbackStatus"),
+    button = $("feedbackScan");
+  feedbackScanRunning = true;
+  feedbackScanAbort = false;
+  feedbackScanTabId = tab.id;
+  button.disabled = false;
+  button.textContent = "Dừng kiểm tra";
+  status.textContent = "Đang tìm trang cá nhân của bạn…";
+  feedbackState.posts = [];
+  await feedbackSave();
+  renderFeedbackState();
+  try {
+    await feedbackEnsureScript(tab.id);
+    const profile = await chrome.tabs
+      .sendMessage(tab.id, { type: "feedbackProfile" })
+      .catch(() => null);
+    if (!profile?.handle) throw new Error("Chưa đọc được tài khoản hiện tại từ tab X.");
+    feedbackState.handle = profile.handle;
+    const profileUrl = `https://x.com/${profile.handle}`;
+    if (!String(tab.url || "").startsWith(profileUrl)) {
+      await chrome.tabs.update(tab.id, { url: profileUrl });
+      await feedbackWaitForTab(tab.id);
+    }
+    if (feedbackScanAbort) return;
+    await feedbackEnsureScript(tab.id);
+    status.textContent = "Đang cuộn và quét các bài viết…";
+    const scan = await chrome.tabs.sendMessage(tab.id, {
+      type: "feedbackScanProfile",
+      rangeMode: $("feedbackRange").value,
+    });
+    if (!scan?.ok) throw new Error(scan?.error || "Không quét được trang cá nhân.");
+    const posts = [];
+    for (const [index, post] of (scan.posts || []).entries()) {
+      if (feedbackScanAbort) break;
+      status.textContent = `Đang kiểm tra comment bài ${index + 1}/${scan.posts.length}…`;
+      await chrome.tabs.update(tab.id, { url: post.url });
+      await feedbackWaitForTab(tab.id);
+      await feedbackEnsureScript(tab.id);
+      if (feedbackScanAbort) break;
+      const inspected = await chrome.tabs
+        .sendMessage(tab.id, {
+          type: "feedbackInspectPost",
+          expectedPostId: post.id,
+          ownHandleOverride: feedbackState.handle,
+        })
+        .catch(() => null);
+      if (inspected && !inspected.ok) {
+        status.textContent = `Bỏ qua bài ${index + 1}: ${inspected.error || "không khớp bài đăng"}.`;
+        continue;
+      }
+      const comments = inspected?.comments || [];
+      const canReply = comments.some(
+        (comment) =>
+          !comment.feedbackSkipped &&
+          !feedbackEmojiOnly(comment.text) &&
+          !feedbackInteractionRequest(comment.text),
+      );
+      posts.push({ ...post, comments, selected: canReply, scannedAt: Date.now() });
+      feedbackState.posts = [...posts];
+      await feedbackSave();
+      renderFeedbackState();
+    }
+    feedbackState.posts = posts.map((post) => {
+      const canReply = (post.comments || []).some(
+        (comment) =>
+          !comment.feedbackSkipped &&
+          !feedbackEmojiOnly(comment.text) &&
+          !feedbackInteractionRequest(comment.text),
+      );
+      return {
+        ...post,
+        selected:
+          canReply &&
+          !(post.comments || []).every((comment) => comment.responded || comment.feedbackSkipped),
+      };
+    });
+    if (!feedbackScanAbort) await chrome.tabs.update(tab.id, { url: profileUrl });
+    await feedbackSave();
+    renderFeedbackState();
+    status.textContent = feedbackScanAbort
+      ? `Đã dừng kiểm tra sau ${posts.length} bài.`
+      : `Đã quét ${posts.length} bài và lưu mốc comment.`;
+  } finally {
+    feedbackScanRunning = false;
+    feedbackScanAbort = false;
+    feedbackScanTabId = null;
+    button.disabled = false;
+    button.textContent = "Kiểm tra dữ liệu";
+  }
+}
+async function feedbackRun() {
+  if (feedbackRunRunning) {
+    feedbackRunAbort = true;
+    return;
+  }
+  const tab = await activeTab();
+  if (!tab?.id || !/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i.test(tab.url || ""))
+    throw new Error("Hãy mở một tab X trước khi thực hiện phản hồi.");
+  feedbackMethodValues();
+  feedbackSpeedValue();
+  let selected = (feedbackState.posts || []).filter((post) => post.selected);
+  if (!selected.length) throw new Error("Hãy chọn ít nhất một bài viết.");
+  const button = $("feedbackStart"),
+    status = $("feedbackStatus");
+  feedbackRunRunning = true;
+  feedbackRunAbort = false;
+  feedbackRunTabId = tab.id;
+  button.disabled = false;
+  button.textContent = "Dừng phản hồi";
+  try {
+    await chrome.storage.local.set({ feedbackExtraContext });
+    await feedbackEnsureScript(tab.id);
+    let total = 0,
+      round = 0;
+    const failedAttempts = new Map();
+    const waitInterruptible = async (duration) => {
+      const until = Date.now() + duration;
+      while (!feedbackRunAbort && Date.now() < until)
+        await new Promise((resolve) => setTimeout(resolve, Math.min(1000, until - Date.now())));
+    };
+    while (!feedbackRunAbort) {
+      round++;
+      let roundTotal = 0,
+        roundCompleted = 0;
+      for (const post of selected) {
+        if (feedbackRunAbort) break;
+        let pending = (post.comments || []).filter(
+          (comment) =>
+            !comment.responded &&
+            !comment.feedbackSkipped &&
+            !feedbackEmojiOnly(comment.text) &&
+            !feedbackInteractionRequest(comment.text),
+        );
+        if (
+          feedbackState.method === "random" ||
+          feedbackState.method === "new" ||
+          feedbackState.method === "continuous"
+        ) {
+          const min = feedbackState.replyMin || feedbackState.randomMin || 3;
+          const max = feedbackState.replyMax || feedbackState.randomMax || 5;
+          const target = Math.min(
+            pending.length,
+            min + Math.floor(Math.random() * Math.max(1, max - min + 1)),
+          );
+          pending = pending.sort(() => Math.random() - 0.5).slice(0, target);
+        }
+        for (const comment of pending) {
+          if (feedbackRunAbort) break;
+          total++;
+          roundTotal++;
+          status.textContent = `Lượt ${round} · Đang phản hồi ${total}: ${post.text ? String(post.text).slice(0, 45) : "bài viết"}…`;
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.max(250, Math.round(feedbackDelayMs() * 0.35))),
+          );
+          await chrome.tabs.update(tab.id, { url: comment.url });
+          await feedbackWaitForTab(tab.id);
+          await feedbackEnsureScript(tab.id);
+          const result = await chrome.tabs
+            .sendMessage(tab.id, {
+              type: "feedbackReplyComment",
+              commentUrl: comment.url,
+              extraContext: feedbackExtraContext,
+              ownHandleOverride: feedbackState.handle,
+            })
+            .catch((error) => ({ ok: false, error: error.message }));
+          let completed = result?.ok;
+          if (!completed && result?.alreadyReplied) {
+            comment.responded = true;
+            comment.respondedAt ||= new Date().toISOString();
+            comment.feedbackSkipReason = "Đã có phản hồi trước khi chạy";
+            await feedbackSave();
+            renderFeedbackState();
+            status.textContent = "Bỏ qua comment đã được phản hồi trước đó.";
+            continue;
+          }
+          if (!completed && result?.reload) {
+            await feedbackWaitForTab(tab.id);
+            await feedbackEnsureScript(tab.id);
+            const retry = await chrome.tabs
+              .sendMessage(tab.id, {
+                type: "feedbackReplyComment",
+                commentUrl: comment.url,
+                extraContext: feedbackExtraContext,
+                ownHandleOverride: feedbackState.handle,
+              })
+              .catch((error) => ({ ok: false, error: error.message }));
+            completed = retry?.ok;
+            if (!completed && retry?.alreadyReplied) {
+              comment.responded = true;
+              comment.respondedAt ||= new Date().toISOString();
+              comment.feedbackSkipReason = "Đã có phản hồi trước khi chạy";
+              await feedbackSave();
+              renderFeedbackState();
+              status.textContent = "Bỏ qua comment đã được phản hồi trước đó.";
+              continue;
+            }
+            if (!completed)
+              status.textContent = `Bỏ qua comment: ${retry?.error || "chưa sẵn sàng"}.`;
+          } else if (!completed)
+            status.textContent = `Bỏ qua comment: ${result?.error || "chưa sẵn sàng"}.`;
+          if (completed) {
+            comment.responded = true;
+            comment.respondedAt = new Date().toISOString();
+            failedAttempts.delete(comment.url);
+            roundCompleted++;
+            await feedbackSave();
+            renderFeedbackState();
+          } else {
+            const attempts = (failedAttempts.get(comment.url) || 0) + 1;
+            failedAttempts.set(comment.url, attempts);
+            // Do not retry one broken comment forever and block the rest of
+            // the queue. It is excluded after two failed rounds and remains
+            // visible in the saved state for diagnostics.
+            if (attempts >= 2) {
+              comment.feedbackSkipped = true;
+              comment.feedbackSkipReason = "Không thể phản hồi sau 2 lượt thử";
+              await feedbackSave();
+              renderFeedbackState();
+            }
+          }
+          await new Promise((resolve) => setTimeout(resolve, feedbackDelayMs()));
+        }
+      }
+      const remaining = selected.some((post) =>
+        (post.comments || []).some(
+          (comment) =>
+            !comment.responded &&
+            !comment.feedbackSkipped &&
+            !feedbackEmojiOnly(comment.text) &&
+            !feedbackInteractionRequest(comment.text),
+        ),
+      );
+      if (feedbackState.method === "continuous") {
+        if (remaining) {
+          status.textContent = `Đã xong lượt ${round} · nghỉ 5 phút trước lượt tiếp theo…`;
+          await waitInterruptible(300000);
+          continue;
+        }
+        const waitMinutes = Math.max(1, Number(feedbackState.continuousWaitMinutes) || 30);
+        status.textContent = `Đã xử lý hết comment hiện tại · nghỉ ${waitMinutes} phút trước khi quét lại…`;
+        await waitInterruptible(waitMinutes * 60000);
+        if (feedbackRunAbort) break;
+        feedbackState.posts.forEach((post) => {
+          post.selected = true;
+        });
+        selected = (feedbackState.posts || []).filter((post) => post.selected);
+        let added = 0;
+        for (const post of selected) {
+          if (feedbackRunAbort) break;
+          added += await feedbackRefreshPost(tab.id, post);
+        }
+        await feedbackSave();
+        renderFeedbackState();
+        status.textContent = added
+          ? `Đã phát hiện ${added} comment mới · tiếp tục phản hồi…`
+          : "Đã quét lại danh sách · tiếp tục phản hồi…";
+        continue;
+      }
+      if (feedbackState.method !== "random" || !remaining || !roundTotal) break;
+      if (!roundCompleted) {
+        status.textContent = `Lượt ${round} chưa có comment hoàn tất · sẽ thử lại sau 5 phút…`;
+      } else {
+        status.textContent = `Đã xong lượt ${round} · nghỉ 5 phút trước lượt tiếp theo…`;
+      }
+      await waitInterruptible(300000);
+    }
+    status.textContent = feedbackRunAbort
+      ? "Đã dừng phản hồi."
+      : "Đã thực hiện xong toàn bộ comment hợp lệ đã chọn.";
+  } finally {
+    chrome.storage.local.remove("feedbackExtraContext").catch(() => {});
+    feedbackRunRunning = false;
+    feedbackRunAbort = false;
+    feedbackRunTabId = null;
+    button.textContent = "Thực hiện phản hồi";
+    updateFeedbackStart();
+  }
+}
+function feedbackWire() {
+  const scanButton = $("feedbackScan");
+  const status = $("feedbackStatus");
+  const continuousLabel = document.querySelector(
+    'input[name="feedbackMethod"][value="continuous"]',
+  )?.nextElementSibling;
+  if (continuousLabel) {
+    continuousLabel.replaceChildren(document.createTextNode("Chạy liên tục · lặp lại sau "));
+    const waitInput = document.createElement("input");
+    waitInput.id = "feedbackContinuousWait";
+    waitInput.type = "number";
+    waitInput.min = "1";
+    waitInput.max = "1440";
+    waitInput.value = String(feedbackState.continuousWaitMinutes || 30);
+    waitInput.setAttribute("aria-label", "Số phút chờ kiểm tra lại");
+    continuousLabel.append(waitInput, document.createTextNode(" phút"));
+  }
+  const randomText = document.querySelector(
+    'input[name="feedbackMethod"][value="random"]',
+  )?.nextElementSibling;
+  const newText = document.querySelector(
+    'input[name="feedbackMethod"][value="new"]',
+  )?.nextElementSibling;
+  if (randomText) randomText.textContent = "Phản hồi ngẫu nhiên";
+  if (newText) newText.textContent = "Chỉ phản hồi cmt mới";
+  const methods = document.querySelector(".feedback-methods");
+  if (methods && !$("feedbackQuantity")) {
+    const quantity = document.createElement("section");
+    quantity.id = "feedbackQuantity";
+    quantity.className = "feedback-quantity";
+    quantity.innerHTML =
+      '<h3>Số lượng phản hồi mỗi bài</h3><label for="feedbackReplyMin">Từ <input id="feedbackReplyMin" type="number" min="1" value="3" aria-label="Số lượng tối thiểu"></label><span> đến </span><label for="feedbackReplyMax"><input id="feedbackReplyMax" type="number" min="1" value="5" aria-label="Số lượng tối đa"> cmt</label>';
+    methods.insertAdjacentElement("afterend", quantity);
+  }
+  if (status && !$("feedbackExtraContext")) {
+    const wrap = document.createElement("div");
+    wrap.className = "feedback-extra";
+    wrap.innerHTML =
+      '<label for="feedbackExtraContext">Ngữ cảnh bổ sung</label><div class="feedback-extra-input"><textarea id="feedbackExtraContext" rows="2" maxlength="500" placeholder="Ví dụ: phản hồi ngắn khoảng 5–8 từ…"></textarea><button id="feedbackExtraClear" class="clear-url" type="button" title="Xoá ngữ cảnh bổ sung" aria-label="Xoá ngữ cảnh bổ sung" hidden>×</button></div>';
+    status.insertAdjacentElement("afterend", wrap);
+  }
+  const extra = $("feedbackExtraContext"),
+    extraClear = $("feedbackExtraClear");
+  const syncExtra = () => {
+    feedbackExtraContext = String(extra?.value || "")
+      .trim()
+      .slice(0, 500);
+    if (extraClear) extraClear.hidden = !feedbackExtraContext.length;
+  };
+  extra?.addEventListener("input", syncExtra);
+  extraClear?.addEventListener("click", () => {
+    if (extra) extra.value = "";
+    syncExtra();
+    extra?.focus();
+  });
+  const speed = $("feedbackSpeed");
+  if (speed) speed.value = String(feedbackState.speed || 0);
+  feedbackSpeedValue();
+  scanButton?.setAttribute("title", "Quét bài trên trang cá nhân và lưu mốc comment");
+  $("feedbackWorkspace")?.querySelector(".section-head small")?.remove();
+  const range = $("feedbackRange");
+  const dayOption = range?.querySelector('option[value="24"]');
+  if (dayOption) {
+    dayOption.value = "day";
+    const hoursOption = document.createElement("option");
+    hoursOption.value = "24";
+    hoursOption.textContent = "24 giờ trước";
+    const twelveHourOption = range.querySelector('option[value="12"]');
+    (twelveHourOption || range.lastElementChild)?.insertAdjacentElement("afterend", hoursOption);
+  }
+  scanButton?.addEventListener("click", () =>
+    feedbackScan().catch((error) => {
+      $("feedbackStatus").textContent = discreet(error.message);
+      scanButton.disabled = false;
+      scanButton.textContent = "Kiểm tra dữ liệu";
+      feedbackScanRunning = false;
+      feedbackScanTabId = null;
+    }),
+  );
+  document.querySelectorAll('input[name="feedbackMethod"]').forEach((input) =>
+    input.addEventListener("change", () => {
+      feedbackMethodValues();
+      feedbackSave();
+    }),
+  );
+  ["feedbackReplyMin", "feedbackReplyMax", "feedbackContinuousWait"].forEach((id) =>
+    $(id)?.addEventListener("change", () => {
+      feedbackMethodValues();
+      feedbackSave();
+    }),
+  );
+  speed?.addEventListener("input", () => {
+    feedbackSpeedValue();
+    feedbackSave();
+  });
+  $("feedbackStart")?.addEventListener("click", () =>
+    feedbackRun().catch((error) => {
+      $("feedbackStatus").textContent = discreet(error.message);
+      feedbackRunRunning = false;
+      feedbackRunAbort = false;
+      $("feedbackStart").textContent = "Thực hiện phản hồi";
+      updateFeedbackStart();
+    }),
+  );
+  chrome.storage.local
+    .get(FEEDBACK_STATE_KEY)
+    .then((saved) => {
+      feedbackState = { ...feedbackState, ...(saved[FEEDBACK_STATE_KEY] || {}) };
+      feedbackState.replyMin = feedbackState.replyMin || feedbackState.randomMin || 3;
+      feedbackState.replyMax = feedbackState.replyMax || feedbackState.randomMax || 5;
+      const method = document.querySelector(
+        `input[name="feedbackMethod"][value="${feedbackState.method}"]`,
+      );
+      if (method) method.checked = true;
+      if (speed) speed.value = String(feedbackState.speed || 0);
+      const replyMin = $("feedbackReplyMin"),
+        replyMax = $("feedbackReplyMax");
+      if (replyMin) replyMin.value = String(feedbackState.replyMin);
+      if (replyMax) replyMax.value = String(feedbackState.replyMax);
+      const continuousWait = $("feedbackContinuousWait");
+      if (continuousWait) continuousWait.value = String(feedbackState.continuousWaitMinutes || 30);
+      feedbackSpeedValue();
+      renderFeedbackState();
+    })
+    .catch(() => {});
+}
+feedbackWire();
 async function safelyContent(fn) {
   try {
     await fn();
@@ -408,14 +1179,12 @@ async function safelyContent(fn) {
 async function readNews() {
   const tab = await activeTab();
   if (!tab?.id || !/^https:\/\//.test(tab.url || ""))
-    throw new Error(
-      "Hãy mở một bài viết trên trình duyệt hoặc dán nội dung gốc.",
-    );
+    throw new Error("Hãy mở một bài viết trên trình duyệt hoặc dán nội dung gốc.");
   const [value] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: [
       "remote-config.js",
-      "language.js",
+      "shared/language.js",
       "content-core.js",
       "content-reader.js",
       "content-extractor.js",
@@ -443,8 +1212,7 @@ async function loadNewsUrl() {
   if (url.protocol !== "https:") throw new Error("Chỉ hỗ trợ liên kết HTTPS.");
   const origin = `${url.origin}/*`,
     granted = await chrome.permissions.request({ origins: [origin] });
-  if (!granted)
-    throw new Error("Cần cấp quyền đọc trang này để lấy nội dung bài viết.");
+  if (!granted) throw new Error("Cần cấp quyền đọc trang này để lấy nội dung bài viết.");
   const tab = await activeTab();
   pendingNewsLoad = true;
   pendingNewsTabId = tab.id;
@@ -494,17 +1262,14 @@ async function readPost() {
     const tab = await activeTab();
     if (
       !tab?.id ||
-      !/^https:\/\/(?:www\.)?(x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(
-        tab.url || "",
-      )
+      !/^https:\/\/(?:www\.)?(x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(tab.url || "")
     )
       throw new Error("Mở permalink bài X hoặc dán link hợp lệ.");
     const [x] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["language.js", "x-media.js", "extract.js"],
+      files: ["shared/language.js", "x-media.js", "extract.js"],
     });
-    if (!x?.result || x.result.error)
-      throw new Error(x?.result?.error || "Không đọc được bài.");
+    if (!x?.result || x.result.error) throw new Error(x?.result?.error || "Không đọc được bài.");
     post = { ...x.result, tabId: tab.id };
     replyHistory = [];
     result = null;
@@ -545,11 +1310,7 @@ async function readPost() {
 let pendingLinkLoad = false;
 async function loadUrl() {
   const url = $("postUrl").value.trim();
-  if (
-    !/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(
-      url,
-    )
-  )
+  if (!/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(url))
     throw new Error("Link phải có dạng x.com/user/status/id.");
   const tab = await activeTab();
   if (tab?.url?.split(/[?#]/)[0] !== url.split(/[?#]/)[0]) {
@@ -576,10 +1337,8 @@ async function generate(force) {
     "fastReplyMode",
   ]);
   const provider = s.provider || "gemini";
-  if (provider === "chatgpt" && !s.chatgptModel)
-    throw new Error("Kết nối ChatGPT và chọn model.");
-  if (provider === "gemini" && !s.geminiKey)
-    throw new Error("Kết nối Gemini trong Cài đặt.");
+  if (provider === "chatgpt" && !s.chatgptModel) throw new Error("Kết nối ChatGPT và chọn model.");
+  if (provider === "gemini" && !s.geminiKey) throw new Error("Kết nối Gemini trong Cài đặt.");
   if (provider === "deepseek" && !s.deepseekKey)
     throw new Error("Kết nối DeepSeek API trong Cài đặt.");
   if (provider === "api" && !/^sk-/.test(s.apiKey || ""))
@@ -614,7 +1373,7 @@ async function generate(force) {
       text: $("postText").value,
       style,
       replyCount: Number($("panelReplyCount").value) || 2,
-        fastMode: !!s.fastReplyMode,
+      fastMode: !!s.fastReplyMode,
       context: $("quickContext").value,
       excludeReplies: force ? replyHistory : [],
     },
@@ -648,20 +1407,14 @@ async function openMediaSuggestion(suggestion) {
       kind: suggestion.kind,
     })
     .catch(() => null);
-  if (!response?.ok)
-    throw new Error(response?.error || "Không mở được bộ chọn GIF/ảnh.");
+  if (!response?.ok) throw new Error(response?.error || "Không mở được bộ chọn GIF/ảnh.");
 }
 function render(data) {
   result = data.result;
   replyHistory = [
-    ...new Set([
-      ...replyHistory,
-      ...(result.replies || []).map((x) => x.reply).filter(Boolean),
-    ]),
+    ...new Set([...replyHistory, ...(result.replies || []).map((x) => x.reply).filter(Boolean)]),
   ].slice(-30);
-  result.replies.sort(
-    (a, b) => (b.relevance_score || 0) - (a.relevance_score || 0),
-  );
+  result.replies.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
   $("results").hidden = false;
   $("cards").replaceChildren();
   result.replies.forEach((item) => {
@@ -716,13 +1469,11 @@ function showSettings(value) {
   const open = !!value;
   $("settingsArea").hidden = !open;
   $("settingsToggle").hidden = false;
+  document.body.classList.toggle("settings-open", open);
   document.querySelector("header")?.classList.toggle("settings-open", open);
   $("settingsToggle").innerHTML =
-    globalThis.AssistantIcons?.svg(open ? "close" : "gear") ||
-    ICON[open ? "close" : "gear"];
-  $("settingsToggle").title = open
-    ? "Đóng cài đặt"
-    : "Cài đặt chung và hệ thống";
+    globalThis.AssistantIcons?.svg(open ? "close" : "gear") || ICON[open ? "close" : "gear"];
+  $("settingsToggle").title = open ? "Đóng cài đặt" : "Cài đặt chung và hệ thống";
   $("settingsToggle").setAttribute("aria-label", $("settingsToggle").title);
   if (open) {
     $("replySettings").hidden = true;
@@ -731,7 +1482,9 @@ function showSettings(value) {
     $("contentWorkspace").hidden = true;
     $("quoteWorkspace").hidden = true;
     $("followWorkspace").hidden = true;
+    $("feedbackWorkspace").hidden = true;
     document.querySelector(".mode-tabs").hidden = true;
+    globalThis.scrollTo?.(0, 0);
   } else showModule(currentModule);
 }
 function connectionState(ok) {
@@ -739,9 +1492,7 @@ function connectionState(ok) {
   const button = $("credentialState");
   button.classList.toggle("connected", connected);
   button.classList.toggle("failed", !connected);
-  button.querySelector("span").textContent = connected
-    ? "Đang kết nối"
-    : "Kết nối";
+  button.querySelector("span").textContent = connected ? "Đang kết nối" : "Kết nối";
   $("disconnectCurrent").hidden = true;
 }
 function setProvider(value, persist = true) {
@@ -784,9 +1535,7 @@ async function refreshChatGPT() {
   if (active?.planEnabled) {
     const m = await chrome.runtime.sendMessage({ type: "companionModels" });
     if (m?.ok) {
-      $("chatgptModels").replaceChildren(
-        ...m.data.models.map((x) => new Option(x.name, x.id)),
-      );
+      $("chatgptModels").replaceChildren(...m.data.models.map((x) => new Option(x.name, x.id)));
       const s = await chrome.storage.local.get("chatgptModel");
       if (m.data.models.some((x) => x.id === s.chatgptModel))
         $("chatgptModels").value = s.chatgptModel;
@@ -803,16 +1552,11 @@ function renderStyles(selected) {
       })),
     })
     .catch(() => {});
-  styles = styles.filter(
-    (s) => s.name.trim().toLocaleLowerCase() !== "tự nhiên trên x (copy)",
-  );
-  const value =
-    selected && styles.some((s) => s.id === selected) ? selected : styles[0].id;
+  styles = styles.filter((s) => s.name.trim().toLocaleLowerCase() !== "tự nhiên trên x (copy)");
+  const value = selected && styles.some((s) => s.id === selected) ? selected : styles[0].id;
   for (const id of ["style", "panelQuickStyle"])
     $(id).replaceChildren(
-      ...styles.map(
-        (s) => new Option(s.id === "natural" ? "Mặc định" : s.name, s.id),
-      ),
+      ...styles.map((s) => new Option(s.id === "natural" ? "Mặc định" : s.name, s.id)),
     );
   $("style").value = value;
   $("panelQuickStyle").value = value;
@@ -914,11 +1658,7 @@ function updateReplyPreview() {
       styles.find((x) => x.id === $("panelQuickStyle")?.value) ||
       styles.find((x) => x.id === $("style")?.value) ||
       styles[0],
-    prompt =
-      $("quickContext")?.value ||
-      $("stylePrompt")?.value ||
-      selected?.prompt ||
-      "",
+    prompt = $("quickContext")?.value || $("stylePrompt")?.value || selected?.prompt || "",
     items = stylePreviewText(selected, prompt),
     name = styleName(selected);
   if ($("replyPreviewSuggestions")) {
@@ -934,8 +1674,7 @@ function updateReplyPreview() {
         return row;
       }),
     );
-  } else if ($("replyPreviewText"))
-    $("replyPreviewText").textContent = items[0];
+  } else if ($("replyPreviewText")) $("replyPreviewText").textContent = items[0];
   if ($("replyPreviewStyle")) $("replyPreviewStyle").textContent = name;
   document
     .querySelectorAll('.reply-preview-button[data-control=\"style\"]')
@@ -973,23 +1712,18 @@ function lockConfig() {
 function hydratePanelIcons() {
   document.querySelectorAll("[data-icon]").forEach((node) => {
     const name = node.dataset.icon;
-    if (globalThis.AssistantIcons?.svg)
-      node.innerHTML = globalThis.AssistantIcons.svg(name);
+    if (globalThis.AssistantIcons?.svg) node.innerHTML = globalThis.AssistantIcons.svg(name);
   });
   const get = $("getFollowList");
-  if (get && !get.innerHTML)
-    get.innerHTML = globalThis.AssistantIcons?.svg("get") || ICON.help;
+  if (get && !get.innerHTML) get.innerHTML = globalThis.AssistantIcons?.svg("get") || ICON.help;
   const help = document.querySelector(".follow-help");
-  if (help && !help.innerHTML)
-    help.innerHTML = globalThis.AssistantIcons?.svg("help") || "";
+  if (help && !help.innerHTML) help.innerHTML = globalThis.AssistantIcons?.svg("help") || "";
   const source = $("contentOpenSources");
   if (source && !source.innerHTML)
-    source.innerHTML =
-      globalThis.AssistantIcons?.svg("setting") || ICON.setting;
+    source.innerHTML = globalThis.AssistantIcons?.svg("setting") || ICON.setting;
   const clear = $("clearFollowList");
   if (clear && !clear.innerHTML)
-    clear.innerHTML =
-      globalThis.AssistantIcons?.svg("clear-list") || ICON.trash;
+    clear.innerHTML = globalThis.AssistantIcons?.svg("clear-list") || ICON.trash;
 }
 function setupModelPickers() {
   document
@@ -1010,8 +1744,7 @@ function setupModelPickers() {
       wrap.append(button, popup);
       const draw = () => {
         const selected = select.options[select.selectedIndex];
-        button.querySelector("span").textContent =
-          selected?.textContent || "Chọn mô hình";
+        button.querySelector("span").textContent = selected?.textContent || "Chọn mô hình";
         popup.replaceChildren(
           ...Array.from(select.options).map((option) => {
             const item = document.createElement("button");
@@ -1043,10 +1776,7 @@ function setupModelPickers() {
     });
   document.addEventListener(
     "click",
-    () =>
-      document
-        .querySelectorAll(".model-picker-popup")
-        .forEach((p) => (p.hidden = true)),
+    () => document.querySelectorAll(".model-picker-popup").forEach((p) => (p.hidden = true)),
     { once: true },
   );
 }
@@ -1083,36 +1813,26 @@ for (const [id, name] of [
   ["copyQuoteDraft", "copy"],
 ])
   if ($(id)) $(id).innerHTML = ICON[name];
-if ($("regenerate"))
-  $("regenerate").innerHTML = globalThis.AssistantIcons?.svg("refresh") || "";
+if ($("regenerate")) $("regenerate").innerHTML = globalThis.AssistantIcons?.svg("refresh") || "";
 if ($("reloadQuoteDraft"))
-  $("reloadQuoteDraft").innerHTML =
-    globalThis.AssistantIcons?.svg("reload") || "";
+  $("reloadQuoteDraft").innerHTML = globalThis.AssistantIcons?.svg("reload") || "";
 $("copyDraft").innerHTML = globalThis.AssistantIcons?.svg("copy") || ICON.copy;
 document
   .querySelectorAll(".config-summary button,.config-summary a")
-  .forEach((node) =>
-    node.addEventListener("click", (event) => event.stopPropagation()),
-  );
-$("geminiKeyQueue")?.addEventListener("click", (event) =>
-  event.stopPropagation(),
-);
+  .forEach((node) => node.addEventListener("click", (event) => event.stopPropagation()));
+$("geminiKeyQueue")?.addEventListener("click", (event) => event.stopPropagation());
 document.addEventListener("click", closeKeyMenus);
 $("settingsToggle").onclick = () => showSettings($("settingsArea").hidden);
 if ($("closeSettings")) $("closeSettings").onclick = () => showSettings(false);
 $("panelStyleButton").onclick = openStyleModal;
 $("styleButton").onclick = openStyleModal;
 $("closeStyleModal").onclick = closeStyleModal;
-document
-  .querySelectorAll("[data-close-style]")
-  .forEach((node) => (node.onclick = closeStyleModal));
+document.querySelectorAll("[data-close-style]").forEach((node) => (node.onclick = closeStyleModal));
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !$("styleModal").hidden) closeStyleModal();
 });
 document.addEventListener("click", (event) => {
-  const button = event.target.closest?.(
-    '.reply-preview-button[data-control="style"]',
-  );
+  const button = event.target.closest?.('.reply-preview-button[data-control="style"]');
   if (button) {
     event.preventDefault();
     openStyleModal();
@@ -1127,17 +1847,12 @@ let linkTimer;
 $("postUrl").oninput = () => {
   clearTimeout(linkTimer);
   const value = $("postUrl").value.trim();
-  if (
-    /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(
-      value,
-    )
-  )
+  if (/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(value))
     linkTimer = setTimeout(() => safely(loadUrl), 350);
 };
 $("generate").onclick = () => safely(() => generate(false));
 $("regenerate").onclick = () => safely(() => generate(true));
-$("autoDetect").onchange = () =>
-  chrome.storage.local.set({ autoDetect: $("autoDetect").checked });
+$("autoDetect").onchange = () => chrome.storage.local.set({ autoDetect: $("autoDetect").checked });
 $("panelAutoSuggest").onchange = () => {
   const auto = $("panelAutoSuggest").checked;
   chrome.storage.local.set({ panelAutoSuggest: auto });
@@ -1145,17 +1860,13 @@ $("panelAutoSuggest").onchange = () => {
 };
 $("panelAutoReply").onchange = () =>
   chrome.storage.local.set({ autoReply: $("panelAutoReply").checked });
-$("hideAds").onchange = () =>
-  chrome.storage.local.set({ hideAds: $("hideAds").checked });
+$("hideAds").onchange = () => chrome.storage.local.set({ hideAds: $("hideAds").checked });
 $("xMode").onclick = () => showMode("x");
 async function setDirectReplyEnabled(enabled) {
   $("directReplyToggle").checked = !!enabled;
   await chrome.storage.local.set({ usageMode: enabled ? "x" : "panel" });
   const tab = await activeTab().catch(() => null);
-  if (
-    tab?.id &&
-    /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//.test(tab.url || "")
-  )
+  if (tab?.id && /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//.test(tab.url || ""))
     chrome.tabs
       .sendMessage(tab.id, { type: "usageMode", mode: enabled ? "x" : "panel" })
       .catch(() => {});
@@ -1166,6 +1877,8 @@ let quoteDraftEditing = false,
   quoteDraftEditingTimer;
 $("replyModule").onclick = () => showModule("reply");
 $("contentModule").onclick = () => showModule("content");
+$("feedbackModule").onclick = () => showModule("feedback");
+$("followModule").addEventListener("click", () => showModule("follow"));
 $("readNews").onclick = () => safelyContent(readNews);
 $("loadNewsUrl").onclick = () => safelyContent(loadNewsUrl);
 $("clearNewsUrl").onclick = () => {
@@ -1248,8 +1961,7 @@ $("connectChatGPT").onclick = () =>
     });
     if (!r?.ok) throw new Error(r?.error);
   });
-$("addChatGPT").onclick = () =>
-  safely(() => chrome.runtime.sendMessage({ type: "authStart" }));
+$("addChatGPT").onclick = () => safely(() => chrome.runtime.sendMessage({ type: "authStart" }));
 $("refreshChatGPT").onclick = () => safely(refreshChatGPT);
 $("disconnectChatGPT").onclick = () =>
   safely(async () => {
@@ -1270,12 +1982,10 @@ $("toggleKey").onclick = () => {
   $("apiKey").type = $("apiKey").type === "password" ? "text" : "password";
 };
 $("toggleGeminiKey").onclick = () => {
-  $("geminiKey").type =
-    $("geminiKey").type === "password" ? "text" : "password";
+  $("geminiKey").type = $("geminiKey").type === "password" ? "text" : "password";
 };
 $("toggleDeepseekKey").onclick = () => {
-  $("deepseekKey").type =
-    $("deepseekKey").type === "password" ? "text" : "password";
+  $("deepseekKey").type = $("deepseekKey").type === "password" ? "text" : "password";
 };
 $("testConnection").onclick = () =>
   safely(async () => {
@@ -1293,61 +2003,80 @@ $("connectGemini").onclick = () =>
   safely(async () => {
     const geminiKey = $("geminiKey").value.trim(),
       previous = $("geminiModel").value;
-    if (!looksLikeApiKey(geminiKey))
-      throw new Error("Hãy thêm Gemini API key vào API Key.");
+    const storedKeys = await chrome.storage.local.get(["geminiKeys"]);
+    if (!looksLikeApiKey(geminiKey)) throw new Error("Hãy thêm Gemini API key vào API Key.");
     const r = await chrome.runtime.sendMessage({
       type: "testGemini",
       geminiKey,
+      geminiKeys: storedKeys.geminiKeys || [],
     });
     if (!r?.ok) throw new Error(r?.error);
-    if (!r.data.models.length)
-      throw new Error("Tài khoản không có model generateContent.");
+    if (!r.data.models.length) throw new Error("Tài khoản không có model generateContent.");
     const geminiModels = geminiModelOptions(r.data.models);
-    $("geminiModel").replaceChildren(
-      ...geminiModels.map((m) => new Option(m.name, m.id)),
-    );
+    $("geminiModel").replaceChildren(...geminiModels.map((m) => new Option(m.name, m.id)));
     $("geminiModel").value = geminiModels.some((m) => m.id === previous)
       ? previous
       : geminiModels.find((m) => m.id === "gemini-3.5-flash-lite")?.id ||
         geminiModels.find((m) => m.id === "gemini-3.1-flash-lite")?.id ||
         geminiModels[0].id;
-    await chrome.storage.local.set({
-      geminiKey,
+    const connectedKey = r.data.key || geminiKey;
+    const savedGemini = {
+      geminiKey: connectedKey,
       geminiModel: $("geminiModel").value,
-    });
-    geminiPrimaryKey = geminiKey;
+    };
+    if (connectedKey === geminiKey) savedGemini.geminiKeyLabel = "";
+    await chrome.storage.local.set(savedGemini);
+    geminiPrimaryKey = connectedKey;
+    if (connectedKey === geminiKey) geminiPrimaryKeyLabel = "";
     connectionState(true);
     status("Gemini đã kết nối.");
   });
+function ensureGeminiQueueLabel() {
+  let input = $("geminiQueueLabel");
+  if (input) return input;
+  input = document.createElement("input");
+  input.id = "geminiQueueLabel";
+  input.type = "text";
+  input.maxLength = 40;
+  input.autocomplete = "off";
+  input.placeholder = "Tên key (tuỳ chọn)";
+  $("saveGeminiQueueKey").before(input);
+  input.onkeydown = (event) => {
+    if (event.key === "Enter") $("saveGeminiQueueKey").click();
+    if (event.key === "Escape") $("cancelGeminiQueueKey").click();
+  };
+  return input;
+}
 $("addGeminiQueueKey").onclick = () => {
   if (displayGeminiKeys(geminiStoredKeys).length >= 10) {
     status("API Key tối đa 10 key.", true);
     return;
   }
+  ensureGeminiQueueLabel();
   $("geminiQueueEditor").hidden = false;
   $("geminiQueueKey").type = "password";
   $("geminiQueueKey").focus();
 };
 $("cancelGeminiQueueKey").onclick = () => {
   $("geminiQueueKey").value = "";
+  if ($("geminiQueueLabel")) $("geminiQueueLabel").value = "";
   $("geminiQueueEditor").hidden = true;
 };
 $("saveGeminiQueueKey").onclick = () =>
   safely(async () => {
     const key = $("geminiQueueKey").value.trim();
-    const stored = await chrome.storage.local.get(["geminiKey", "geminiKeys"]);
+    const label = ($("geminiQueueLabel")?.value || "").trim().slice(0, 40);
+    const stored = await chrome.storage.local.get(["geminiKey", "geminiKeyLabel", "geminiKeys"]);
     geminiPrimaryKey = stored.geminiKey || geminiPrimaryKey;
+    geminiPrimaryKeyLabel = stored.geminiKeyLabel || geminiPrimaryKeyLabel;
     geminiStoredKeys = normalizeGeminiKeys(stored.geminiKeys || []);
     const list = displayGeminiKeys(geminiStoredKeys);
     if (!looksLikeApiKey(key)) throw new Error("API key không hợp lệ.");
     if (list.length >= 10) throw new Error("API Key tối đa 10 key.");
-    if (list.some((x) => x.key === key))
-      throw new Error("Key này đã có trong danh sách.");
-    await saveGeminiKeyList([
-      ...list,
-      { id: `gk-${Date.now()}`, key, enabled: true },
-    ]);
+    if (list.some((x) => x.key === key)) throw new Error("Key này đã có trong danh sách.");
+    await saveGeminiKeyList([...list, { id: `gk-${Date.now()}`, key, label, enabled: true }]);
     $("geminiQueueKey").value = "";
+    if ($("geminiQueueLabel")) $("geminiQueueLabel").value = "";
     $("geminiQueueEditor").hidden = true;
     status("Đã thêm key vào API Key.");
   });
@@ -1357,10 +2086,15 @@ $("geminiQueueKey").onkeydown = (event) => {
 };
 $("geminiModel").onchange = () =>
   safely(async () => {
-    const stored = await chrome.storage.local.get(["geminiKey", "geminiKeys"]);
+    const stored = await chrome.storage.local.get(["geminiKey", "geminiKeyLabel", "geminiKeys"]);
     const keys = normalizeGeminiKeys([
       stored.geminiKey
-        ? { id: "primary", key: stored.geminiKey, enabled: true }
+        ? {
+            id: "primary",
+            key: stored.geminiKey,
+            label: stored.geminiKeyLabel,
+            enabled: true,
+          }
         : null,
       ...(Array.isArray(stored.geminiKeys) ? stored.geminiKeys : []),
     ]).map((item) => ({
@@ -1389,16 +2123,26 @@ $("deepseekModel").onchange = () =>
   chrome.storage.local.set({ deepseekModel: $("deepseekModel").value });
 $("disconnectGemini").onclick = () =>
   safely(async () => {
-    const stored = await chrome.storage.local.get(["geminiKey", "geminiKeys"]);
+    const stored = await chrome.storage.local.get(["geminiKey", "geminiKeyLabel", "geminiKeys"]);
     const preserved = normalizeGeminiKeys([
       ...(Array.isArray(stored.geminiKeys) ? stored.geminiKeys : []),
       stored.geminiKey
-        ? { id: `gk-${Date.now()}`, key: stored.geminiKey, enabled: true }
+        ? {
+            id: `gk-${Date.now()}`,
+            key: stored.geminiKey,
+            label: stored.geminiKeyLabel,
+            enabled: true,
+          }
         : null,
     ]);
-    await chrome.storage.local.set({ geminiKey: "", geminiKeys: preserved });
+    await chrome.storage.local.set({
+      geminiKey: "",
+      geminiKeyLabel: "",
+      geminiKeys: preserved,
+    });
     await chrome.storage.local.remove(["geminiModel"]);
     geminiPrimaryKey = "";
+    geminiPrimaryKeyLabel = "";
     geminiStoredKeys = preserved;
     $("geminiKey").value = "";
     $("geminiQueueKey").value = "";
@@ -1443,9 +2187,7 @@ function validateStyleDraft() {
     save = $("saveSettings");
   if (!input || !save) return;
   const name = input.value.trim().toLocaleLowerCase();
-  const duplicate = styles.some(
-    (x) => x.name.trim().toLocaleLowerCase() === name,
-  );
+  const duplicate = styles.some((x) => x.name.trim().toLocaleLowerCase() === name);
   save.disabled = !styleDraftMode || !name || duplicate;
 }
 $("styleName").oninput = () => {
@@ -1502,8 +2244,7 @@ $("editConfig").onclick = () => lockConfig(false);
 $("saveSettings").onclick = () =>
   safely(async () => {
     const name = $("styleName").value.trim();
-    if (!name || styles.some((x) => x.name.trim().toLocaleLowerCase() === name))
-      return;
+    if (!name || styles.some((x) => x.name.trim().toLocaleLowerCase() === name)) return;
     let chosen;
     if (styleDraftMode) {
       chosen = {
@@ -1552,10 +2293,7 @@ function updateQuoteWordCount() {
 }
 async function readCurrentQuotePost() {
   const tab = await activeTab();
-  if (
-    !tab?.id ||
-    !/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//.test(tab.url || "")
-  )
+  if (!tab?.id || !/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//.test(tab.url || ""))
     return null;
   const response = await chrome.tabs
     .sendMessage(tab.id, { type: "readQuotePost" })
@@ -1585,7 +2323,9 @@ async function regenerateQuoteDraft() {
   const provider = saved.provider || "gemini",
     model =
       provider === "gemini"
-        ? (/gemini-2\.(?:5|0)-flash-lite/i.test(saved.geminiModel || "") ? "gemini-3.5-flash-lite" : saved.geminiModel || "gemini-3.1-flash-lite")
+        ? /gemini-2\.(?:5|0)-flash-lite/i.test(saved.geminiModel || "")
+          ? "gemini-3.5-flash-lite"
+          : saved.geminiModel || "gemini-3.1-flash-lite"
         : provider === "deepseek"
           ? saved.deepseekModel || "deepseek-flash"
           : saved.apiModel || "gpt-4.1-mini",
@@ -1615,16 +2355,12 @@ async function regenerateQuoteDraft() {
       }),
       timeout = new Promise((_, reject) =>
         setTimeout(
-          () =>
-            reject(
-              new Error("Tạo lại nội dung trích dẫn quá lâu. Hãy bấm thử lại."),
-            ),
+          () => reject(new Error("Tạo lại nội dung trích dẫn quá lâu. Hãy bấm thử lại.")),
           45000,
         ),
       );
     const r = await Promise.race([request, timeout]);
-    if (!r?.ok)
-      throw new Error(r?.error || "Không tạo lại được nội dung trích dẫn.");
+    if (!r?.ok) throw new Error(r?.error || "Không tạo lại được nội dung trích dẫn.");
     await chrome.storage.local.set({
       quoteAnalysisState: {
         ...state,
@@ -1666,9 +2402,7 @@ function renderQuoteState(state = {}) {
   updateQuoteWordCount();
   copy.disabled = !draft.value.trim();
   const loadingFresh =
-    state.status === "loading" &&
-    state.updatedAt &&
-    Date.now() - state.updatedAt < 45000;
+    state.status === "loading" && state.updatedAt && Date.now() - state.updatedAt < 45000;
   reload.disabled = false;
   if (state.status === "loading") {
     status.textContent = loadingFresh
@@ -1678,20 +2412,17 @@ function renderQuoteState(state = {}) {
   } else if (state.status === "ready") {
     status.textContent = "";
   } else if (state.status === "error") {
-    status.textContent = discreet(
-      state.error || "Không tạo được nội dung trích dẫn.",
-    );
+    status.textContent = discreet(state.error || "Không tạo được nội dung trích dẫn.");
   } else status.textContent = "";
-  if (
-    state.updatedAt &&
-    Date.now() - state.updatedAt < 300000 &&
-    $("settingsArea")?.hidden !== false
-  )
-    showModule("quote");
 }
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.geminiKey || changes.geminiKeys)) {
-    geminiPrimaryKey = changes.geminiKey?.newValue || geminiPrimaryKey;
+  if (area === "local" && (changes.geminiKey || changes.geminiKeyLabel || changes.geminiKeys)) {
+    if (changes.geminiKey) {
+      geminiPrimaryKey = changes.geminiKey.newValue || "";
+    }
+    if (changes.geminiKeyLabel) {
+      geminiPrimaryKeyLabel = changes.geminiKeyLabel.newValue || "";
+    }
     $("geminiKey").value = geminiPrimaryKey;
     renderGeminiKeys(changes.geminiKeys?.newValue || geminiStoredKeys);
   }
@@ -1704,6 +2435,7 @@ safely(async () => {
     "apiKey",
     "apiModel",
     "geminiKey",
+    "geminiKeyLabel",
     "geminiKeys",
     "geminiModel",
     "deepseekKey",
@@ -1724,6 +2456,7 @@ safely(async () => {
   $("apiKey").value = s.apiKey || "";
   $("models").value = s.apiModel || "gpt-4.1-mini";
   geminiPrimaryKey = s.geminiKey || "";
+  geminiPrimaryKeyLabel = s.geminiKeyLabel || "";
   $("geminiKey").value = geminiPrimaryKey;
   renderGeminiKeys(s.geminiKeys || []);
   $("deepseekKey").value = s.deepseekKey || "";
@@ -1748,28 +2481,25 @@ safely(async () => {
 });
 async function notifyPanel(open) {
   const tab = await activeTab().catch(() => null);
-  if (tab?.id)
-    chrome.tabs
-      .sendMessage(tab.id, { type: "panelState", open })
-      .catch(() => {});
+  if (tab?.id) chrome.tabs.sendMessage(tab.id, { type: "panelState", open }).catch(() => {});
 }
-notifyPanel(true);
+ensurePanelTargetUi();
+resolvePanelTarget().finally(() => {
+  notifyPanel(true);
+  refreshPanelTargets();
+});
 addEventListener("pagehide", () => notifyPanel(false));
 
 document.addEventListener("visibilitychange", () =>
   notifyPanel(document.visibilityState === "visible"),
 );
-document
-  .getElementById("openSidePanelSettings")
-  ?.addEventListener("click", () => {
-    const language = chrome.i18n?.getUILanguage?.() || navigator.language || "";
-    const query = /^vi(?:-|$)/i.test(language)
-      ? "Bảng điều khiển Chrome"
-      : "Chrome side panel";
-    chrome.tabs.create({
-      url: `chrome://settings/?search=${encodeURIComponent(query)}`,
-    });
+document.getElementById("openSidePanelSettings")?.addEventListener("click", () => {
+  const language = chrome.i18n?.getUILanguage?.() || navigator.language || "";
+  const query = /^vi(?:-|$)/i.test(language) ? "Bảng điều khiển Chrome" : "Chrome side panel";
+  chrome.tabs.create({
+    url: `chrome://settings/?search=${encodeURIComponent(query)}`,
   });
+});
 addEventListener("beforeunload", () => notifyPanel(false));
 const toneInstruction = (tone) =>
   tone === "male"
@@ -1789,8 +2519,7 @@ function highlightTone() {
 }
 applyAiIconMask(document);
 const versionLabel = document.querySelector(".app-version");
-if (versionLabel)
-  versionLabel.textContent = chrome.runtime.getManifest().version;
+if (versionLabel) versionLabel.textContent = chrome.runtime.getManifest().version;
 (() => {
   const tone = $("replyTone");
   if (!tone) return;
@@ -1851,9 +2580,7 @@ function renderQuotePostPreview(post = {}) {
   handle.textContent = post.handle || "@" + (post.username || "");
   identity.append(name, handle);
   author.append(identity);
-  meta.textContent = post.publishedAt
-    ? new Date(post.publishedAt).toLocaleString()
-    : "";
+  meta.textContent = post.publishedAt ? new Date(post.publishedAt).toLocaleString() : "";
   text.textContent = post.text || "";
   const media = (post.mediaUrls || []).filter(Boolean);
   if (media.length) {
@@ -1879,22 +2606,17 @@ function renderQuotePostPreview(post = {}) {
 }
 chrome.storage.local
   .get("quoteAnalysisState")
-  .then(({ quoteAnalysisState }) =>
-    renderQuotePostPreview(quoteAnalysisState?.quotePost || {}),
-  )
+  .then(({ quoteAnalysisState }) => renderQuotePostPreview(quoteAnalysisState?.quotePost || {}))
   .catch(() => {});
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.quoteAnalysisState)
-    renderQuotePostPreview(
-      changes.quoteAnalysisState.newValue?.quotePost || {},
-    );
+    renderQuotePostPreview(changes.quoteAnalysisState.newValue?.quotePost || {});
 });
 async function syncQuotePostFromTab() {
   const tab = await activeTab(),
-    isStatus =
-      /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(
-        tab?.url || "",
-      );
+    isStatus = /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(
+      tab?.url || "",
+    );
   const saved = await chrome.storage.local.get("quoteAnalysisState"),
     state = saved.quoteAnalysisState || {};
   if (!isStatus) {
@@ -1937,10 +2659,7 @@ async function syncQuotePostFromTab() {
     });
   } else {
     const merged = { ...(state.quotePost || {}), ...post };
-    if (
-      !state.quotePost?.avatarUrl ||
-      !(state.quotePost?.mediaUrls || []).length
-    )
+    if (!state.quotePost?.avatarUrl || !(state.quotePost?.mediaUrls || []).length)
       await chrome.storage.local.set({
         quoteAnalysisState: {
           ...state,
@@ -1951,12 +2670,15 @@ async function syncQuotePostFromTab() {
   }
 }
 syncQuotePostFromTab().catch(() => {});
-chrome.tabs.onActivated.addListener(() =>
-  syncQuotePostFromTab().catch(() => {}),
-);
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  if (panelWindowId && activeInfo.windowId !== panelWindowId) return;
+  if (!panelTargetTabId || panelTargetTabId !== activeInfo.tabId)
+    panelTargetTabId = activeInfo.tabId;
+  syncQuotePostFromTab().catch(() => {});
+  refreshPanelTargets();
+});
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
-  if (changeInfo.url || changeInfo.status === "complete")
-    syncQuotePostFromTab().catch(() => {});
+  if (changeInfo.url || changeInfo.status === "complete") syncQuotePostFromTab().catch(() => {});
 });
 function decorateQuotePostCard(post = {}) {
   const card = $("quotePostCard");
@@ -1974,9 +2696,7 @@ function decorateQuotePostCard(post = {}) {
 }
 chrome.storage.local
   .get("quoteAnalysisState")
-  .then(({ quoteAnalysisState }) =>
-    decorateQuotePostCard(quoteAnalysisState?.quotePost || {}),
-  )
+  .then(({ quoteAnalysisState }) => decorateQuotePostCard(quoteAnalysisState?.quotePost || {}))
   .catch(() => {});
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.quoteAnalysisState)
@@ -1997,40 +2717,34 @@ $("clearQuotePost")?.addEventListener("click", async () => {
   });
 });
 
-document
-  .getElementById("autoReplyFlow")
-  ?.addEventListener("change", async () => {
-    const enabled = document.getElementById("autoReplyFlow").checked;
-    const active = await chrome.tabs.query({
-      active: true,
-      lastFocusedWindow: true,
-    });
-    await chrome.storage.local.set({
-      autoReplyFlow: enabled,
-      autoReply: enabled,
-      autoReplyFlowTargetUrl: active[0]?.url || "",
-    });
-    const tabs = await chrome.tabs.query({
-      active: true,
-      lastFocusedWindow: true,
-    });
-    const targets = tabs.filter((t) =>
-      /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//.test(t.url || ""),
-    );
-    await Promise.all(
-      targets.map((tab) =>
-        chrome.tabs
-          .sendMessage(tab.id, { type: "autoReplyFlow", enabled })
-          .catch(() => null),
-      ),
-    );
-    status(
-      enabled
-        ? `Tự động đã bật (${targets.length} tab X trong cửa sổ này).`
-        : "Tự động đã tắt.",
-    );
+document.getElementById("autoReplyFlow")?.addEventListener("change", async () => {
+  const enabled = document.getElementById("autoReplyFlow").checked;
+  const active = await activeTab();
+  await chrome.storage.local.set({
+    autoReplyFlow: enabled,
+    autoReply: enabled,
+    autoReplyFlowTargetUrl: active?.url || "",
   });
-chrome.runtime.onMessage.addListener((message) => {
+  const targets =
+    active && /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//.test(active.url || "")
+      ? [active]
+      : [];
+  if (active?.id)
+    await chrome.runtime
+      .sendMessage({ type: "autoFlowSetTab", tabId: active.id, enabled })
+      .catch(() => {});
+  await Promise.all(
+    targets.map((tab) =>
+      chrome.tabs.sendMessage(tab.id, { type: "autoReplyFlow", enabled }).catch(() => null),
+    ),
+  );
+  status(
+    enabled ? `Tự động đã bật (${targets.length} tab X trong cửa sổ này).` : "Tự động đã tắt.",
+  );
+});
+chrome.runtime.onMessage.addListener((message, sender) => {
+  const sourceTabId = Number(sender?.tab?.id) || null;
+  if (panelTargetTabId && sourceTabId && sourceTabId !== panelTargetTabId) return;
   if (message?.type === "autoFlowPauseState") {
     status(message.paused ? "Tự động đang tạm dừng." : "Tự động đang tiếp tục.");
     return;
@@ -2044,8 +2758,7 @@ function syncReplySettingsVisibility() {
   const node = document.getElementById("replySettings"),
     settings = document.getElementById("settingsArea");
   if (!node) return;
-  const reply =
-    !!settings?.hidden && (document.body.dataset.module || "reply") === "reply";
+  const reply = !!settings?.hidden && (document.body.dataset.module || "reply") === "reply";
   node.style.display = reply ? "block" : "none";
 }
 new MutationObserver(syncReplySettingsVisibility).observe(document.body, {
