@@ -118,15 +118,6 @@ let styles = [],
   geminiStoredKeys = [];
 const PRESET_SOURCE =
   "https://raw.githubusercontent.com/TO-HU-TIEU/configs/main/presets/reply-styles.json";
-chrome.storage.local.get("customStyles").then(({ customStyles = [] }) => {
-  const clean = customStyles.filter(
-    (s) =>
-      String(s.name || "")
-        .trim()
-        .toLocaleLowerCase() !== "tự nhiên trên x (copy)",
-  );
-  if (clean.length !== customStyles.length) chrome.storage.local.set({ customStyles: clean });
-});
 function validRemotePresets(value) {
   return (
     value &&
@@ -191,14 +182,15 @@ const MAX_GEMINI_KEYS = 20;
 function normalizeGeminiKeys(value) {
   const seen = new Set();
   return (Array.isArray(value) ? value : [])
-    .filter((x) => x && x.key)
+    .map((raw) => (typeof raw === "string" ? { key: raw } : raw))
+    .filter((x) => x && (x.key || x.apiKey || x.value || x.token))
     .map((x) => {
-      const key = String(x.key || "").trim();
+      const key = String(x.key || x.apiKey || x.value || x.token || "").trim();
       return {
         id: x.id || `gk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         key,
         label:
-          String(x.label || "")
+          String(x.label || x.name || "")
             .trim()
             .slice(0, 40) || maskKey(key),
         enabled: x.enabled !== false,
@@ -1604,7 +1596,6 @@ function renderStyles(selected) {
       })),
     })
     .catch(() => {});
-  styles = styles.filter((s) => s.name.trim().toLocaleLowerCase() !== "tự nhiên trên x (copy)");
   const value = selected && styles.some((s) => s.id === selected) ? selected : styles[0].id;
   for (const id of ["style", "panelQuickStyle"])
     $(id).replaceChildren(
@@ -2551,7 +2542,17 @@ safely(async () => {
   geminiPrimaryKey = s.geminiKey || "";
   geminiPrimaryKeyLabel = s.geminiKeyLabel || "";
   $("geminiKey").value = geminiPrimaryKey;
-  renderGeminiKeys(s.geminiKeys || []);
+  const normalizedKeys = normalizeGeminiKeys(s.geminiKeys || []);
+  // Older builds stored backup keys as strings or records without ids. Migrate
+  // that shape once so all keys remain available after an extension update.
+  if (
+    Array.isArray(s.geminiKeys) &&
+    s.geminiKeys.length > 0 &&
+    s.geminiKeys.some((item) => typeof item === "string" || !item?.id || !item?.key)
+  ) {
+    await chrome.storage.local.set({ geminiKeys: normalizedKeys });
+  }
+  renderGeminiKeys(normalizedKeys);
   $("deepseekKey").value = s.deepseekKey || "";
   $("deepseekModel").value = s.deepseekModel || "deepseek-flash";
   $("autoDetect").checked = !!s.autoDetect;
@@ -2569,7 +2570,10 @@ safely(async () => {
   $("replyTone").value = s.replyTone || "";
   $("replyTone").dispatchEvent(new Event("change", { bubbles: true }));
   if (!s.replyTone) setTimeout(highlightTone, 500);
-  styles = [...(await loadDefaultStyles()), ...(s.customStyles || [])];
+  styles = [
+    ...(await loadDefaultStyles()),
+    ...(Array.isArray(s.customStyles) ? s.customStyles : []),
+  ];
   renderAutoExcludedAuthors(s.autoReplyExcludedAuthors || []);
   setAutoExcludedAuthorsCollapsed(s.autoExcludedAuthorsCollapsed ?? true, false);
   renderStyles(s.styleId);
