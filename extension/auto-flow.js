@@ -724,10 +724,34 @@
       // The assistant toolbar is mounted near the reply composer. Do not
       // advance the whole X page while waiting for it; that can run to the
       // bottom of a long conversation when the toolbar is unavailable.
-      const replyComposer = document.querySelector(
+      let replyComposer = document.querySelector(
         '[data-testid="tweetTextarea_0_label"], [data-testid^="tweetTextarea_"]',
       );
       if (!(await waitIfPaused())) return;
+      if (!replyComposer) {
+        // On a status page X may not mount the inline composer until its
+        // native Reply action is opened. Scope the click to this post so it
+        // cannot trigger the global compose flow.
+        const targetArticle = [...document.querySelectorAll('article[data-testid="tweet"]')].find(
+          (candidate) =>
+            [...candidate.querySelectorAll('a[href*="/status/"]')].some((anchor) =>
+              new RegExp(`/status/${id}(?:$|[?#/])`).test(anchor.href),
+            ),
+        );
+        const nativeReply = targetArticle?.querySelector('[data-testid="reply"]');
+        if (nativeReply && !nativeReply.dataset.xraOpened) {
+          nativeReply.dataset.xraOpened = "1";
+          nativeReply.click();
+          log("Đã mở ô Trả lời của bài viết");
+        }
+        for (let composerWait = 0; composerWait < 20; composerWait++) {
+          replyComposer = document.querySelector(
+            '[data-testid="tweetTextarea_0_label"], [data-testid^="tweetTextarea_"]',
+          );
+          if (replyComposer) break;
+          await pauseSleep(300);
+        }
+      }
       replyComposer?.scrollIntoView({ behavior: "auto", block: "center" });
       let replyButton = null;
       for (let toolbarWait = 0; toolbarWait < 20; toolbarWait++) {
