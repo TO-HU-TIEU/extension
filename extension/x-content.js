@@ -1445,6 +1445,8 @@
           "deepseekModel",
           "styleId",
           "stylePrompt",
+          "styleMinWords",
+          "styleMaxWords",
           "replyStyleCatalog",
           "customStyles",
           "replyTone",
@@ -1473,8 +1475,19 @@
           ...(Array.isArray(s.replyStyleCatalog) ? s.replyStyleCatalog : []),
           ...(Array.isArray(s.customStyles) ? s.customStyles : []),
         ];
-        const selectedStylePrompt =
-          styleCatalog.find((item) => item?.id === s.styleId)?.prompt || s.stylePrompt || "";
+        const selectedStyle = styleCatalog.find((item) => item?.id === s.styleId) || null;
+        const selectedStylePrompt = selectedStyle?.prompt || s.stylePrompt || "";
+        // Keep the numeric constraint alongside the prompt. A style can be
+        // enriched by preferences/corpus hints later, so it is safer to pass
+        // the user setting as structured data instead of re-parsing the prompt.
+        const styleMinWords = Math.min(100, Math.max(1, Number(s.styleMinWords) || 6));
+        const styleWordRange = {
+          min: styleMinWords,
+          max: Math.min(
+            100,
+            Math.max(styleMinWords, Number(s.styleMaxWords) || 10),
+          ),
+        };
         const data = await request({
           provider,
           apiKey: s.apiKey,
@@ -1496,6 +1509,7 @@
                 : s.replyTone === "female"
                   ? "The reply author is female. Use a natural feminine voice while preserving the post's original language; do not mention gender."
                   : ""),
+            styleWordRange,
             replyCount,
             fastMode: !!s.fastReplyMode,
             excludeReplies: force ? state.replyHistory : [],

@@ -507,6 +507,18 @@ async function refreshPanelTargets() {
   syncPanelAutoModeControls(selectedAutoFlowRunning);
 }
 let currentModule = "reply";
+function readStyleWordRange() {
+  const min = Math.min(100, Math.max(1, Number($("styleMinWords")?.value) || 6));
+  const max = Math.min(100, Math.max(min, Number($("styleMaxWords")?.value) || 10));
+  return { min, max };
+}
+function syncStyleWordRange() {
+  const range = readStyleWordRange();
+  if ($("styleMinWords")) $("styleMinWords").value = String(range.min);
+  if ($("styleMaxWords")) $("styleMaxWords").value = String(range.max);
+  chrome.storage.local.set({ styleMinWords: range.min, styleMaxWords: range.max }).catch(() => {});
+  return range;
+}
 function showModule(module) {
   if (module === "quote") module = "reply";
   $("settingsArea").hidden = true;
@@ -1346,6 +1358,8 @@ async function generate(force) {
     "deepseekKey",
     "deepseekModel",
     "stylePrompt",
+    "styleMinWords",
+    "styleMaxWords",
     "replyTone",
     "fastReplyMode",
   ]);
@@ -1385,6 +1399,16 @@ async function generate(force) {
       ...post,
       text: $("postText").value,
       style: toneStyle(style, s.replyTone),
+      styleWordRange: {
+        min: Math.min(100, Math.max(1, Number(s.styleMinWords) || 6)),
+        max: Math.min(
+          100,
+          Math.max(
+            Math.min(100, Math.max(1, Number(s.styleMinWords) || 6)),
+            Number(s.styleMaxWords) || 10,
+          ),
+        ),
+      },
       replyCount: Number($("panelReplyCount").value) || 2,
       fastMode: !!s.fastReplyMode,
       context: $("quickContext").value,
@@ -2193,6 +2217,8 @@ $("panelReplyCount").onchange = () =>
   chrome.storage.local.set({ replyCount: Number($("panelReplyCount").value) });
 $("quickContext").oninput = updateStylePreview;
 $("stylePrompt").oninput = updateStylePreview;
+$("styleMinWords").onchange = syncStyleWordRange;
+$("styleMaxWords").onchange = syncStyleWordRange;
 function validateStyleDraft() {
   const input = $("styleName"),
     save = $("saveSettings");
@@ -2559,6 +2585,8 @@ safely(async () => {
     "autoReply",
     "usageMode",
     "styleId",
+    "styleMinWords",
+    "styleMaxWords",
     "replyTone",
     "customStyles",
     "replyCount",
@@ -2594,6 +2622,16 @@ safely(async () => {
   document.querySelector(".post-card .actions").hidden = !!s.panelAutoSuggest;
   for (let i = 1; i <= 10; i++) $("panelReplyCount").append(new Option(i, i));
   $("panelReplyCount").value = String(s.replyCount || 2);
+  $("styleMinWords").value = String(Math.min(100, Math.max(1, Number(s.styleMinWords) || 6)));
+  $("styleMaxWords").value = String(
+    Math.min(
+      100,
+      Math.max(
+        Math.min(100, Math.max(1, Number(s.styleMinWords) || 6)),
+        Number(s.styleMaxWords) || 10,
+      ),
+    ),
+  );
   $("directReplyToggle").checked = (s.usageMode || "x") === "x";
   usageMode = "x";
   await showMode("x");

@@ -99,6 +99,26 @@ body {
   line-height: 1.45;
 }
 
+/* The style editor uses one typography scale for its three sibling controls. */
+#stylePickerField > label,
+.style-length-row > label,
+.prompt-label {
+  font-size: var(--panel-font-body) !important;
+  line-height: var(--panel-line-body);
+  font-weight: 700;
+  color: var(--ui-text, #e7e9ea) !important;
+}
+#stylePrompt,
+.style-length-fields,
+.style-length-fields input {
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+  color: var(--ui-text, #e7e9ea);
+}
+.style-length-fields {
+  font-weight: 500;
+}
+
 header {
   gap: var(--panel-space-2);
   margin: 0 0 var(--panel-space-3);

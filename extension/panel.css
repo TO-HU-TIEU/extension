@@ -1773,6 +1773,33 @@ button {
 #stylePrompt {
   min-height: 150px;
 }
+.style-length-row {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--text, #edf1f5);
+  font-size: 13px;
+  font-weight: 700;
+}
+.style-length-fields {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted, #8b98a5);
+  font-weight: 500;
+}
+.style-length-fields input {
+  width: 62px;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #2f3945);
+  border-radius: 8px;
+  background: var(--panel, #10151b);
+  color: var(--text, #edf1f5);
+  font: inherit;
+}
 .reply-style-learning-status {
   display: flex;
   align-items: center;

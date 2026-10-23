@@ -244,6 +244,15 @@
             ></button>
           </div>
         </div>
+        <div class="style-length-row panel-row">
+          <label for="styleMinWords">Độ dài gợi ý</label>
+          <span class="style-length-fields">
+            <input id="styleMinWords" type="number" min="1" max="100" value="6" aria-label="Số từ tối thiểu" />
+            <span>đến</span>
+            <input id="styleMaxWords" type="number" min="1" max="100" value="10" aria-label="Số từ tối đa" />
+            <span>từ</span>
+          </span>
+        </div>
         <label class="prompt-label" for="stylePrompt">Prompt</label
         ><textarea id="stylePrompt" rows="7"></textarea>
       </section>

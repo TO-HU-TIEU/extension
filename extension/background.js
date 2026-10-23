@@ -310,6 +310,15 @@ function selectedStyleWordRange(style) {
     ? { min, max: Math.min(max, 100) }
     : null;
 }
+function postStyleWordRange(post = {}) {
+  const explicit = post?.styleWordRange;
+  if (explicit && Number(explicit.min) > 0 && Number(explicit.max) >= Number(explicit.min))
+    return {
+      min: Number(explicit.min),
+      max: Math.min(Number(explicit.max), 100),
+    };
+  return selectedStyleWordRange(post?.style);
+}
 function selectedStyleLengthRule(style) {
   const range = selectedStyleWordRange(style);
   return range
@@ -318,6 +327,18 @@ function selectedStyleLengthRule(style) {
 }
 function selectedStyleLengthMismatch(reply, style) {
   const range = selectedStyleWordRange(style);
+  if (!range) return false;
+  const count = String(reply || "").trim().match(/\S+/gu)?.length || 0;
+  return count < range.min || count > range.max;
+}
+function postStyleLengthRule(post = {}) {
+  const range = postStyleWordRange(post);
+  return range
+    ? ` Selected style hard length constraint: every reply must contain ${range.min}-${range.max} whitespace-separated words inclusive. Count the words before returning JSON and rewrite any reply outside this range; do not trade this constraint for a longer explanation.`
+    : "";
+}
+function postStyleLengthMismatch(reply, post = {}) {
+  const range = postStyleWordRange(post);
   if (!range) return false;
   const count = String(reply || "").trim().match(/\S+/gu)?.length || 0;
   return count < range.min || count > range.max;
@@ -824,15 +845,15 @@ function validateTranslations(result, post, allowMissing = false) {
     throw new Error(
       "Mô hình trả tiếng Việt không dấu cho bài tiếng Việt có dấu. Hãy tạo lại gợi ý.",
     );
-  const styleRange = selectedStyleWordRange(post.style);
-  if (styleRange && result.replies?.some((item) => selectedStyleLengthMismatch(item.reply, post.style)))
+  const styleRange = postStyleWordRange(post);
+  if (styleRange && result.replies?.some((item) => postStyleLengthMismatch(item.reply, post)))
     throw new Error(
       `Gợi ý không tuân thủ độ dài phong cách đã chọn (${styleRange.min}-${styleRange.max} từ). Hãy tạo lại gợi ý.`,
     );
   if (
     result.replies?.some(
       (item) =>
-        selectedStyleLengthMismatch(item.reply, post.style) ||
+        postStyleLengthMismatch(item.reply, post) ||
         incompleteReplyEnding(item.reply) ||
         staleTimeWish(item.reply, post) ||
         genericBotReply(item.reply, post) ||
@@ -1943,7 +1964,7 @@ function replyInstructions(message) {
         message.retryReason
       : "");
   const temporal = globalThis.XReplyTime?.build?.(message.post) || "";
-  const selectedStyleRule = selectedStyleLengthRule(message.post?.style);
+  const selectedStyleRule = postStyleLengthRule(message.post);
   const questionRule =
     " HARD QUESTION-FIRST RULE: If target_text is a question or rhetorical confirmation request, especially Vietnamese endings “nhỉ”, “đúng không”, “phải không”, “sao”, or “?”, make reply 1 a direct answer, agreement, disagreement, or concise clarification of the exact claim. Do not lead reply 1 with newly invented statistics, percentages, prices, liquidation counts, trading advice, or unrelated market analysis. For a sentence like “Thanh lý hơn nửa triệu đô và phe Long sập hầm thế này thị trường khốc liệt quá bác nhỉ”, a natural agreement is the right first angle. Do not turn every suggestion into a question.";
   return (
