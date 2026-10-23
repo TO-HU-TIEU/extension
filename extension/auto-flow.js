@@ -268,10 +268,11 @@
     const setting = document.createElement("div");
     setting.dataset.autoMinGapControl = "";
     setting.style.cssText =
-      "display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0 4px;color:var(--xra-text,#edf1f5);font-size:14px";
+      "display:flex;align-items:center;flex-wrap:nowrap;gap:8px;padding:8px 0 4px;color:var(--xra-text,#edf1f5);font-size:14px";
     const label = document.createElement("b");
     label.textContent = "Thời gian giãn cách tối thiểu";
-    label.style.flex = "1 1 100%";
+    label.style.cssText =
+      "flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
     const input = document.createElement("input");
     input.type = "number";
     input.min = "0";
@@ -515,6 +516,15 @@
       '<div data-auto-drag-handle style="display:flex;align-items:center;gap:8px;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--xra-border,#303842);cursor:move;touch-action:none"><span style="display:flex;align-items:center;gap:8px"><img src="' +
       runtimeAssetUrl("assets/logo.svg") +
       '" alt="Assistant" style="width:28px;height:28px"><strong style="font-size:17px;color:var(--xra-text,#edf1f5)">Tự động</strong></span><span style="display:flex;gap:6px"><button data-auto-pause aria-label="Tạm dừng" title="Tạm dừng" style="width:36px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:0;border:1px solid var(--xra-border,#303842);border-radius:8px;background:#d64555;color:#fff;cursor:pointer;font:700 13px system-ui"><svg viewBox="0 0 12 12" aria-hidden="true" style="width:12px;height:12px;display:block;fill:currentColor"><rect x="1.5" y="1.5" width="9" height="9" rx="1"></rect></svg></button><button data-auto-minimize aria-label="Thu nhỏ" title="Thu nhỏ" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">−</button><button data-auto-close aria-label="Đóng dashboard" title="Đóng dashboard" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">×</button></span></div><h3 style="margin:12px 0 5px;font-size:17px">Thiết lập</h3><div style="padding:8px 0 4px"><div style="display:flex;justify-content:space-between;font-size:15px"><b>Tốc độ xử lý</b><output data-auto-speed-value>0</output></div><input data-auto-speed type="range" min="-3" max="3" step="0.5" value="0" style="width:100%;accent-color:var(--xra-accent,#1d9bf0)"><div style="display:flex;justify-content:space-between;color:var(--xra-muted,#9aa4af);font-size:11px"><span>-3</span><span>-1.5</span><span>0</span><span>1.5</span><span>3</span></div></div><label style="display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px"><input data-auto-vietnamese type="checkbox" checked> Chỉ xử lý bài có nội dung tiếng Việt</label><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 5px"><h3 style="margin:0;font-size:17px">Thông tin phiên</h3><span data-auto-session-status style="color:#20c997;font-size:12px;white-space:nowrap">● Đang chạy (0 phút)</span></div><div data-auto-stats style="font-size:16px;margin:6px 0 10px;color:var(--xra-muted,#9aa4af);padding:4px 0"></div><div style="padding:12px;border:1px solid var(--xra-border,#303842);border-radius:10px;margin-bottom:10px;font-size:14px"><b style="display:flex;align-items:center"><span style="color:#20c997;font-size:10px;margin-right:4px">●</span> Đang xử lý <span data-auto-current-toggle style="margin-left:auto;font-size:16px;line-height:1">⌄</span></b><div data-auto-log-list style="margin-top:7px;max-height:none;overflow:visible;white-space:pre-wrap;font:13px/1.5 system-ui;color:var(--xra-muted,#9aa4af)">Đang chờ bài tiếp theo</div></div><details style="margin-top:12px"><summary style="font-size:14px;font-weight:700;list-style:none;display:flex;justify-content:flex-start;align-items:center;gap:4px;padding:8px 0;border-bottom:1px solid var(--xra-border,#303842);cursor:pointer">Đã xử lý <span data-auto-processed-count></span><span style="margin-left:auto;font-size:16px;line-height:1">⌄</span></summary><div data-auto-list style="max-height:none;overflow:visible;padding:4px 0;background:transparent;font-size:13px"></div></details><button data-auto-reset style="width:100%;margin-top:12px;padding:9px;border:1px solid var(--xra-border,#303842);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font:600 14px system-ui">Reset số liệu</button>';
+    const dragHandle = box.querySelector("[data-auto-drag-handle]");
+    if (dragHandle) {
+      dragHandle.style.position = "sticky";
+      dragHandle.style.top = "-16px";
+      dragHandle.style.zIndex = "5";
+      dragHandle.style.margin = "-16px -16px 12px";
+      dragHandle.style.padding = "16px 16px 12px";
+      dragHandle.style.background = "var(--xra-bg,#000)";
+    }
     const vietnameseFilter = box.querySelector("[data-auto-vietnamese]")?.closest("label");
     if (vietnameseFilter) {
       const restRow = document.createElement("label");
@@ -912,9 +922,8 @@
       }
       if (claim.waitMs) {
         log(
-          `Đã nhận bài · chờ ${Math.ceil(claim.waitMs / 1000)} giây để tránh gửi trùng thời điểm`,
+          `Đã nhận bài · tạo gợi ý trước, sẽ giữ khoảng giãn cách trước khi gửi`,
         );
-        await pauseSleep(claim.waitMs);
       }
       log("Trạng thái: Chưa trả lời");
       let button = null;
@@ -1077,6 +1086,7 @@
             dashboard();
             break;
           }
+          await coordinate("sent", item);
           await coordinate("release", item);
           memory.consecutiveFailures = 0;
           p.push({ ...item, completedAt: Date.now() });

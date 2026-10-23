@@ -110,6 +110,7 @@ const DEFAULT_STYLES = [
 ];
 let styles = [],
   editingCustom = false,
+  editingStyleId = null,
   styleDraftMode = false,
   currentProvider = "gemini",
   connected = false,
@@ -1708,16 +1709,16 @@ function selectStyle() {
   const custom = !!s.custom;
   if (!styleDraftMode) {
     $("stylePrompt").value = s.prompt;
-    $("stylePrompt").disabled = !custom;
+    $("stylePrompt").disabled = !custom || editingStyleId !== s.id;
     $("stylePickerField").hidden = false;
-    $("customStyleFields").hidden = true;
+    $("customStyleFields").hidden = editingStyleId !== s.id;
     $("styleName").value = s.name;
     $("deleteStyle").hidden = !custom;
     $("newStyle").hidden = false;
-    $("editConfig").hidden = true;
-    $("saveSettings").hidden = true;
-    $("cancelStyle").hidden = true;
-    editingCustom = custom;
+    $("editConfig").hidden = !custom || editingStyleId === s.id;
+    $("saveSettings").hidden = editingStyleId !== s.id;
+    $("cancelStyle").hidden = editingStyleId !== s.id;
+    editingCustom = editingStyleId === s.id;
   }
   updateStylePreview();
   validateStyleDraft();
@@ -2197,8 +2198,12 @@ function validateStyleDraft() {
     save = $("saveSettings");
   if (!input || !save) return;
   const name = input.value.trim().toLocaleLowerCase();
-  const duplicate = styles.some((x) => x.name.trim().toLocaleLowerCase() === name);
-  save.disabled = !styleDraftMode || !name || duplicate;
+  const duplicate = styles.some(
+    (x) =>
+      x.id !== editingStyleId &&
+      x.name.trim().toLocaleLowerCase() === name,
+  );
+  save.disabled = (!styleDraftMode && !editingStyleId) || !name || duplicate;
 }
 $("styleName").oninput = () => {
   validateStyleDraft();
@@ -2212,6 +2217,7 @@ $("clearStyleName").onclick = () => {
 };
 $("newStyle").onclick = () => {
   styleDraftMode = true;
+  editingStyleId = null;
   editingCustom = true;
   $("newStyle").hidden = true;
   $("deleteStyle").hidden = true;
@@ -2228,6 +2234,7 @@ $("newStyle").onclick = () => {
 };
 $("cancelStyle").onclick = () => {
   styleDraftMode = false;
+  editingStyleId = null;
   editingCustom = false;
   $("styleName").value = "";
   $("stylePickerField").hidden = false;
@@ -2250,11 +2257,29 @@ $("deleteStyle").onclick = () =>
     lockConfig();
     status("Đã xoá phong cách.");
   });
-$("editConfig").onclick = () => lockConfig(false);
+$("editConfig").onclick = () => {
+  const chosen = styles.find((x) => x.id === $("style").value);
+  if (!chosen?.custom) return;
+  styleDraftMode = false;
+  editingStyleId = chosen.id;
+  editingCustom = true;
+  $("customStyleFields").hidden = false;
+  $("stylePrompt").disabled = false;
+  $("editConfig").hidden = true;
+  $("saveSettings").hidden = false;
+  $("cancelStyle").hidden = false;
+  $("styleName").focus();
+  validateStyleDraft();
+};
 $("saveSettings").onclick = () =>
   safely(async () => {
     const name = $("styleName").value.trim();
-    if (!name || styles.some((x) => x.name.trim().toLocaleLowerCase() === name)) return;
+    const duplicate = styles.some(
+      (x) =>
+        x.id !== editingStyleId &&
+        x.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+    );
+    if (!name || duplicate) return;
     let chosen;
     if (styleDraftMode) {
       chosen = {
@@ -2265,7 +2290,7 @@ $("saveSettings").onclick = () =>
       };
       styles.push(chosen);
     } else {
-      chosen = styles.find((x) => x.id === $("style").value);
+      chosen = styles.find((x) => x.id === (editingStyleId || $("style").value));
       if (chosen?.custom) {
         chosen.name = name;
         chosen.prompt = $("stylePrompt").value.trim() || chosen.prompt;
@@ -2278,6 +2303,7 @@ $("saveSettings").onclick = () =>
       configSaved: true,
     });
     styleDraftMode = false;
+    editingStyleId = null;
     editingCustom = !!chosen.custom;
     renderStyles(chosen.id);
     lockConfig();
