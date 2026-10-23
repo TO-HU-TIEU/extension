@@ -197,6 +197,7 @@
         postId: item?.id,
         runId: memory.runId,
         speed: Number(memory.speed || 0),
+        minGapMs: Number(memory.autoMinGapMs || 0),
       },
       { data: { granted: false, reason: "coordinator-unavailable" } },
     ).then((response) => response?.data || { granted: false, reason: "no-coordinator-response" });
@@ -249,6 +250,58 @@
     // Slow the baseline by another 10%; the slider still applies its relative
     // adjustment on top of this baseline.
     return Math.max(350, Math.round(ms * 1.1781 * (1 - speed * 0.12) * jitter));
+  };
+  const readMinimumGapSetting = () => {
+    const value = Math.max(
+        0,
+        Math.min(86_400, Number(localStorage.getItem("assistantAutoMinGapValue")) || 30),
+      ),
+      unit = localStorage.getItem("assistantAutoMinGapUnit") === "minutes" ? "minutes" : "seconds";
+    memory.autoMinGapMs = value * (unit === "minutes" ? 60_000 : 1_000);
+    return { value, unit };
+  };
+  const configureMinimumGapControl = (box) => {
+    if (box.querySelector("[data-auto-min-gap-control]")) return;
+    const speedInput = box.querySelector("[data-auto-speed]"),
+      speedWrap = speedInput?.parentElement;
+    if (!speedWrap) return;
+    const setting = document.createElement("div");
+    setting.dataset.autoMinGapControl = "";
+    setting.style.cssText =
+      "display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0 4px;color:var(--xra-text,#edf1f5);font-size:14px";
+    const label = document.createElement("b");
+    label.textContent = "Thời gian giãn cách tối thiểu";
+    label.style.flex = "1 1 100%";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.max = "86400";
+    input.step = "1";
+    input.dataset.autoMinGapValue = "";
+    input.setAttribute("aria-label", "Giá trị thời gian giãn cách tối thiểu");
+    input.style.cssText =
+      "width:76px;padding:6px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const select = document.createElement("select");
+    select.dataset.autoMinGapUnit = "";
+    select.setAttribute("aria-label", "Đơn vị thời gian giãn cách tối thiểu");
+    select.append(new Option("Giây", "seconds"), new Option("Phút", "minutes"));
+    select.style.cssText =
+      "padding:6px 24px 6px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const sync = () => {
+      const value = Math.max(0, Math.min(86_400, Number(input.value) || 0));
+      input.value = String(value);
+      const unit = select.value === "minutes" ? "minutes" : "seconds";
+      localStorage.setItem("assistantAutoMinGapValue", String(value));
+      localStorage.setItem("assistantAutoMinGapUnit", unit);
+      memory.autoMinGapMs = value * (unit === "minutes" ? 60_000 : 1_000);
+    };
+    const saved = readMinimumGapSetting();
+    input.value = String(saved.value);
+    select.value = saved.unit;
+    input.addEventListener("change", sync);
+    select.addEventListener("change", sync);
+    setting.append(label, input, select);
+    speedWrap.after(setting);
   };
   const domHasOwnReply = (handle) => {
     if (!handle) return false;
@@ -450,6 +503,7 @@
     let box = document.getElementById("assistant-auto-dashboard");
     if (box) {
       configureSpeedControl(box);
+      configureMinimumGapControl(box);
       syncPauseButton();
       return box;
     }
@@ -512,6 +566,7 @@
     }
     document.documentElement.appendChild(box);
     configureSpeedControl(box);
+    configureMinimumGapControl(box);
     const tabBadge = document.createElement("span");
     memory.tabBadge ||= Math.random().toString(36).slice(2, 6).toUpperCase();
     tabBadge.dataset.autoTabBadge = "";
@@ -587,21 +642,36 @@
           "display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;padding:0;border:1px solid var(--xra-border);border-radius:50%;background:var(--xra-bg);color:var(--xra-color);cursor:move;line-height:0";
       }
       let dragState = null;
+      let dragMoved = false;
       dragHandle?.addEventListener("pointerdown", (event) => {
         if (!allowInteractive && event.target.closest("button, input, select, textarea, a")) return;
-        dragState = { x: event.clientX - box.offsetLeft, y: event.clientY - box.offsetTop };
+        dragState = {
+          x: event.clientX - box.offsetLeft,
+          y: event.clientY - box.offsetTop,
+          startX: event.clientX,
+          startY: event.clientY,
+        };
+        dragMoved = false;
+        dragHandle.dataset.autoDragMoved = "false";
         dragHandle.setPointerCapture?.(event.pointerId);
       });
       dragHandle?.addEventListener("pointermove", (event) => {
         if (!dragState) return;
+        if (
+          Math.abs(event.clientX - dragState.startX) + Math.abs(event.clientY - dragState.startY) >
+          4
+        )
+          dragMoved = true;
         box.style.left = `${Math.max(0, event.clientX - dragState.x)}px`;
         box.style.top = `${Math.max(0, event.clientY - dragState.y)}px`;
         box.style.right = "auto";
       });
       dragHandle?.addEventListener("pointerup", () => {
+        if (dragHandle) dragHandle.dataset.autoDragMoved = dragMoved ? "true" : "false";
         dragState = null;
       });
       dragHandle?.addEventListener("pointercancel", () => {
+        if (dragHandle) dragHandle.dataset.autoDragMoved = dragMoved ? "true" : "false";
         dragState = null;
       });
     };
@@ -649,7 +719,12 @@
       dashboard();
       makeDraggable(box.querySelector("[data-auto-restore]"));
       box.querySelector("[data-auto-restore]").onclick = (event) => {
-        if (event.detail > 1) return;
+        const restore = box.querySelector("[data-auto-restore]");
+        if (event.detail > 1 || restore?.dataset.autoDragMoved === "true") {
+          if (restore) restore.dataset.autoDragMoved = "false";
+          event.preventDefault();
+          return;
+        }
         const left = box.style.left,
           top = box.style.top;
         box.remove();

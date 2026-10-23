@@ -1443,7 +1443,10 @@
           "geminiModel",
           "deepseekKey",
           "deepseekModel",
+          "styleId",
           "stylePrompt",
+          "replyStyleCatalog",
+          "customStyles",
           "replyTone",
           "replyMediaSuggestions",
           "feedbackExtraContext",
@@ -1466,6 +1469,12 @@
               : provider === "deepseek"
                 ? s.deepseekModel || "deepseek-flash"
                 : s.apiModel || "gpt-4.1-mini";
+        const styleCatalog = [
+          ...(Array.isArray(s.replyStyleCatalog) ? s.replyStyleCatalog : []),
+          ...(Array.isArray(s.customStyles) ? s.customStyles : []),
+        ];
+        const selectedStylePrompt =
+          styleCatalog.find((item) => item?.id === s.styleId)?.prompt || s.stylePrompt || "";
         const data = await request({
           provider,
           apiKey: s.apiKey,
@@ -1477,7 +1486,7 @@
           post: {
             ...post,
             style:
-              (s.stylePrompt || "") +
+              selectedStylePrompt +
               (s.feedbackExtraContext
                 ? ` Additional feedback context from the user: ${String(s.feedbackExtraContext).slice(0, 500)}`
                 : "") +

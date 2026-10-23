@@ -123,8 +123,10 @@ function autoFlowAccountKey(message, sender) {
 function autoFlowCommentGap(message) {
   const speed = Math.max(-5, Math.min(5, Number(message.speed) || 0)),
     base = AUTO_FLOW_COMMENT_GAP_MS * (1 - speed * 0.12),
-    jitter = 0.85 + Math.random() * 0.3;
-  return Math.max(6_000, Math.round(base * jitter));
+    jitter = 0.85 + Math.random() * 0.3,
+    minimum = Math.max(0, Number(message.minGapMs) || 0);
+  // The configured minimum is a hard floor; natural jitter may only add time.
+  return Math.max(6_000, minimum, Math.round(base * jitter));
 }
 async function persistAutoFlowCoordination() {
   if (extensionStorage?.set)
