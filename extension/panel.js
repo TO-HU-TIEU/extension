@@ -179,7 +179,6 @@ function geminiModelOptions(models = []) {
     (a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99) || a.name.localeCompare(b.name),
   );
 }
-const MAX_GEMINI_KEYS = 20;
 function normalizeGeminiKeys(value) {
   const seen = new Set();
   return (Array.isArray(value) ? value : [])
@@ -201,8 +200,7 @@ function normalizeGeminiKeys(value) {
         invalidAt: x.invalidAt || "",
       };
     })
-    .filter((x) => looksLikeApiKey(x.key) && !seen.has(x.key) && seen.add(x.key))
-    .slice(0, MAX_GEMINI_KEYS);
+    .filter((x) => looksLikeApiKey(x.key) && !seen.has(x.key) && seen.add(x.key));
 }
 function displayGeminiKeys(keys = []) {
   const backups = normalizeGeminiKeys(keys).filter((x) => x.key !== geminiPrimaryKey);
@@ -2134,10 +2132,6 @@ function ensureGeminiQueueLabel() {
   return input;
 }
 $("addGeminiQueueKey").onclick = () => {
-  if (displayGeminiKeys(geminiStoredKeys).length >= MAX_GEMINI_KEYS) {
-    status(`API Key tối đa ${MAX_GEMINI_KEYS} key.`, true);
-    return;
-  }
   ensureGeminiQueueLabel();
   $("geminiQueueEditor").hidden = false;
   $("geminiQueueKey").type = "password";
@@ -2158,7 +2152,6 @@ $("saveGeminiQueueKey").onclick = () =>
     geminiStoredKeys = normalizeGeminiKeys(stored.geminiKeys || []);
     const list = displayGeminiKeys(geminiStoredKeys);
     if (!looksLikeApiKey(key)) throw new Error("API key không hợp lệ.");
-    if (list.length >= MAX_GEMINI_KEYS) throw new Error(`API Key tối đa ${MAX_GEMINI_KEYS} key.`);
     if (list.some((x) => x.key === key)) throw new Error("Key này đã có trong danh sách.");
     await saveGeminiKeyList([...list, { id: `gk-${Date.now()}`, key, label, enabled: true }]);
     $("geminiQueueKey").value = "";
@@ -2883,7 +2876,12 @@ async function syncQuotePostFromTab() {
 syncQuotePostFromTab().catch(() => {});
 chrome.tabs.onActivated.addListener((activeInfo) => {
   if (panelWindowId && activeInfo.windowId !== panelWindowId) return;
-  if (!panelTargetTabId || panelTargetTabId !== activeInfo.tabId)
+  // In split view the radio target is explicit. Do not let Chrome's active-tab
+  // event silently switch feedback/auto actions to the other pane.
+  if (
+    panelTargets.length < 2 &&
+    (!panelTargetTabId || panelTargetTabId !== activeInfo.tabId)
+  )
     panelTargetTabId = activeInfo.tabId;
   syncQuotePostFromTab().catch(() => {});
   refreshPanelTargets();
