@@ -243,7 +243,7 @@
     return `${absolute} (${relative})`;
   }
   function cardFor(item) {
-    const card = element("article", "panel-card content-feed-card");
+    const card = element("article", "content-feed-card");
     card.dataset.id = item.id;
     card.classList.toggle("content-selected", selected.has(item.id));
     const heading = element("div", "content-card-head");

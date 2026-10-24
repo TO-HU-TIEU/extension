@@ -11,6 +11,8 @@ import {
   consumeResponseStream,
   parseReplies,
   completeTranslations,
+  isReplyQualityError,
+  publicReplyError,
 } from "./replies.mjs";
 let config;
 try {
@@ -210,40 +212,70 @@ const server = http.createServer(async (req, res) => {
         const model = mode === "api" ? config.apiModel : String(input.model || "");
         if (!model || model.length > 120)
           throw new Error("Hãy chọn mô hình sau khi làm mới kết nối.");
-        const cacheKey = hash(JSON.stringify([credential.profileId, mode, model, post])).toString(
-          "hex",
-        );
+        const cachePost = { ...post, generated_at: "" };
+        const cacheKey = hash(
+          JSON.stringify([credential.profileId, mode, model, cachePost]),
+        ).toString("hex");
         const cached = cache.get(cacheKey);
-        if (!input.force && cached && cached.until > Date.now())
-          return json(res, 200, {
-            result: cached.result,
-            cached: true,
-            model,
-            mediaAnalyzed: post.media_urls.length + (post.media_inline?.length || 0),
-          });
+        if (!input.force && cached && cached.until > Date.now()) {
+          if (String(req.headers.accept || "").includes("application/x-ndjson")) {
+            res.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8" });
+            res.end(
+              `${JSON.stringify({ type: "result", result: cached.result, cached: true, model, mediaAnalyzed: post.media_urls.length + (post.media_inline?.length || 0) })}\n`,
+            );
+          } else {
+            json(res, 200, {
+              result: cached.result,
+              cached: true,
+              model,
+              mediaAnalyzed: post.media_urls.length + (post.media_inline?.length || 0),
+            });
+          }
+          return;
+        }
         const start = Date.now();
-        const response = await openai("responses", credential.token, {
-          method: "POST",
-          body: JSON.stringify(buildRequest(model, post, mode)),
-          signal: controller.signal,
-        });
         res.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8" });
         const send = (data) => {
           if (!res.destroyed) res.write(`${JSON.stringify(data)}\n`);
         };
         send({ type: "status", message: "AI đang viết gợi ý…" });
-        let last = 0;
-        let result = await consumeResponseStream(
-          response,
-          () => {
-            if (Date.now() - last > 400) {
-              send({ type: "progress" });
-              last = Date.now();
-            }
-          },
-          post.reply_count,
-          (raw) => parseReplies(raw, post.reply_count, true, post.language_hint, post),
-        );
+        let last = 0,
+          result,
+          repaired = false;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const requestPost =
+              attempt === 0
+                ? post
+                : {
+                    ...post,
+                    retry_reason:
+                      "A prior reply used a canned/empty phrase or mismatched the post time. Write brief, natural reactions to concrete details; do not invent personal experience or stale time references. (repair-attempt)",
+                  };
+            if (attempt)
+              send({ type: "status", message: "AI đang sửa câu khuôn mẫu hoặc lệch thời điểm…" });
+            const response = await openai("responses", credential.token, {
+              method: "POST",
+              body: JSON.stringify(buildRequest(model, requestPost, mode)),
+              signal: controller.signal,
+            });
+            result = await consumeResponseStream(
+              response,
+              () => {
+                if (Date.now() - last > 400) {
+                  send({ type: "progress" });
+                  last = Date.now();
+                }
+              },
+              post.reply_count,
+              (raw) => parseReplies(raw, post.reply_count, true, post.language_hint, post),
+            );
+            repaired = attempt > 0;
+            break;
+          } catch (error) {
+            if (attempt || !isReplyQualityError(error)) throw error;
+          }
+        }
         result = await completeTranslations(result, post, model, mode, async (request) => {
           const translation = await openai("responses", credential.token, {
             method: "POST",
@@ -266,6 +298,7 @@ const server = http.createServer(async (req, res) => {
         send({
           type: "result",
           result,
+          repaired,
           cached: false,
           model,
           mediaAnalyzed: post.media_urls.length + (post.media_inline?.length || 0),
@@ -275,7 +308,7 @@ const server = http.createServer(async (req, res) => {
       } catch (error) {
         const message = controller.signal.aborted
           ? "Tác vụ đã bị hủy hoặc hết thời gian chờ. Thử tạo lại."
-          : error.message;
+          : publicReplyError(error);
         if (!res.destroyed) {
           if (res.headersSent) {
             res.write(`${JSON.stringify({ type: "error", error: message })}\n`);

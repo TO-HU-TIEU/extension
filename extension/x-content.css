@@ -1218,23 +1218,6 @@ html[data-theme="light"] .xra-menu {
   font-size: 11px;
   font-weight: 600;
 }
-.xra-relevance.quality-low {
-  color: #e58a32;
-}
-.reply-quality-highlight {
-  border-radius: 3px;
-  padding: 0 2px;
-  background: rgb(229 138 50 / 18%);
-  color: #ffb55f;
-  text-decoration: underline wavy rgb(229 138 50 / 75%);
-  text-underline-offset: 2px;
-}
-@media (prefers-color-scheme: light) {
-  .reply-quality-highlight {
-    background: rgb(176 91 0 / 12%);
-    color: #8b4800;
-  }
-}
 .xra-count-menu {
   top: auto !important;
   bottom: 36px !important;

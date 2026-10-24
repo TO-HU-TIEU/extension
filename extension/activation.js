@@ -1,6 +1,6 @@
 (() => {
+  if (globalThis.XRA_DEMO_MODE) return;
   const SUPABASE = "https://gmwyhzbtrtpwpwssqync.supabase.co/functions/v1/admin-keys";
-  const SHARED_KEY_HASH = "a5a9923303be2b9cd5dd1d0e5bc204530b02f86d7135c61ccf4a46064f04288e";
   const hash = async (value) =>
     Array.from(
       new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))),
@@ -58,8 +58,6 @@
     if (!response.ok) throw new Error(data.error || "Activation key không hợp lệ");
     return data;
   };
-  const isSharedActivationConflict = (error) =>
-    String(error?.message || "").includes("Key đã được kích hoạt trên thiết bị khác");
   const start = async () => {
     await loadMachineIdentity();
     // Validate a previously activated device before mounting the gate. This
@@ -69,13 +67,7 @@
         await verify(stored, storedDeviceHash);
         localStorage.setItem("assistantActivationVerified", "1");
         return;
-      } catch (error) {
-        // Keep existing kieu.eth installations usable while an older deployed
-        // edge function is still enforcing the former one-device rule.
-        if (!(stored === SHARED_KEY_HASH && isSharedActivationConflict(error))) throw error;
-        localStorage.setItem("assistantActivationVerified", "1");
-        return;
-      }
+      } catch {}
     }
     show();
     const input = cover.querySelector("#activation-key"),
@@ -89,13 +81,7 @@
         if (!key) throw new Error("Vui lòng nhập activation key");
         const keyHash = await hash(key);
         const deviceHash = await hash(device);
-        try {
-          await verify(keyHash, deviceHash);
-        } catch (error) {
-          // The server has already matched this key, so only allow the
-          // known shared license to bypass a stale one-device response.
-          if (!(keyHash === SHARED_KEY_HASH && isSharedActivationConflict(error))) throw error;
-        }
+        await verify(keyHash, deviceHash);
         localStorage.setItem("assistantActivation", keyHash);
         localStorage.setItem("assistantActivationDeviceHash", deviceHash);
         localStorage.setItem("assistantActivationVerified", "1");

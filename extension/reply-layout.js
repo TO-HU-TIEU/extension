@@ -19,17 +19,33 @@
     showLabels: false,
     border: true,
   };
-  function normalize() {
+  function normalize(value = {}) {
+    value = value && typeof value === "object" ? value : {};
     const result = {
-      left: [...defaults.left],
-      right: [...defaults.right],
-      hidden: [],
-      menu: [...defaults.menu],
-    };
+        left: [],
+        right: [],
+        hidden: [],
+        menu: [],
+        density: value.density === "compact" ? "compact" : "comfortable",
+        showLabels: !!value.showLabels,
+        border: value.border !== false,
+      },
+      seen = new Set();
+    for (const side of ["left", "right", "hidden", "menu"])
+      for (const id of Array.isArray(value[side]) ? value[side] : defaults[side])
+        if (ids.includes(id) && !seen.has(id)) {
+          seen.add(id);
+          result[side].push(id);
+        }
+    for (const id of ids)
+      if (!seen.has(id))
+        result[
+          defaults.menu.includes(id) ? "menu" : defaults.left.includes(id) ? "left" : "right"
+        ].push(id);
     return result;
   }
-  function apply(box) {
-    const layout = normalize(),
+  function apply(box, value) {
+    const layout = normalize(value),
       tools = box.querySelector(".xra-tools");
     if (!tools) return;
     const selectors = {
@@ -74,7 +90,9 @@
       for (const row of rows)
         row.hidden = !layout.menu.includes(row.querySelector("input")?.dataset.key);
     }
-    box.classList.remove("xra-compact", "xra-show-labels", "xra-no-border");
+    box.classList.toggle("xra-compact", layout.density === "compact");
+    box.classList.toggle("xra-show-labels", layout.showLabels);
+    box.classList.toggle("xra-no-border", !layout.border);
     for (const id of ["generate", "regenerate", "fast", "settings"]) {
       const node = nodes[id];
       if (!node) continue;

@@ -126,6 +126,7 @@
     .catch(() => null);
   async function refresh(force = false) {
     await ready;
+    if (globalThis.XRA_DEMO_MODE) return cache;
     if (!storage()) return cache;
     if (inflight) return inflight;
     if (!force && cache && Date.now() - cache.checkedAt < 3600000) return cache;
