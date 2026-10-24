@@ -11,6 +11,13 @@ globalThis.X_REPLY_CONFIG ||= Object.freeze({ serverUrl: "http://127.0.0.1:8791"
 globalThis.RemoteConfig?.start();
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 const LOCAL = globalThis.X_REPLY_CONFIG;
+const providerTimeoutSignal = (milliseconds) => {
+  try {
+    return globalThis.AbortSignal?.timeout?.(milliseconds);
+  } catch {
+    return undefined;
+  }
+};
 const AUTO_FLOW_COORDINATION_KEY = "autoFlowCoordinationV1";
 const AUTO_FLOW_LEASE_MS = 90_000;
 const AUTO_FLOW_COMMENT_GAP_MS = 10_707;
@@ -53,9 +60,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "autoFlowSetTab") {
     const tabId = Number(message.tabId);
     if (tabId) {
-      if (message.enabled) autoFlowTabs[String(tabId)] = { enabled: true, updatedAt: Date.now() };
-      else delete autoFlowTabs[String(tabId)];
-      persistAutoFlowTabs();
+      const key = String(tabId), previous = autoFlowTabs[key];
+      if (message.enabled) {
+        chrome.tabs
+          .get(tabId)
+          .then((tab) => {
+            autoFlowTabs[key] = {
+              enabled: true,
+              updatedAt: Date.now(),
+              autoDiscardableBefore: tab?.autoDiscardable !== false,
+            };
+            // Chrome Memory Saver may discard an idle X tab while the user is
+            // away. Keep only explicitly automated tabs resident.
+            return chrome.tabs.update(tabId, { autoDiscardable: false });
+          })
+          .catch(() => {})
+          .finally(() => persistAutoFlowTabs());
+      } else {
+        delete autoFlowTabs[key];
+        const restore = previous?.autoDiscardableBefore !== false;
+        chrome.tabs.update(tabId, { autoDiscardable: restore }).catch(() => {});
+        persistAutoFlowTabs();
+      }
     }
     sendResponse({ ok: true });
     return false;
@@ -222,6 +248,7 @@ async function localRequest(path, body) {
     method: body === undefined ? "GET" : "POST",
     headers: { "Content-Type": "application/json", "X-Local-Token": LOCAL.localToken },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: providerTimeoutSignal(60_000),
   });
   const type = response.headers.get("content-type") || "";
   if (type.includes("application/json")) {
@@ -1140,6 +1167,7 @@ async function suggest(message) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${message.apiKey}`, "Content-Type": "application/json" },
+    signal: providerTimeoutSignal(45_000),
     body: JSON.stringify({
       model: message.model || "gpt-4.1-mini",
       instructions: replyInstructions(message),
@@ -1184,6 +1212,7 @@ async function suggest(message) {
 async function testCredential(message) {
   const response = await fetch("https://api.openai.com/v1/models", {
     headers: { Authorization: `Bearer ${message.apiKey}` },
+    signal: providerTimeoutSignal(15_000),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || `OpenAI HTTP ${response.status}`);
@@ -1321,6 +1350,7 @@ async function deepseekChat(message, { instruction, input, maxTokens } = {}) {
           Authorization: `Bearer ${message.deepseekKey}`,
           "Content-Type": "application/json",
         },
+        signal: providerTimeoutSignal(45_000),
         body: JSON.stringify(request),
       });
     let data;
@@ -1363,6 +1393,7 @@ async function deepseekSuggest(message) {
 async function testDeepseek(message) {
   const response = await fetch("https://api.deepseek.com/models", {
     headers: { Authorization: `Bearer ${message.deepseekKey}` },
+    signal: providerTimeoutSignal(15_000),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || `DeepSeek HTTP ${response.status}`);
@@ -1694,6 +1725,7 @@ async function composeQuotePost(message) {
             Authorization: `Bearer ${message.deepseekKey}`,
             "Content-Type": "application/json",
           },
+          signal: providerTimeoutSignal(45_000),
           body: JSON.stringify(request),
         });
       let data;
@@ -1727,6 +1759,7 @@ async function composeQuotePost(message) {
   const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${message.apiKey}`, "Content-Type": "application/json" },
+      signal: providerTimeoutSignal(45_000),
       body: JSON.stringify({
         model: message.model || "gpt-4.1-mini",
         instructions: QUOTE_INSTRUCTIONS,
@@ -1786,6 +1819,7 @@ async function composeNews(message) {
   const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${message.apiKey}`, "Content-Type": "application/json" },
+      signal: providerTimeoutSignal(45_000),
       body: JSON.stringify({
         model: message.model || "gpt-4.1-mini",
         instructions: NEWS_INSTRUCTIONS,
@@ -2224,6 +2258,7 @@ async function finishReplies(result, post, message) {
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { Authorization: `Bearer ${message.apiKey}`, "Content-Type": "application/json" },
+        signal: providerTimeoutSignal(45_000),
         body: JSON.stringify({
           model,
           instructions: instruction,

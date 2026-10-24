@@ -1084,13 +1084,16 @@
             globalThis.__assistantAutoFlowRequest = false;
           }
           console.log("[Assistant Auto] Status: Normal (đã yêu cầu tạo gợi ý)");
-          while (running && !suggestion) {
+          const suggestionDeadline = Date.now() + 75_000;
+          while (running && !suggestion && Date.now() < suggestionDeadline) {
             await pauseSleep(flowDelay(700));
             suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
             const errorNode = document.querySelector(".xra-error,[role=alert],.xra-status-error");
             providerError = errorNode?.textContent?.trim() || "";
             if (providerError) break;
           }
+          if (!suggestion && !providerError)
+            providerError = "Gợi ý quá thời gian chờ · request có thể đã bị treo";
         }
         if (providerError) {
           const retryButton = document.querySelector(
@@ -1109,7 +1112,8 @@
               globalThis.__assistantAutoFlowRequest = false;
             }
             providerError = "";
-            for (let retryWait = 0; retryWait < 60 && running; retryWait++) {
+            const retryDeadline = Date.now() + 75_000;
+            while (running && Date.now() < retryDeadline) {
               await pauseSleep(flowDelay(500));
               const retryError =
                 document
