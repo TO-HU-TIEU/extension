@@ -468,7 +468,7 @@ const genericBotReply = (text, temporal = {}) => {
         "",
     );
   return (
-    /(?:^|[.!?…]\s*)cảm ơn(?:\s+bạn)?(?:\s+(?:vì|về|đã|thông tin))?(?:\s|[.!?…]|$)/iu.test(value) ||
+    /(?:^|[.!?…]\s*)(?:cảm\s*ơn|thanks|thank\s+you)(?:\s+bạn)?(?:\s+(?:vì|về|đã|thông tin(?:\s+hữu ích)?|chia sẻ|sharing))?(?:\s|[.!?…]|$)/iu.test(value) ||
     /^(?:mọi người|anh em)\s+(?:nhớ|nên|hãy|cần)(?:\s|$)/iu.test(value) ||
     /^(?:nhớ|nên|hãy|cần|cẩn thận)(?:\s|$).+(?:nhé|đấy)[.!…]*$/iu.test(value) ||
     (/(?:mưa|bão|ngập|áp\s*thấp|thời\s*tiết|nghỉ\s*học|cho\s+học\s+sinh\s+nghỉ)/iu.test(source) &&
@@ -476,6 +476,18 @@ const genericBotReply = (text, temporal = {}) => {
         value,
       ))
   );
+};
+const markGenericReplyLowQuality = (item, temporal = {}) => {
+  if (!item || !genericBotReply(item.reply, temporal)) return item;
+  item.quality_issues = [
+    ...new Set([
+      ...(Array.isArray(item.quality_issues) ? item.quality_issues : []),
+      "Câu cảm ơn/chung chung",
+    ]),
+  ];
+  const score = Number(item.relevance_score);
+  item.relevance_score = Number.isFinite(score) ? Math.min(Math.max(0, score), 30) : 30;
+  return item;
 };
 const staleTemporalReply = (text, temporal = {}) => {
   const value = String(text || ""),
@@ -582,7 +594,6 @@ export function parseReplies(
     if (staleTemporalReply(item.reply, temporal))
       throw new Error("AI trả về gợi ý không còn phù hợp với thời điểm hiện tại. Thử tạo lại.");
     if (
-      genericBotReply(item.reply, temporal) ||
       woodenTemplateReply(item.reply) ||
       volatileMetricReply(item.reply, temporal) ||
       riskyMarketAnalysisReply(item.reply, temporal) ||
@@ -621,6 +632,7 @@ export function parseReplies(
     ) {
       throw new Error("AI thiếu bản dịch tiếng Việt. Thử tạo lại.");
     }
+    markGenericReplyLowQuality(item, temporal);
   }
   return value;
 }
