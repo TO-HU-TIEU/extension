@@ -195,6 +195,464 @@
       if (all.size) progress(mode, all);
     }
   }, 700);
+
+  // The automatic-follow runner deliberately stays in this content script so
+  // it can use X's rendered controls instead of private endpoints. Progress
+  // is saved before every navigation, allowing a reload or extension restart
+  // to resume the same post safely.
+  const AUTO_FOLLOW_SOURCE =
+      "https://x.com/i/jf/creators/inspiration/top_posts",
+    AUTO_FOLLOW_STORAGE_KEY = "autoFollowRunV1";
+  let autoFollowBusy = false,
+    autoFollowToken = 0;
+  const autoFollowSend = (payload) => {
+    try {
+      chrome.runtime.sendMessage({ type: "autoFollowProgress", ...payload }).catch(() => {});
+    } catch {}
+  };
+  const autoFollowReadState = async () => {
+    try {
+      const stored = await chrome.storage.local.get(AUTO_FOLLOW_STORAGE_KEY);
+      return stored[AUTO_FOLLOW_STORAGE_KEY] || null;
+    } catch {
+      return null;
+    }
+  };
+  const autoFollowSaveState = async (state) => {
+    try {
+      await chrome.storage.local.set({ [AUTO_FOLLOW_STORAGE_KEY]: state });
+    } catch {}
+  };
+  const autoFollowIsSource = () =>
+    /^\/i\/jf\/creators\/inspiration\/top_posts(?:\/|$)/i.test(location.pathname);
+  const autoFollowSleep = (ms, token) =>
+    new Promise((resolve) => {
+      const started = Date.now();
+      const tick = () => {
+        if (token !== autoFollowToken) return resolve(false);
+        const remaining = ms - (Date.now() - started);
+        if (remaining <= 0) return resolve(true);
+        setTimeout(tick, Math.min(1000, remaining));
+      };
+      tick();
+    });
+  const autoFollowAuthor = (article) => {
+    const link = article?.querySelector(
+      '[data-testid="User-Name"] a[href^="/"],a[href^="/"]:not([href*="/status/"])',
+    );
+    const handle = link?.getAttribute("href")?.match(/^\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/)?.[1];
+    return handle ? { handle: handle.toLowerCase(), url: `https://x.com/${handle}` } : null;
+  };
+  const autoFollowVerifiedIconSelector =
+    '[data-testid="icon-verified"],[aria-label*="Tài khoản đã xác nhận" i],[aria-label*="Verified account" i],[aria-label="Verified"]';
+  const autoFollowIsVerified = (root) => {
+    const author = root?.querySelector?.('[data-testid="User-Name"],[data-testid="UserName"]'),
+      scope = author || root;
+    return !!scope?.querySelector?.(autoFollowVerifiedIconSelector);
+  };
+  const autoFollowPostId = (article) =>
+    article?.querySelector('a[href*="/status/"]')?.href.match(/\/status\/(\d+)/)?.[1] || "";
+  const autoFollowPostText = (article) =>
+    text(article?.querySelector('[data-testid="tweetText"]')?.textContent || "").slice(0, 140);
+  const autoFollowVietnamese = (value) => {
+    const input = text(value);
+    if (!input || /^[\p{Extended_Pictographic}\p{Emoji_Presentation}\s]+$/u.test(input)) return false;
+    return (
+      /[ăâđêôơưàáạảãằắặẳẵầấậẩẫèéẹẻẽìíịỉĩòóọỏõùúụủũỳýỵỷỹ]/iu.test(input) ||
+      /\b(và|của|cho|được|không|một|những|này|đang|với|trong|là|người)\b/iu.test(input)
+    );
+  };
+  const autoFollowControl = (root) => {
+    const buttons = [...(root || document).querySelectorAll("button,[role=button]")];
+    return buttons.find((button) => {
+      const label = text(button.textContent || button.getAttribute("aria-label"));
+      const testId = button.getAttribute("data-testid") || "";
+      return (
+        !/(?:Following|Đang theo dõi|Unfollow|Ngừng theo dõi)/i.test(label) &&
+        (/^follow$/i.test(testId) || /^(?:Follow|Theo dõi)(?:\s|$)/i.test(label))
+      );
+    });
+  };
+  const autoFollowAlreadyFollowing = (root) => {
+    const label = text(root?.textContent || "");
+    return /(?:Following|Đang theo dõi|Unfollow|Ngừng theo dõi)/i.test(label);
+  };
+  const AUTO_FOLLOW_SOURCE_TAB_XPATH =
+    '//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div/div/div/div[1]/div[1]/div[2]/div[2]/div[2]/div[3]/button';
+  const autoFollowSourceTabLabel = (button) =>
+    text(button?.textContent || button?.getAttribute("aria-label"));
+  const autoFollowIsSourceTabLabel = (label) =>
+    /^(?:Nhiều phản hồi nhất|Most replies|Top replies)$/i.test(label) ||
+    /(?:Nhiều phản hồi nhất|Most replies|Top replies)/i.test(label);
+  const autoFollowSourceTabByXPath = () => {
+    try {
+      const node = document
+        .evaluate?.(AUTO_FOLLOW_SOURCE_TAB_XPATH, document, null, 9, null)
+        ?.singleNodeValue;
+      if (
+        node &&
+        /^(?:BUTTON|A)$/i.test(node.tagName || "") &&
+        autoFollowIsSourceTabLabel(autoFollowSourceTabLabel(node))
+      )
+        return node;
+    } catch {}
+    return null;
+  };
+  const autoFollowSourceTab = () => {
+    const direct = autoFollowSourceTabByXPath();
+    if (direct) return direct;
+    return [...document.querySelectorAll("button,[role=tab],[role=button]")].find((button) => {
+      return autoFollowIsSourceTabLabel(autoFollowSourceTabLabel(button));
+    });
+  };
+  const autoFollowFirstPostId = () =>
+    document
+      .querySelector('article[data-testid="tweet"] a[href*="/status/"]')
+      ?.href.match(/\/status\/(\d+)/)?.[1] || "";
+  const autoFollowSelectSourceTab = async (token) => {
+    // X renders the tab group asynchronously after the Top Posts shell. Try
+    // immediately, then retry briefly so a transient render gap is not treated
+    // as a permanent missing tab.
+    const deadline = Date.now() + 6000;
+    while (token === autoFollowToken && Date.now() < deadline) {
+      const button = autoFollowSourceTab();
+      if (button) {
+        if (token !== autoFollowToken) return false;
+        // X uses hashed classes for the active style, so do not infer the
+        // current tab from computed colors. Clicking the exact target is safe
+        // even when it is already selected and avoids staying on Likes.
+        const beforePostId = autoFollowFirstPostId();
+        button.scrollIntoView?.({ block: "nearest", inline: "center" });
+        button.click();
+        // Wait for X to commit the sort and replace the timeline before
+        // collecting posts; otherwise the old Likes list can be captured.
+        const settleDeadline = Date.now() + 5000;
+        while (token === autoFollowToken && Date.now() < settleDeadline) {
+          await autoFollowSleep(250, token);
+          const currentPostId = autoFollowFirstPostId();
+          if (currentPostId && currentPostId !== beforePostId) {
+            await autoFollowSleep(500, token);
+            break;
+          }
+        }
+        return token === autoFollowToken;
+      }
+      await autoFollowSleep(150, token);
+    }
+    return false;
+  };
+  const autoFollowVisiblePosts = () => {
+    const seen = new Set();
+    return [...document.querySelectorAll('article[data-testid="tweet"]')]
+      .filter((article) => !article.parentElement?.closest('article[data-testid="tweet"]'))
+      .filter((article) => autoFollowIsVerified(article))
+      .map((article) => {
+        const id = autoFollowPostId(article),
+          author = autoFollowAuthor(article),
+          link = article.querySelector('a[href*="/status/"]')?.href || "";
+        if (!id || seen.has(id)) return null;
+        seen.add(id);
+        return {
+          id,
+          url: link || `https://x.com/i/status/${id}`,
+          author: author?.handle || "unknown",
+          text: autoFollowPostText(article),
+        };
+      })
+      .filter(Boolean);
+  };
+  const autoFollowCollectPosts = async (token) => {
+    const posts = new Map();
+    let stable = 0,
+      previous = 0;
+    for (let attempt = 0; attempt < 24 && token === autoFollowToken; attempt++) {
+      for (const post of autoFollowVisiblePosts()) posts.set(post.id, post);
+      if (posts.size === previous) stable++;
+      else stable = 0;
+      previous = posts.size;
+      if (stable >= 4 && posts.size) break;
+      window.scrollBy({ top: Math.max(360, innerHeight * 0.78), behavior: "smooth" });
+      await autoFollowSleep(900, token);
+    }
+    return [...posts.values()];
+  };
+  const autoFollowCommentArticles = (postId) =>
+    [...document.querySelectorAll('article[data-testid="tweet"]')]
+      .filter((article) => !article.parentElement?.closest('article[data-testid="tweet"]'))
+      .filter((article) => autoFollowPostId(article) !== postId)
+      .filter((article) => autoFollowIsVerified(article))
+      .map((article) => {
+        const author = autoFollowAuthor(article);
+        if (!author) return null;
+        return {
+          id: autoFollowPostId(article) || `${author.handle}:${text(article.textContent).slice(0, 24)}`,
+          name: text(article.querySelector('[data-testid="User-Name"]')?.textContent || author.handle).split("@")[0].trim(),
+          handle: author.handle,
+          profileUrl: author.url,
+          text: text(article.querySelector('[data-testid="tweetText"]')?.textContent || ""),
+        };
+      })
+      .filter(Boolean)
+      .filter((item, index, all) => all.findIndex((candidate) => candidate.handle === item.handle) === index);
+  const autoFollowScrollComments = async (postId, token) => {
+    const found = new Map();
+    let stable = 0,
+      previous = 0;
+    for (let attempt = 0; attempt < 30 && token === autoFollowToken; attempt++) {
+      for (const comment of autoFollowCommentArticles(postId)) found.set(comment.handle, comment);
+      if (found.size === previous) stable++;
+      else stable = 0;
+      previous = found.size;
+      if (stable >= 5 && found.size) break;
+      window.scrollBy({ top: Math.max(380, innerHeight * 0.82), behavior: "smooth" });
+      await autoFollowSleep(850, token);
+    }
+    for (const comment of autoFollowCommentArticles(postId)) found.set(comment.handle, comment);
+    return [...found.values()];
+  };
+  const autoFollowDetail = (state, message) => {
+    const current = state.currentPost || {},
+      entries = Array.isArray(state.logs) ? state.logs : [],
+      followed = Number(state.followedInPost || 0),
+      total = Number(state.currentTotal || state.comments?.length || 0),
+      next = {
+        postId: current.id,
+        postText: current.text || "Bài không có nội dung chữ",
+        author: current.author || "unknown",
+        followed,
+        total,
+        createdAt: Date.now(),
+        people: Array.isArray(state.currentPeople) ? state.currentPeople : [],
+      };
+    state.logs = [...entries, next].slice(-50);
+    state.currentPeople = [];
+    state.followedInPost = 0;
+    state.currentTotal = total;
+    autoFollowSend({ state, status: message || `Đã xử lý ${followed}/${total} người trong bài.` });
+  };
+  const autoFollowFinishPost = async (state, token, message) => {
+    autoFollowDetail(state, message);
+    state.postIndex = Number(state.postIndex || 0) + 1;
+    state.currentPost = null;
+    state.comments = [];
+    state.commentIndex = 0;
+    state.phase = "source";
+    await autoFollowSaveState(state);
+    if (token !== autoFollowToken || !state.enabled) return;
+    location.href = AUTO_FOLLOW_SOURCE;
+  };
+  const autoFollowWait = async (state, token) => {
+    const remaining = Math.max(0, Number(state.nextRunAt || 0) - Date.now());
+    autoFollowSend({ state, status: `Đủ lượt ${state.targetLimit} người · nghỉ 20 phút trước lượt tiếp theo.` });
+    if (remaining > 0) {
+      const ok = await autoFollowSleep(remaining, token);
+      if (!ok) return;
+    }
+    state.followedInWindow = 0;
+    state.targetLimit = 12 + Math.floor(Math.random() * 4);
+    state.nextRunAt = 0;
+    state.phase = state.currentPost ? "post" : "source";
+    await autoFollowSaveState(state);
+    if (token !== autoFollowToken || !state.enabled) return;
+    location.href = state.currentPost?.url || AUTO_FOLLOW_SOURCE;
+  };
+  const autoFollowProcessProfile = async (state, token) => {
+    const candidate = state.currentCandidate;
+    if (!candidate || token !== autoFollowToken) return;
+    const profileRoot = document.querySelector("main") || document.body;
+    if (!autoFollowIsVerified(profileRoot)) {
+      state.currentCandidate = null;
+      state.commentIndex = Number(state.commentIndex || 0) + 1;
+      state.phase = "post";
+      await autoFollowSaveState(state);
+      location.href = state.currentPost?.url || AUTO_FOLLOW_SOURCE;
+      return;
+    }
+    const button = autoFollowControl(profileRoot);
+    if (button && !autoFollowAlreadyFollowing(button)) {
+      button.click();
+      await autoFollowSleep(900, token);
+      state.followedInWindow = Number(state.followedInWindow || 0) + 1;
+      state.followedInPost = Number(state.followedInPost || 0) + 1;
+      state.currentPeople = [
+        ...(state.currentPeople || []),
+        { name: candidate.name || candidate.handle, handle: `@${candidate.handle}`, followedAt: Date.now() },
+      ];
+    }
+    state.currentCandidate = null;
+    state.commentIndex = Number(state.commentIndex || 0) + 1;
+    state.phase = "post";
+    await autoFollowSaveState(state);
+    if (state.followedInWindow >= state.targetLimit) {
+      state.nextRunAt = Date.now() + 20 * 60 * 1000;
+      state.phase = "waiting";
+      await autoFollowSaveState(state);
+      return autoFollowWait(state, token);
+    }
+    location.href = state.currentPost?.url || AUTO_FOLLOW_SOURCE;
+  };
+  const autoFollowProcessPost = async (state, token) => {
+    if (!state.currentPost || token !== autoFollowToken) return;
+    const onlyVietnamese = state.onlyVietnamese !== false;
+    if (
+      onlyVietnamese &&
+      state.currentPost.text &&
+      !autoFollowVietnamese(state.currentPost.text)
+    ) {
+      return autoFollowFinishPost(state, token, "Bỏ qua bài: nội dung bài không phải tiếng Việt.");
+    }
+    const all = await autoFollowScrollComments(state.currentPost.id, token),
+      currentOnlyVietnamese = state.onlyVietnamese !== false;
+    state.comments = all.filter(
+      (comment) => !currentOnlyVietnamese || autoFollowVietnamese(comment.text),
+    );
+    state.currentTotal = state.comments.length;
+    state.commentIndex = Number(state.commentIndex || 0);
+    await autoFollowSaveState(state);
+    if (!state.comments.length) {
+      return autoFollowFinishPost(state, token, "Bỏ qua bài: không có bình luận tiếng Việt phù hợp.");
+    }
+    const articles = [...document.querySelectorAll('article[data-testid="tweet"]')];
+    while (state.commentIndex < state.comments.length && token === autoFollowToken) {
+      if (state.followedInWindow >= state.targetLimit) {
+        state.nextRunAt = Date.now() + 20 * 60 * 1000;
+        state.phase = "waiting";
+        await autoFollowSaveState(state);
+        return autoFollowWait(state, token);
+      }
+      const comment = state.comments[state.commentIndex],
+        article = articles.find((node) => autoFollowAuthor(node)?.handle === comment.handle),
+        button = autoFollowControl(article);
+      if (button) {
+        button.click();
+        await autoFollowSleep(900, token);
+        state.followedInWindow = Number(state.followedInWindow || 0) + 1;
+        state.followedInPost = Number(state.followedInPost || 0) + 1;
+        state.currentPeople = [
+          ...(state.currentPeople || []),
+          { name: comment.handle, handle: `@${comment.handle}`, followedAt: Date.now() },
+        ];
+        state.commentIndex += 1;
+        await autoFollowSaveState(state);
+        autoFollowSend({ state, status: `Đã follow @${comment.handle} · ${state.followedInWindow}/${state.targetLimit} lượt này.` });
+        continue;
+      }
+      state.currentCandidate = comment;
+      state.phase = "profile";
+      await autoFollowSaveState(state);
+      location.href = comment.profileUrl;
+      return;
+    }
+    await autoFollowFinishPost(state, token, `Bài ${state.currentPost.author} · đã follow ${state.followedInPost}/${state.currentTotal} người.`);
+  };
+  const autoFollowProcessSource = async (state, token) => {
+    if (!(await autoFollowSelectSourceTab(token))) {
+      autoFollowSend({ state, status: "Không tìm thấy tab Nhiều phản hồi nhất trên trang Top Posts." });
+      return;
+    }
+    if (token !== autoFollowToken || !state.enabled) return;
+    if (state.nextRunAt && state.nextRunAt > Date.now()) return autoFollowWait(state, token);
+    if (!Array.isArray(state.queue) || !state.queue.length || state.postIndex >= state.queue.length) {
+      state.queue = await autoFollowCollectPosts(token);
+      state.postIndex = 0;
+      if (!state.queue.length) {
+        autoFollowSend({ state, status: "Chưa tìm thấy bài trong Top Posts." });
+        return;
+      }
+      await autoFollowSaveState(state);
+    }
+    let skippedNonVietnamese = 0;
+    while (state.onlyVietnamese && state.postIndex < state.queue.length) {
+      const candidate = state.queue[state.postIndex];
+      if (!candidate?.text || autoFollowVietnamese(candidate.text)) break;
+      state.postIndex += 1;
+      skippedNonVietnamese += 1;
+    }
+    if (skippedNonVietnamese) await autoFollowSaveState(state);
+    if (state.postIndex >= state.queue.length) {
+      autoFollowSend({
+        state,
+        status: "Đã bỏ qua các bài không có nội dung tiếng Việt trong lượt này.",
+      });
+      return;
+    }
+    state.currentPost = state.queue[state.postIndex];
+    state.phase = "post";
+    state.comments = [];
+    state.commentIndex = 0;
+    state.followedInPost = 0;
+    state.currentPeople = [];
+    await autoFollowSaveState(state);
+    autoFollowSend({ state, status: `Đang mở bài ${state.postIndex + 1}/${state.queue.length}: ${state.currentPost.text || state.currentPost.author}` });
+    location.href = state.currentPost.url;
+  };
+  const autoFollowLoop = async (options = {}) => {
+    if (autoFollowBusy) return;
+    autoFollowBusy = true;
+    const token = ++autoFollowToken;
+    let state = await autoFollowReadState();
+    const restoring = options.restore === true;
+    if (!restoring) {
+      state = {
+        ...(state || {}),
+        phase: "source",
+        queue: [],
+        postIndex: 0,
+        currentPost: null,
+        comments: [],
+        commentIndex: 0,
+        currentCandidate: null,
+        followedInPost: 0,
+        currentPeople: [],
+        currentTotal: 0,
+        nextRunAt: 0,
+      };
+    }
+    state = {
+      enabled: true,
+      onlyVietnamese:
+        options.onlyVietnamese !== undefined
+          ? options.onlyVietnamese !== false
+          : state?.onlyVietnamese !== false,
+      phase: state?.phase || "source",
+      queue: state?.queue || [],
+      postIndex: Number(state?.postIndex || 0),
+      currentPost: state?.currentPost || null,
+      comments: state?.comments || [],
+      commentIndex: Number(state?.commentIndex || 0),
+      followedInWindow: Number(state?.followedInWindow || 0),
+      targetLimit: Number(state?.targetLimit) >= 12 ? Number(state.targetLimit) : 12 + Math.floor(Math.random() * 4),
+      nextRunAt: Number(state?.nextRunAt || 0),
+      logs: Array.isArray(state?.logs) ? state.logs : [],
+      currentPeople: state?.currentPeople || [],
+      followedInPost: Number(state?.followedInPost || 0),
+      currentTotal: Number(state?.currentTotal || 0),
+      currentCandidate: state?.currentCandidate || null,
+    };
+    await autoFollowSaveState(state);
+    autoFollowSend({ state, status: "Tự động follow đang chạy." });
+    try {
+      if (!autoFollowIsSource()) {
+        if (state.phase === "profile" && state.currentCandidate) return autoFollowProcessProfile(state, token);
+        if (state.phase === "post" && state.currentPost) return autoFollowProcessPost(state, token);
+        location.href = AUTO_FOLLOW_SOURCE;
+        return;
+      }
+      if (state.phase === "waiting") return autoFollowWait(state, token);
+      return autoFollowProcessSource(state, token);
+    } finally {
+      autoFollowBusy = false;
+    }
+  };
+  const autoFollowStop = async () => {
+    autoFollowToken++;
+    autoFollowBusy = false;
+    const state = (await autoFollowReadState()) || {};
+    state.enabled = false;
+    state.phase = "stopped";
+    await autoFollowSaveState(state);
+    autoFollowSend({ state, status: "Đã dừng tự động follow." });
+  };
   addEventListener(
     "click",
     (event) => {
@@ -226,6 +684,22 @@
   );
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const mode = currentMode();
+    if (message?.type === "autoFollowStart") {
+      autoFollowLoop({ onlyVietnamese: message.onlyVietnamese !== false, restore: message.restore === true });
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message?.type === "autoFollowStop") {
+      autoFollowStop();
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message?.type === "autoFollowIdentity") {
+      autoFollowReadState().then((state) =>
+        sendResponse({ ok: true, enabled: state?.enabled === true, running: autoFollowBusy, state }),
+      );
+      return true;
+    }
     if (message?.type === "followPageInfo") {
       sendResponse({ ok: !!mode, mode });
       return;
@@ -302,4 +776,7 @@
       return true;
     }
   });
+  try {
+    chrome.runtime.sendMessage({ type: "autoFollowReady" }).catch(() => {});
+  } catch {}
 })();

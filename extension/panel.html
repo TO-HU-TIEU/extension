@@ -403,6 +403,31 @@
       </section>
     </main>
     <main id="followWorkspace" hidden>
+      <section class="panel-card follow-card auto-follow-card">
+        <div class="section-head">
+          <div class="panel-copy">
+            <h2>Tự động follow</h2>
+            <small>Follow người chưa theo dõi trong Top Posts 24 giờ</small>
+          </div>
+          <label class="switch" title="Bật tự động follow">
+            <input id="autoFollowToggle" type="checkbox" />
+            <span></span>
+          </label>
+        </div>
+        <div class="auto-follow-options">
+          <label class="auto-follow-option">
+            <input id="autoFollowVietnamese" type="checkbox" checked />
+            <span>Chỉ follow người Việt</span>
+          </label>
+          <span class="auto-follow-limit">Mỗi lượt 12–15 người · nghỉ 20 phút</span>
+        </div>
+        <div id="autoFollowStatus" class="hint" role="status">Đang tắt</div>
+        <button id="autoFollowStop" class="danger auto-follow-stop" type="button" hidden>Dừng tự động follow</button>
+        <details class="auto-follow-log-details">
+          <summary>Nhật ký lượt follow</summary>
+          <div id="autoFollowLog" class="auto-follow-log"></div>
+        </details>
+      </section>
       <section class="panel-card follow-card">
         <div class="section-head">
           <div class="panel-copy">

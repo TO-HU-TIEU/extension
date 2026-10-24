@@ -140,7 +140,7 @@
     if (!article) return false;
     if (
       article.querySelector(
-        '[data-testid="placementTracking"],[data-testid*="promoted" i],[data-testid*="sponsor" i]',
+        '[data-testid*="promoted" i],[data-testid*="sponsor" i]',
       )
     )
       return true;
@@ -183,25 +183,32 @@
     });
   }
   function applyAdHiding() {
-    document.documentElement.classList.toggle("xra-hide-ads-enabled", hideAdsEnabled);
-    // Limit filtering to timelines and a status conversation. The exact target
-    // post is always preserved; only posts carrying explicit ad markers qualify.
-    if (
-      !/^\/(?:home|explore|search)(?:\/|$)|^\/[^/]+\/status\/\d+(?:\/|$)/i.test(location.pathname)
-    )
-      return;
-    const currentId = location.pathname.match(/\/status\/(\d+)/)?.[1],
-      root = currentId ? articleFor(currentId) : null,
-      isHome = /^\/home(?:\/|$)/i.test(location.pathname);
-    if (!hideAdsEnabled && isHome) {
+    // Ẩn quảng cáo chỉ áp dụng cho timeline Home. Search, trang bài viết,
+    // phản hồi và các màn hình khác phải giữ nguyên nội dung X.
+    const isHome = /^\/home(?:\/|$)/i.test(location.pathname);
+    if (!isHome) {
+      document.documentElement.classList.remove("xra-hide-ads-enabled");
       for (const [article, placeholder] of removedHomeAds) {
         if (placeholder.isConnected) placeholder.replaceWith(article);
         removedHomeAds.delete(article);
       }
+      removedHomeAds.clear();
+      for (const article of document.querySelectorAll('article[data-testid="tweet"]')) {
+        article.classList.remove("xra-hidden-ad");
+      }
+      return;
+    }
+    document.documentElement.classList.toggle("xra-hide-ads-enabled", hideAdsEnabled);
+    if (!hideAdsEnabled) {
+      for (const [article, placeholder] of removedHomeAds) {
+        if (placeholder.isConnected) placeholder.replaceWith(article);
+        removedHomeAds.delete(article);
+      }
+      removedHomeAds.clear();
     }
     for (const article of [...document.querySelectorAll('article[data-testid="tweet"]')]) {
-      const shouldHide = article !== root && hideAdsEnabled && promotedArticle(article);
-      if (isHome && shouldHide) {
+      const shouldHide = hideAdsEnabled && promotedArticle(article);
+      if (shouldHide) {
         if (!removedHomeAds.has(article)) {
           const placeholder = document.createComment("xra-hidden-ad");
           article.before(placeholder);
@@ -1438,7 +1445,11 @@
       // Other triggers (autoSuggest, style changes, or a second click) must
       // not start a competing request while that flow is active. The auto
       // loop sets this short-lived flag only for its deliberate click.
-      if (globalThis.__assistantAutoFlowRunning === true && !globalThis.__assistantAutoFlowRequest)
+      if (
+        globalThis.__assistantAutoFlowRunning === true &&
+        globalThis.__assistantAutoFlowPaused !== true &&
+        !globalThis.__assistantAutoFlowRequest
+      )
         return;
       if (running) {
         pending = true;

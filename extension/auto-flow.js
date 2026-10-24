@@ -21,6 +21,33 @@
   };
   const isInvalidatedContext = (error) =>
     /extension context invalidated/i.test(String(error?.message || error || ""));
+  // X can reject a send attempt with a page-level anti-automation warning.
+  // Treat that as a terminal condition for this run. Retrying or clicking the
+  // same controls again only increases the chance of a longer account block.
+  const readAutomationBlockNotice = () => {
+    const patterns = [
+      /yêu cầu này\s+trông\s+giống\s+như\s+(?:được\s+)?tự\s+động/i,
+      /trông\s+giống\s+như\s+được\s+tự\s+động/i,
+      /to\s+protect\s+our\s+users/i,
+      /this\s+request\s+looks\s+automated/i,
+      /không\s+thể\s+hoàn\s+tất\s+hành\s+động\s+này\s+ngay\s+bây\s+giờ/i,
+      /hãy\s+thử\s+chụp\s+một\s+tấm\s+mới/i,
+    ];
+    const candidates = [
+      ...document.querySelectorAll(
+        '[role="alert"], [aria-live], [data-testid*="toast" i], [data-testid*="error" i]',
+      ),
+    ];
+    const bodyText = document.body?.innerText || "";
+    for (const value of [
+      ...candidates.map((node) => node.innerText || node.textContent || ""),
+      bodyText,
+    ]) {
+      const text = String(value).replace(/\s+/gu, " ").trim();
+      if (text && patterns.some((pattern) => pattern.test(text))) return text.slice(0, 320);
+    }
+    return "";
+  };
   const runtimeAssetUrl = (path) => {
     try {
       return chrome.runtime.getURL(path);
@@ -48,6 +75,7 @@
       activeRunSegmentStartedAt = Date.now();
     }
     memory.isPaused = nextPaused;
+    globalThis.__assistantAutoFlowPaused = memory.isPaused;
     memory.runState = memory.isPaused ? "paused" : running ? "running" : memory.runState;
     syncPauseButton();
     const status = document.querySelector("#assistant-auto-dashboard [data-auto-session-status]");
@@ -276,6 +304,61 @@
     memory.autoMinGapMs = value * (unit === "minutes" ? 60_000 : 1_000);
     return { value, unit };
   };
+  const dailyReplyDayKey = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  };
+  const readDailyReplyLimit = () => {
+    const value = Math.max(
+      1,
+      Math.min(5_000, Number(localStorage.getItem("assistantAutoDailyReplyLimit")) || 500),
+    );
+    memory.autoDailyReplyLimit = value;
+    return value;
+  };
+  const readDailyReplyCount = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("assistantAutoDailyReplyCount") || "null");
+      return saved?.day === dailyReplyDayKey() ? Math.max(0, Number(saved.count) || 0) : 0;
+    } catch {
+      return 0;
+    }
+  };
+  const recordDailyReply = () => {
+    const next = { day: dailyReplyDayKey(), count: readDailyReplyCount() + 1 };
+    try {
+      localStorage.setItem("assistantAutoDailyReplyCount", JSON.stringify(next));
+    } catch {}
+    return next.count;
+  };
+  const configureDailyReplyLimitControl = (box) => {
+    if (box.querySelector("[data-auto-daily-limit-control]")) return;
+    const vietnameseFilter = box.querySelector("[data-auto-vietnamese]")?.closest("label");
+    if (!vietnameseFilter) return;
+    const setting = document.createElement("label");
+    setting.dataset.autoDailyLimitControl = "";
+    setting.style.cssText =
+      "display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = "5000";
+    input.step = "1";
+    input.dataset.autoDailyLimit = "";
+    input.setAttribute("aria-label", "Giới hạn trả lời mỗi ngày");
+    input.style.cssText =
+      "width:84px;min-width:84px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const sync = () => {
+      const value = Math.max(1, Math.min(5000, Number(input.value) || 500));
+      input.value = String(value);
+      memory.autoDailyReplyLimit = value;
+      localStorage.setItem("assistantAutoDailyReplyLimit", String(value));
+    };
+    input.value = String(readDailyReplyLimit());
+    input.addEventListener("change", sync);
+    setting.append(document.createTextNode("Giới hạn trả lời/ngày:"), input);
+    vietnameseFilter.before(setting);
+  };
   const configureMinimumGapControl = (box) => {
     if (box.querySelector("[data-auto-min-gap-control]")) return;
     const speedInput = box.querySelector("[data-auto-speed]"),
@@ -372,6 +455,11 @@
     let editor = null;
     let send = null;
     for (let attempt = 0; attempt < 30 && running; attempt++) {
+      const blockNotice = readAutomationBlockNotice();
+      if (blockNotice) {
+        memory.autoBlockNotice = blockNotice;
+        return false;
+      }
       if (domHasOwnReply(handle)) return true;
       editor = findEditor();
       const editorText = normalize(editor?.innerText || editor?.textContent);
@@ -382,9 +470,19 @@
       await pauseSleep(250);
     }
     if (!running || !editor || !send || send.disabled) return false;
+    const beforeSendBlock = readAutomationBlockNotice();
+    if (beforeSendBlock) {
+      memory.autoBlockNotice = beforeSendBlock;
+      return false;
+    }
     send.click();
     for (let attempt = 0; attempt < 32 && running; attempt++) {
       await pauseSleep(250);
+      const blockNotice = readAutomationBlockNotice();
+      if (blockNotice) {
+        memory.autoBlockNotice = blockNotice;
+        return false;
+      }
       if (domHasOwnReply(handle)) return true;
       const currentEditor = findEditor();
       const remaining = normalize(currentEditor?.innerText || currentEditor?.textContent);
@@ -586,6 +684,7 @@
     if (box) {
       configureSpeedControl(box);
       configureMinimumGapControl(box);
+      configureDailyReplyLimitControl(box);
       syncPauseButton();
       return box;
     }
@@ -664,6 +763,7 @@
     document.documentElement.appendChild(box);
     configureSpeedControl(box);
     configureMinimumGapControl(box);
+    configureDailyReplyLimitControl(box);
     const tabBadge = document.createElement("span");
     memory.tabBadge ||= Math.random().toString(36).slice(2, 6).toUpperCase();
     tabBadge.dataset.autoTabBadge = "";
@@ -860,6 +960,7 @@
   function stop(reason = "Đã dừng") {
     running = false;
     memory.isPaused = false;
+    globalThis.__assistantAutoFlowPaused = false;
     memory.isAutoResting = false;
     memory.autoRestUntil = 0;
     activeRunSegmentStartedAt = 0;
@@ -871,8 +972,22 @@
     dashboard();
     notifyPanel(false);
   }
+  async function stopForAutomationBlock(item, notice = "") {
+    if (item) {
+      try {
+        await coordinate("release", item);
+      } catch {}
+    }
+    const detail = notice ? ` (${notice.slice(0, 180)})` : "";
+    stop(`Đã dừng: X chặn thao tác tự động${detail}`);
+  }
   async function loop() {
     if (!running) return;
+    const initialBlockNotice = readAutomationBlockNotice();
+    if (initialBlockNotice) {
+      await stopForAutomationBlock(null, initialBlockNotice);
+      return;
+    }
     if (/^\/compose\/post(?:\/|$)/i.test(location.pathname)) {
       stop("Đã dừng: phát hiện trình soạn thảo X");
       return;
@@ -887,10 +1002,15 @@
       done = new Set([...p, ...s].map((x) => x.id)),
       me = own(),
       excludedAuthors = await excludedAuthorSet();
+    const dailyLimit = readDailyReplyLimit();
+    if (readDailyReplyCount() >= dailyLimit) {
+      stop(`Đã dừng: đạt giới hạn ${dailyLimit} trả lời/ngày`);
+      return;
+    }
     for (const article of document.querySelectorAll('article[data-testid="tweet"]')) {
       if (
         article.querySelector(
-          '[data-testid="placementTracking"], [data-testid="placementTracking"]',
+          '[data-testid*="promoted" i],[data-testid*="sponsor" i]',
         ) ||
         /được quảng bá|promoted/i.test(article.textContent || "")
       )
@@ -1087,6 +1207,11 @@
           const suggestionDeadline = Date.now() + 75_000;
           while (running && !suggestion && Date.now() < suggestionDeadline) {
             await pauseSleep(flowDelay(700));
+            const blockNotice = readAutomationBlockNotice();
+            if (blockNotice) {
+              await stopForAutomationBlock(item, blockNotice);
+              return;
+            }
             suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
             const errorNode = document.querySelector(".xra-error,[role=alert],.xra-status-error");
             providerError = errorNode?.textContent?.trim() || "";
@@ -1094,6 +1219,11 @@
           }
           if (!suggestion && !providerError)
             providerError = "Gợi ý quá thời gian chờ · request có thể đã bị treo";
+        }
+        const providerBlockNotice = readAutomationBlockNotice();
+        if (providerBlockNotice) {
+          await stopForAutomationBlock(item, providerBlockNotice);
+          return;
         }
         if (providerError) {
           const retryButton = document.querySelector(
@@ -1115,6 +1245,11 @@
             const retryDeadline = Date.now() + 75_000;
             while (running && Date.now() < retryDeadline) {
               await pauseSleep(flowDelay(500));
+              const blockNotice = readAutomationBlockNotice();
+              if (blockNotice) {
+                await stopForAutomationBlock(item, blockNotice);
+                return;
+              }
               const retryError =
                 document
                   .querySelector(".xra-error,[role=alert],.xra-status-error")
@@ -1188,6 +1323,11 @@
             await coordinate("release", item);
             return;
           }
+          const beforeSelectBlock = readAutomationBlockNotice();
+          if (beforeSelectBlock) {
+            await stopForAutomationBlock(item, beforeSelectBlock);
+            return;
+          }
           const selectedReply =
             suggestion.querySelector(":scope > span:first-child")?.textContent?.trim() ||
             suggestion.textContent?.trim() ||
@@ -1195,6 +1335,12 @@
           suggestion.click();
           const submitted = await submitSelectedReply(selectedReply, myHandle);
           if (!submitted) {
+            const blockNotice = memory.autoBlockNotice || readAutomationBlockNotice();
+            if (blockNotice) {
+              memory.autoBlockNotice = "";
+              await stopForAutomationBlock(item, blockNotice);
+              return;
+            }
             const reason = "Không xác nhận được nút Trả lời sau khi chọn gợi ý";
             log(`Lỗi: ${reason}`);
             await coordinate("release", item);
@@ -1208,9 +1354,16 @@
           await coordinate("sent", item);
           await coordinate("release", item);
           memory.consecutiveFailures = 0;
+          const dailyCount = recordDailyReply();
           p.push({ ...item, completedAt: Date.now() });
           save(processedKey, p);
-          log("Hoàn thành [Total done: " + p.length + " | Total skip: " + s.length + "]");
+          log(
+            "Hoàn thành [Total done: " +
+              p.length +
+              " | Total skip: " +
+              s.length +
+              ` | Hôm nay: ${dailyCount}/${readDailyReplyLimit()}]`,
+          );
           await pauseSleep(1800);
         }
       }
@@ -1246,6 +1399,7 @@
     memory.skipped = read(skippedKey);
     activeRunSegmentStartedAt = memory.isAutoResting ? 0 : Date.now();
     memory.isPaused = false;
+    globalThis.__assistantAutoFlowPaused = false;
     memory.runState = "running";
     running = true;
     globalThis.__assistantAutoFlowRunning = true;
@@ -1287,6 +1441,7 @@
       if (m?.type !== "autoReplyFlow") return;
       stop("Đã reset phiên");
       if (m.enabled) {
+        const restoredPaused = m.restore === true && m.paused === true;
         sessionStart = Date.now();
         memory.autoRestEnabled = localStorage.getItem("assistantAutoRestEnabled") === "true";
         memory.autoRestEveryMinutes = Math.max(
@@ -1295,16 +1450,18 @@
         );
         memory.runId = createRunId();
         memory.runStartedAt = sessionStart;
-        memory.runState = "running";
-        memory.isPaused = false;
+        memory.runState = restoredPaused ? "paused" : "running";
+        memory.isPaused = restoredPaused;
+        globalThis.__assistantAutoFlowPaused = restoredPaused;
         memory.isAutoResting = false;
         memory.autoRestUntil = 0;
         activeRunElapsedMs = 0;
-        activeRunSegmentStartedAt = sessionStart;
+        activeRunSegmentStartedAt = restoredPaused ? 0 : sessionStart;
         processedKey = runStorageKey(memory.runId, "processed");
         skippedKey = runStorageKey(memory.runId, "skipped");
         memory.sessionFailures = 0;
         memory.consecutiveFailures = 0;
+        memory.autoBlockNotice = "";
         memory.processed = [];
         memory.skipped = [];
         memory.logs = [];
@@ -1314,10 +1471,17 @@
         globalThis.__assistantAutoFlowRunning = true;
         document.dispatchEvent(new Event("assistant-auto-flow-state"));
         notifyPanel(true);
-        log(`Bắt đầu phiên tự động · ID ${memory.runId}`);
+        log(
+          restoredPaused
+            ? `Khôi phục phiên tự động đang tạm dừng · ID ${memory.runId}`
+            : `Bắt đầu phiên tự động · ID ${memory.runId}`,
+        );
         dashboardView();
         dashboard();
         (async () => {
+          // A restored paused session must not navigate or process anything
+          // until the user explicitly presses Continue.
+          if (restoredPaused && !(await waitIfPaused())) return;
           if (!location.href.includes("/home") && location.pathname !== "/") {
             const currentAuthor = location.pathname
                 .match(/^\/([^/]+)\/status\//i)?.[1]

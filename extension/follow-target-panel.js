@@ -4,6 +4,10 @@
     /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/(?:following|followers)\/?(?:\?|$)/i.test(
       url || "",
     );
+  const isAutoFollowUrl = (url) =>
+    /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/i\/jf\/creators\/inspiration\/top_posts(?:\?|$)/i.test(
+      url || "",
+    );
   chrome.tabs.query = async (query) => {
     const tabs = await originalQuery(query);
     if (
@@ -12,10 +16,11 @@
       !document.getElementById("followModule")?.classList.contains("active")
     )
       return tabs;
-    const active = tabs.find((tab) => isFollowUrl(tab.url));
+    const autoFollow = document.getElementById("autoFollowToggle")?.checked;
+    const active = tabs.find((tab) => (autoFollow ? isAutoFollowUrl(tab.url) : isFollowUrl(tab.url)));
     if (active) return [active];
     const all = await originalQuery({ currentWindow: true });
-    const follow = all.find((tab) => isFollowUrl(tab.url));
+    const follow = all.find((tab) => (autoFollow ? isAutoFollowUrl(tab.url) : isFollowUrl(tab.url)));
     return follow ? [follow] : tabs;
   };
 })();

@@ -26,7 +26,9 @@ const AUTO_FLOW_COMMENT_GAP_MS = 10_707;
 // wrong tab.
 const panelTargetsByWindow = new Map();
 const AUTO_FLOW_TABS_KEY = "autoFlowTabsV1";
+const AUTO_FOLLOW_TABS_KEY = "autoFollowTabsV1";
 let autoFlowTabs = {};
+let autoFollowTabs = {};
 const extensionStorage = globalThis.chrome?.storage?.local;
 const autoFlowTabsReady = extensionStorage?.get
   ? extensionStorage
@@ -37,15 +39,29 @@ const autoFlowTabsReady = extensionStorage?.get
       })
       .catch(() => {})
   : Promise.resolve();
+const autoFollowTabsReady = extensionStorage?.get
+  ? extensionStorage
+      .get(AUTO_FOLLOW_TABS_KEY)
+      .then((stored) => {
+        const value = stored?.[AUTO_FOLLOW_TABS_KEY];
+        if (value && typeof value === "object") autoFollowTabs = value;
+      })
+      .catch(() => {})
+  : Promise.resolve();
 const persistAutoFlowTabs = () =>
   extensionStorage?.set
     ? extensionStorage.set({ [AUTO_FLOW_TABS_KEY]: autoFlowTabs }).catch(() => {})
     : Promise.resolve();
+const persistAutoFollowTabs = () =>
+  extensionStorage?.set
+    ? extensionStorage.set({ [AUTO_FOLLOW_TABS_KEY]: autoFollowTabs }).catch(() => {})
+    : Promise.resolve();
 chrome.runtime.onInstalled?.addListener((details) => {
   if (details?.reason !== "update") return;
   autoFlowTabsReady
+    .then(() => autoFollowTabsReady)
     .then(async () => {
-      for (const [rawTabId, state] of Object.entries(autoFlowTabs)) {
+      for (const [rawTabId, state] of Object.entries({ ...autoFlowTabs, ...autoFollowTabs })) {
         if (!state?.enabled) continue;
         const tabId = Number(rawTabId);
         const tab = await chrome.tabs.get(tabId).catch(() => null);
@@ -67,6 +83,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           .then((tab) => {
             autoFlowTabs[key] = {
               enabled: true,
+              paused: false,
               updatedAt: Date.now(),
               autoDiscardableBefore: tab?.autoDiscardable !== false,
             };
@@ -86,15 +103,80 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (message?.type === "autoFollowSetTab") {
+    const tabId = Number(message.tabId);
+    if (tabId) {
+      const key = String(tabId);
+      if (message.enabled) {
+        autoFollowTabs[key] = {
+          enabled: true,
+          onlyVietnamese: message.onlyVietnamese !== false,
+          updatedAt: Date.now(),
+        };
+        chrome.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
+      } else {
+        delete autoFollowTabs[key];
+      }
+      persistAutoFollowTabs();
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message?.type === "autoFollowReady" && sender.tab?.id) {
+    const tabId = String(sender.tab.id);
+    autoFollowTabsReady.then(() => {
+      const state = autoFollowTabs[tabId];
+      if (state?.enabled)
+        chrome.tabs
+          .sendMessage(sender.tab.id, {
+            type: "autoFollowStart",
+            enabled: true,
+            restore: true,
+            onlyVietnamese: state.onlyVietnamese !== false,
+          })
+          .catch(() => {});
+    });
+    sendResponse({ ok: true, enabled: !!autoFollowTabs[tabId]?.enabled });
+    return false;
+  }
+  if (message?.type === "autoFollowProgress") {
+    chrome.runtime
+      .sendMessage({ ...message, sourceTabId: sender.tab?.id || null })
+      .catch(() => {});
+    return false;
+  }
+  if (message?.type === "autoFlowPauseState" && sender.tab?.id) {
+    const key = String(sender.tab.id);
+    autoFlowTabsReady.then(() => {
+      const current = autoFlowTabs[key];
+      if (!current?.enabled) return;
+      autoFlowTabs[key] = {
+        ...current,
+        paused: !!message.paused,
+        updatedAt: Date.now(),
+      };
+      persistAutoFlowTabs();
+    });
+    return false;
+  }
   if (message?.type === "autoFlowReady" && sender.tab?.id) {
     const tabId = String(sender.tab.id);
     autoFlowTabsReady.then(() => {
       if (autoFlowTabs[tabId]?.enabled)
         chrome.tabs
-          .sendMessage(sender.tab.id, { type: "autoReplyFlow", enabled: true, restore: true })
+          .sendMessage(sender.tab.id, {
+            type: "autoReplyFlow",
+            enabled: true,
+            restore: true,
+            paused: !!autoFlowTabs[tabId].paused,
+          })
           .catch(() => {});
     });
-    sendResponse({ ok: true, enabled: !!autoFlowTabs[tabId]?.enabled });
+    sendResponse({
+      ok: true,
+      enabled: !!autoFlowTabs[tabId]?.enabled,
+      paused: !!autoFlowTabs[tabId]?.paused,
+    });
     return false;
   }
   if (message?.type === "openPanel" && sender.tab?.id && sender.tab?.windowId !== undefined) {
@@ -118,6 +200,10 @@ chrome.tabs?.onRemoved?.addListener((tabId) => {
   if (autoFlowTabs[String(tabId)]) {
     delete autoFlowTabs[String(tabId)];
     persistAutoFlowTabs();
+  }
+  if (autoFollowTabs[String(tabId)]) {
+    delete autoFollowTabs[String(tabId)];
+    persistAutoFollowTabs();
   }
 });
 let autoFlowCoordination = { leases: {}, accountTail: {}, accountLastSubmit: {} };

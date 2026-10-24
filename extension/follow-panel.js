@@ -10,7 +10,10 @@
     mode = "following",
     filters = new Set(),
     sortMode = "default",
-    running = false;
+    running = false,
+    autoFollowTabId = null,
+    autoFollowState = null;
+  const AUTO_FOLLOW_SOURCE = "https://x.com/i/jf/creators/inspiration/top_posts";
   const stateKey = (m, p) => `${m}:${p}`,
     normalizeHandle = (value) =>
       String(value || "")
@@ -53,6 +56,120 @@
     /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/(?:following|followers)\/?(?:\?|$)/i.test(
       url || "",
     );
+  const autoFollowValid = (url) =>
+    /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/i\/jf\/creators\/inspiration\/top_posts(?:\?|$)/i.test(
+      url || "",
+    );
+  const escapeHtml = (value) =>
+    String(value || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  const renderAutoFollowLog = (logs = []) => {
+    const node = $("autoFollowLog");
+    if (!node) return;
+    node.replaceChildren(
+      ...logs.slice().reverse().map((entry) => {
+        const details = document.createElement("details"),
+          summary = document.createElement("summary"),
+          list = document.createElement("ul");
+        summary.textContent = `${entry.author || "unknown"} · ${entry.followed || 0}/${entry.total || 0} · ${entry.postText || entry.postId || "Bài viết"}`;
+        list.innerHTML = (entry.people || [])
+          .map((person) => `<li>${escapeHtml(person.name || person.handle)} (${escapeHtml(person.handle || "")}) · ${new Date(person.followedAt || Date.now()).toLocaleTimeString("vi-VN")}</li>`)
+          .join("");
+        details.append(summary, list);
+        return details;
+      }),
+    );
+  };
+  const renderAutoFollowState = (state, status) => {
+    autoFollowState = state || autoFollowState || {};
+    const toggle = $("autoFollowToggle"),
+      stop = $("autoFollowStop"),
+      statusNode = $("autoFollowStatus");
+    if (toggle && autoFollowState.enabled !== undefined) toggle.checked = !!autoFollowState.enabled;
+    if (stop) stop.hidden = !autoFollowState.enabled;
+    if (statusNode) statusNode.textContent = status || (autoFollowState.enabled ? "Đang chạy…" : "Đang tắt");
+    renderAutoFollowLog(autoFollowState.logs || []);
+  };
+  const waitForTabComplete = (tabId, timeout = 15000) =>
+    new Promise((resolve) => {
+      let finished = false;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      };
+      const listener = (id, change) => {
+        if (id === tabId && change.status === "complete") done();
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      setTimeout(done, timeout);
+    });
+  const ensureAutoFollowSourceTab = async (tab) => {
+    let current = await chrome.tabs.get(tab.id).catch(() => tab);
+    if (autoFollowValid(current?.url)) return current;
+    await chrome.tabs.update(tab.id, { url: AUTO_FOLLOW_SOURCE });
+    await waitForTabComplete(tab.id);
+    current = await chrome.tabs.get(tab.id).catch(() => tab);
+    return current;
+  };
+  const autoFollowStart = async () => {
+    const toggle = $("autoFollowToggle"),
+      onlyVietnamese = $("autoFollowVietnamese")?.checked !== false;
+    toggle.disabled = true;
+    try {
+      const tabs = await chrome.tabs.query({ currentWindow: true });
+      let tab = tabs.find((item) => autoFollowValid(item.url));
+      if (!tab)
+        tab =
+          tabs.find(
+            (item) =>
+              item.active && /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i.test(item.url || ""),
+          ) || tabs.find((item) => /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i.test(item.url || ""));
+      if (!tab) throw new Error("Mở một tab X trước khi bật tự động follow.");
+      autoFollowTabId = tab.id;
+      await chrome.runtime.sendMessage({
+        type: "autoFollowSetTab",
+        tabId: tab.id,
+        enabled: true,
+        onlyVietnamese,
+      });
+      tab = await ensureAutoFollowSourceTab(tab);
+      if (!autoFollowValid(tab.url)) throw new Error("Không xác nhận được tab Top Posts sau khi chuyển trang.");
+      try {
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["follow.js"] });
+      } catch {}
+      await chrome.tabs.sendMessage(tab.id, { type: "autoFollowStart", onlyVietnamese }).catch(() => {});
+      renderAutoFollowState({ ...(autoFollowState || {}), enabled: true }, "Đang mở Top Posts và chuẩn bị quét…");
+    } catch (error) {
+      if (toggle) toggle.checked = false;
+      renderAutoFollowState({ ...(autoFollowState || {}), enabled: false }, error.message || "Không thể bật tự động follow.");
+    } finally {
+      toggle.disabled = false;
+    }
+  };
+  const autoFollowStop = async () => {
+    const toggle = $("autoFollowToggle");
+    if (toggle) toggle.disabled = true;
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    const targets = tabs.filter((tab) => tab.id === autoFollowTabId || autoFollowValid(tab.url));
+    if (autoFollowTabId)
+      await chrome.runtime.sendMessage({ type: "autoFollowSetTab", tabId: autoFollowTabId, enabled: false }).catch(() => {});
+    await Promise.all(targets.map((tab) => chrome.tabs.sendMessage(tab.id, { type: "autoFollowStop" }).catch(() => {})));
+    autoFollowState = { ...(autoFollowState || {}), enabled: false, phase: "stopped" };
+    renderAutoFollowState(autoFollowState, "Đã dừng tự động follow.");
+    if (toggle) {
+      toggle.checked = false;
+      toggle.disabled = false;
+    }
+  };
+  const hydrateAutoFollow = async () => {
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    const source = tabs.find((tab) => autoFollowValid(tab.url));
+    if (!source?.id) return;
+    autoFollowTabId = source.id;
+    const result = await chrome.tabs.sendMessage(source.id, { type: "autoFollowIdentity" }).catch(() => null);
+    if (result?.state) renderAutoFollowState(result.state, result.state.enabled ? "Đang chạy…" : "Đang tắt");
+  };
   const active = () => {
     for (const id of ["replyModule", "contentModule", "quoteModule", "followModule"])
       $(id)?.classList.toggle("active", id === "followModule");
@@ -196,7 +313,32 @@
   $("followModule").onclick = () => {
     active();
     page();
+    hydrateAutoFollow().catch(() => {});
   };
+  $("autoFollowToggle")?.addEventListener("change", () => {
+    if ($("autoFollowToggle").checked) autoFollowStart();
+    else autoFollowStop();
+  });
+  $("autoFollowStop")?.addEventListener("click", () => autoFollowStop());
+  $("autoFollowVietnamese")?.addEventListener("change", async () => {
+    if (!$("autoFollowToggle")?.checked || !autoFollowTabId) return;
+    await chrome.runtime.sendMessage({
+      type: "autoFollowSetTab",
+      tabId: autoFollowTabId,
+      enabled: true,
+      onlyVietnamese: $("autoFollowVietnamese").checked,
+    });
+    chrome.tabs.sendMessage(autoFollowTabId, {
+      type: "autoFollowStart",
+      onlyVietnamese: $("autoFollowVietnamese").checked,
+    }).catch(() => {});
+  });
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "autoFollowProgress") return;
+    if (message.sourceTabId && autoFollowTabId && Number(message.sourceTabId) !== Number(autoFollowTabId)) return;
+    autoFollowTabId ||= message.sourceTabId || null;
+    renderAutoFollowState(message.state || {}, message.status);
+  });
   $("clearFollowList").onclick = () => {
     if (!confirm("Làm sạch danh sách hiện tại?")) return;
     if (recentView) {
