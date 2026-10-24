@@ -4,15 +4,18 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Assistant</title>
-    <link rel="stylesheet" href="panel-ui.css" />
+    <link rel="stylesheet" href="panel.css" />
+    <link rel="stylesheet" href="content-panel.css" />
+    <link rel="stylesheet" href="reply-ui.css" />
+    <link rel="stylesheet" href="panel-rhythm.css" />
   </head>
   <body>
     <header>
       <img class="logo assistant-mark" src="assets/logo.svg" alt="Assistant" />
-      <div>
+      <hgroup class="panel-copy">
         <h1>Assistant <small class="app-version">1.0.0</small></h1>
         <p id="connection"></p>
-      </div>
+      </hgroup>
       <button
         id="themeToggle"
         class="icon ghost theme-button"
@@ -46,28 +49,32 @@
     </div>
 
     <main id="workspace">
-      <details class="setup-card" open>
+      <details class="panel-card setup-card" open>
         <summary><span>Cài đặt nhanh</span><i data-icon="up" aria-hidden="true"></i></summary>
         <div class="setup-body">
           <span class="group-label">Khi mở bài</span>
           <div class="toggle-row">
-            <div><b>Đọc khi mở bài</b><small>Đọc bài khi mở liên kết chi tiết</small></div>
+            <div class="panel-copy">
+              <b>Đọc khi mở bài</b><small>Đọc bài khi mở liên kết chi tiết</small>
+            </div>
             <label class="switch"><input id="autoDetect" type="checkbox" /><span></span></label>
           </div>
           <div class="toggle-row">
-            <div><b>Gợi ý khi mở bài</b><small>Tạo ngay sau khi đọc bài</small></div>
+            <div class="panel-copy">
+              <b>Gợi ý khi mở bài</b><small>Tạo ngay sau khi đọc bài</small>
+            </div>
             <label class="switch"
               ><input id="panelAutoSuggest" type="checkbox" /><span></span
             ></label>
           </div>
           <div class="toggle-row">
-            <div>
+            <div class="panel-copy">
               <b>Trả lời ngay sau khi chọn</b><small>Đăng ngay thay vì chỉ điền nội dung</small>
             </div>
             <label class="switch"><input id="panelAutoReply" type="checkbox" /><span></span></label>
           </div>
           <div class="quick-grid">
-            <div class="style-field">
+            <div class="style-field panel-field">
               <span>Phong cách</span
               ><button id="panelStyleButton" class="style-open" type="button"></button
               ><select id="panelQuickStyle" hidden></select>
@@ -83,8 +90,8 @@
           ></textarea>
         </div>
       </details>
-      <section class="post-card reply-surface">
-        <div class="url-row">
+      <section class="panel-card post-card reply-surface">
+        <div class="url-row panel-row">
           <input id="postUrl" type="url" placeholder="Dán liên kết bài viết…" /><button
             id="clearUrl"
             class="clear-url"
@@ -94,9 +101,11 @@
             ×
           </button>
         </div>
-        <div class="post-author">
+        <div class="post-author panel-row">
           <img id="postAvatar" alt="" hidden />
-          <div><b id="postDisplayName">Chưa có bài viết</b><small id="postMeta"></small></div>
+          <div class="panel-copy">
+            <b id="postDisplayName">Chưa có bài viết</b><small id="postMeta"></small>
+          </div>
           <button id="read" class="icon" title="Tải lại bài viết"></button>
         </div>
         <div id="postPreview" class="post-preview" hidden></div>
@@ -107,7 +116,7 @@
           placeholder="Nội dung bài viết…"
         ></textarea>
         <p id="warning" class="warning" hidden></p>
-        <div class="actions reply-toolbar">
+        <div class="actions reply-toolbar panel-actions">
           <button
             id="generate"
             class="primary reply-tool reply-generate"
@@ -125,15 +134,15 @@
         </div>
       </section>
       <p id="status" role="status"></p>
-      <section id="results" class="results-compact reply-surface" hidden>
+      <section id="results" class="panel-card results-compact reply-surface" hidden>
         <h2>Gợi ý</h2>
         <div id="cards"></div>
       </section>
     </main>
     <main id="xWorkspace">
-      <section class="x-mode-card reply-live-preview">
+      <section class="panel-card x-mode-card reply-live-preview">
         <div class="section-head">
-          <div>
+          <div class="panel-copy">
             <span class="eyebrow">HIỂN THỊ</span>
             <h2>Gợi ý trả lời/phản hồi</h2>
           </div>
@@ -143,22 +152,60 @@
             ><input id="directReplyToggle" type="checkbox" /><span></span
           ></label>
         </div>
-        <div class="toggle-row compact-row">
-          <div><b>Tự động</b></div>
-          <label class="switch"><input id="autoReplyFlow" type="checkbox" /><span></span></label>
+        <div class="toggle-row compact-row auto-flow-row">
+          <div class="panel-copy">
+            <div class="auto-flow-label">
+              <b>Tự động</b>
+              <button
+                id="autoExcludedAuthorsToggle"
+                class="auto-exclusion-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="autoExcludedAuthorsBody"
+                title="Mở danh sách tài khoản tự động bỏ qua"
+                aria-label="Mở danh sách tài khoản tự động bỏ qua"
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <circle cx="10" cy="6.5" r="3" />
+                  <path d="M4.5 17a5.5 5.5 0 0 1 11 0" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="auto-flow-actions panel-actions">
+            <label class="switch"><input id="autoReplyFlow" type="checkbox" /><span></span></label>
+          </div>
+        </div>
+        <div id="autoExcludedAuthorsBody" class="auto-exclusion-expanded-row" hidden>
+          <div class="auto-exclusion-entry">
+            <input
+              id="autoExcludedAuthorInput"
+              type="text"
+              placeholder="@username hoặc liên kết X"
+              autocomplete="off"
+            />
+            <button
+              id="addAutoExcludedAuthor"
+              type="button"
+              aria-label="Thêm tài khoản bỏ qua"
+              title="Thêm"
+            >
+              +
+            </button>
+          </div>
+          <div id="autoExcludedAuthorsList" class="auto-exclusion-list" aria-live="polite"></div>
         </div>
         <div class="toggle-row compact-row">
-          <div><b>Ẩn quảng cáo</b></div>
+          <b>Ẩn quảng cáo</b>
           <label class="switch"><input id="hideAds" type="checkbox" /><span></span></label>
         </div>
       </section>
     </main>
     <div id="replySettings" class="module-settings">
-      <div data-reply-preferences></div>
-      <section class="config-card">
+      <section class="panel-card config-card">
         <div class="section-head">
-          <div><h2>Phong cách trả lời/phản hồi</h2></div>
-          <div class="tool-buttons">
+          <h2>Phong cách trả lời/phản hồi</h2>
+          <div class="tool-buttons panel-actions">
             <button
               id="newStyle"
               class="icon ghost"
@@ -183,14 +230,14 @@
             ><button id="cancelStyle" class="icon ghost" title="Huỷ tạo phong cách" hidden></button>
           </div>
         </div>
-        <div id="stylePickerField">
+        <div id="stylePickerField" class="panel-field">
           <label for="style">Phong cách</label
           ><button id="styleButton" class="style-open wide" type="button"></button
           ><select id="style" hidden></select>
         </div>
-        <div id="customStyleFields" hidden>
+        <div id="customStyleFields" class="panel-stack" hidden>
           <label for="styleName">Tên phong cách</label>
-          <div class="style-name-input">
+          <div class="style-name-input panel-row">
             <input id="styleName" placeholder="Nhập tên phong cách" /><button
               id="clearStyleName"
               class="icon ghost"
@@ -201,18 +248,25 @@
             ></button>
           </div>
         </div>
-        <div class="prompt-field">
-          <label class="prompt-label" for="stylePrompt">Prompt</label
-          ><textarea id="stylePrompt" rows="7" aria-label="Prompt"></textarea>
+        <div class="style-length-row panel-row">
+          <label for="styleMinWords">Độ dài gợi ý</label>
+          <span class="style-length-fields">
+            <input id="styleMinWords" type="number" min="1" max="100" value="6" aria-label="Số từ tối thiểu" />
+            <span>đến</span>
+            <input id="styleMaxWords" type="number" min="1" max="100" value="10" aria-label="Số từ tối đa" />
+            <span>từ</span>
+          </span>
         </div>
+        <label class="prompt-label" for="stylePrompt">Prompt</label
+        ><textarea id="stylePrompt" rows="7"></textarea>
       </section>
     </div>
-    <section id="toneSettings" class="config-card tone-settings">
+    <section id="toneSettings" class="panel-card config-card tone-settings">
       <div class="section-head">
-        <div>
+        <hgroup class="panel-copy">
           <h2>Tone người dùng</h2>
           <p class="hint">Chọn Nam hoặc Nữ để điều chỉnh xưng hô và góc nhìn.</p>
-        </div>
+        </hgroup>
       </div>
       <select id="replyTone" aria-label="Tone người dùng">
         <option value="">Chưa chọn</option>
@@ -230,23 +284,23 @@
     >
       <div class="style-backdrop" data-close-style></div>
       <section class="style-dialog">
-        <div class="style-dialog-head">
-          <div><h2 id="styleModalTitle">Chọn phong cách trả lời</h2></div>
+        <div class="style-dialog-head panel-row">
+          <h2 id="styleModalTitle">Chọn phong cách trả lời</h2>
           <button id="closeStyleModal" class="icon ghost" type="button" aria-label="Đóng"></button>
         </div>
         <div id="styleOptions" class="style-options"></div>
       </section>
     </div>
     <main id="contentWorkspace" hidden>
-      <div class="content-toolbar"><small id="contentScanInfo">Chưa bật quét</small></div>
+      <div class="content-toolbar panel-row"><small id="contentScanInfo">Chưa bật quét</small></div>
       <details id="contentSettings" class="module-settings">
         <summary>Nguồn content</summary>
-        <section class="config-card">
+        <section class="panel-card config-card">
           <div class="section-head">
-            <div><h2>Nguồn tự động quét</h2></div>
+            <h2>Nguồn tự động quét</h2>
           </div>
           <div class="toggle-row compact-row">
-            <div><b>Tự động quét content</b></div>
+            <div class="panel-copy"><b>Tự động quét content</b></div>
             <label class="switch"
               ><input id="contentScanEnabled" type="checkbox" /><span></span
             ></label>
@@ -273,16 +327,16 @@
       <p id="contentEmpty" class="content-empty"></p>
       <details class="content-manual">
         <summary>Thêm thủ công</summary>
-        <section class="content-card">
+        <section class="panel-card content-card">
           <div class="section-head">
-            <div>
+            <div class="panel-copy">
               <span class="eyebrow">CONTENT</span>
               <h2>Tạo bài</h2>
             </div>
             <button id="readNews" class="icon" title="Đọc trang đang mở"></button>
           </div>
           <label for="newsUrl">Link</label>
-          <div class="url-row">
+          <div class="url-row panel-row">
             <input id="newsUrl" type="url" placeholder="https://…" /><button
               id="loadNewsUrl"
               class="secondary compact"
@@ -302,7 +356,7 @@
           </button>
         </section>
       </details>
-      <section id="contentResult" hidden>
+      <section id="contentResult" class="panel-card" hidden>
         <div class="section-head">
           <h2>Bản nháp</h2>
           <button id="copyDraft" class="icon" title="Sao chép"></button>
@@ -311,10 +365,10 @@
       </section>
     </main>
     <main id="quoteWorkspace" hidden>
-      <section class="quote-card">
+      <section class="panel-card quote-card">
         <div class="section-head">
-          <div><h2>Phân tích - góc nhìn</h2></div>
-          <div class="tool-buttons">
+          <h2>Phân tích - góc nhìn</h2>
+          <div class="tool-buttons panel-actions">
             <button id="reloadQuoteDraft" class="icon" title="Tạo lại nội dung trích dẫn"></button
             ><button id="copyQuoteDraft" class="icon" title="Sao chép nội dung trích dẫn"></button>
           </div>
@@ -336,8 +390,8 @@
           ><small id="quoteWordCount" class="quote-word-count">0 ký tự</small>
         </div>
         <section id="quotePostCard" class="quote-post-card" hidden>
-          <div class="quote-post-head">
-            <div>
+          <div class="quote-post-head panel-row">
+            <div class="panel-copy">
               <span id="quotePostAuthor" class="quote-post-author"></span
               ><small id="quotePostMeta"></small>
             </div>
@@ -349,20 +403,13 @@
       </section>
     </main>
     <main id="followWorkspace" hidden>
-      <section class="follow-card">
+      <section class="panel-card follow-card">
         <div class="section-head">
-          <div>
-            <div class="heading-with-help">
-              <h2>Quản lý theo dõi</h2>
-              <button
-                class="context-help follow-help"
-                title="Các bộ lọc có thể bật đồng thời; danh sách chỉ giữ tài khoản phù hợp tất cả tiêu chí."
-                aria-label="Hướng dẫn quản lý theo dõi"
-              ></button>
-            </div>
+          <div class="panel-copy">
+            <h2>Quản lý theo dõi</h2>
             <small id="followPageHint">Chỉ hoạt động trên Following hoặc Followers</small>
           </div>
-          <div class="follow-head-actions">
+          <div class="follow-head-actions panel-actions">
             <button
               id="clearFollowList"
               class="icon"
@@ -442,71 +489,47 @@
               <option value="newest">Mới nhất</option>
               <option value="oldest">Cũ nhất</option>
               <option value="name">Tên A–Z</option>
-            </select></label
-          >
+            </select></label>
+          ><button
+            class="follow-help"
+            title="Các bộ lọc có thể bật đồng thời; danh sách chỉ giữ tài khoản phù hợp tất cả tiêu chí."
+            aria-label="Hướng dẫn bộ lọc"
+          ></button>
         </div>
         <div id="followList" class="follow-list"></div>
       </section>
     </main>
 
     <main id="feedbackWorkspace" hidden>
-      <section class="feedback-card">
-        <div class="feedback-toolbar">
-          <label
-            >Khoảng thời gian<select id="feedbackRange">
+      <section class="panel-card feedback-card">
+        <div class="section-head">
+          <div class="panel-copy">
+            <h2>Phản hồi tự động</h2>
+            <small>Quét bài trên trang cá nhân và lưu mốc comment</small>
+          </div>
+          <button id="feedbackScan" class="primary feedback-scan-button">Bắt đầu</button>
+        </div>
+        <p id="feedbackStatus" class="hint feedback-status" role="status">
+          Nhấn Bắt đầu để quét bài và tự động phản hồi
+        </p>
+        <div class="feedback-toolbar panel-row">
+          <label class="feedback-range-control">
+            <span>Khoảng thời gian</span>
+            <select id="feedbackRange">
               <option value="24">Trong ngày</option>
               <option value="1">1 giờ trước</option>
               <option value="6">6 giờ trước</option>
               <option value="12">12 giờ trước</option>
-            </select></label
-          ><button id="feedbackScan" class="primary">Kiểm tra dữ liệu</button>
+            </select>
+          </label>
         </div>
-        <p id="feedbackStatus" class="hint" role="status"></p>
-        <h3 id="feedbackPostsTitle" class="feedback-posts-title">Danh sách bài đăng</h3>
-        <div id="feedbackPosts" class="feedback-posts"></div>
-        <section class="feedback-methods">
-          <h3>Cách thức phản hồi</h3>
-          <label class="feedback-method"
-            ><input type="radio" name="feedbackMethod" value="random" checked /><span
-              >Phản hồi ngẫu nhiên
-              <input
-                id="feedbackRandomMin"
-                type="number"
-                min="1"
-                value="3"
-                aria-label="Tối thiểu"
-              />
-              đến
-              <input id="feedbackRandomMax" type="number" min="1" value="5" aria-label="Tối đa" />
-              cmt</span
-            ></label
-          ><label class="feedback-method"
-            ><input type="radio" name="feedbackMethod" value="all" /><span
-              >Phản hồi tất cả</span
-            ></label
-          ><label class="feedback-method"
-            ><input type="radio" name="feedbackMethod" value="new" /><span
-              >Chỉ phản hồi cmt mới
-              <input id="feedbackNewMin" type="number" min="1" value="3" aria-label="Tối thiểu" />
-              đến
-              <input id="feedbackNewMax" type="number" min="1" value="5" aria-label="Tối đa" />
-              cmt</span
-            ></label
-          ><label class="feedback-method"
-            ><input type="radio" name="feedbackMethod" value="continuous" /><span
-              >Chạy liên tục đến khi dừng</span
-            ></label
-          >
+        <section class="feedback-setting-section feedback-posts-section">
+          <h3 id="feedbackPostsTitle" class="feedback-posts-title">Danh sách bài đăng</h3>
+          <div id="feedbackPosts" class="feedback-posts"></div>
         </section>
-        <label class="feedback-speed" for="feedbackSpeed"
-          ><span><b>Tốc độ phản hồi</b><output id="feedbackSpeedValue">0</output></span
-          ><input id="feedbackSpeed" type="range" min="-3" max="3" step="0.5" value="0" /><small
-            ><span>Chậm hơn</span><span>Nhanh hơn</span></small
-          ></label
-        >
-        <div class="feedback-extra">
-          <label for="feedbackExtraContext">Ngữ cảnh bổ sung</label>
-          <div class="feedback-extra-input">
+        <section class="feedback-setting-section feedback-extra-section">
+          <h3>Ngữ cảnh bổ sung</h3>
+          <div class="feedback-extra-input panel-row">
             <textarea
               id="feedbackExtraContext"
               rows="2"
@@ -524,13 +547,47 @@
               ×
             </button>
           </div>
-        </div>
-        <button id="feedbackStart" class="primary connect-full" disabled>Thực hiện phản hồi</button>
+        </section>
+        <section class="feedback-methods">
+          <h3>Cách thức phản hồi</h3>
+          <div class="feedback-method-row">
+            <label class="feedback-method">
+              <input type="radio" name="feedbackMethod" value="random" checked />
+              <span>Ngẫu nhiên</span>
+            </label>
+          </div>
+          <div class="feedback-method-row">
+            <label class="feedback-method">
+              <input type="radio" name="feedbackMethod" value="all" />
+              <span>Tất cả</span>
+            </label>
+          </div>
+          <div class="feedback-method-row">
+            <label class="feedback-method">
+              <input type="radio" name="feedbackMethod" value="new" />
+              <span>Chỉ cmt mới</span>
+            </label>
+          </div>
+          <div class="feedback-method-row">
+            <label class="feedback-method">
+              <input type="radio" name="feedbackMethod" value="continuous" />
+              <span>Liên tục</span>
+            </label>
+          </div>
+        </section>
+        <section class="feedback-setting-section feedback-speed-section">
+          <h3>Tốc độ phản hồi</h3>
+          <label class="feedback-speed" for="feedbackSpeed">
+            <span><output id="feedbackSpeedValue">0</output></span>
+            <input id="feedbackSpeed" type="range" min="-3" max="3" step="0.5" value="0" />
+            <small>Chậm hơn <i>•</i> Nhanh hơn</small>
+          </label>
+        </section>
       </section>
     </main>
     <aside id="settingsArea" hidden>
       <div class="settings-title">
-        <div><h2>Cài đặt chung và hệ thống</h2></div>
+        <h2>Cài đặt chung và hệ thống</h2>
         <button
           id="closeSettings"
           class="icon ghost"
@@ -539,7 +596,7 @@
           aria-label="Đóng cài đặt"
         ></button>
       </div>
-      <details class="config-card settings-card" open>
+      <details class="panel-card config-card settings-card" open>
         <summary class="config-summary">
           <span><h2>Cập nhật extension</h2></span
           ><span class="summary-actions"
@@ -554,7 +611,7 @@
             ><i class="collapse-icon" data-icon="up" aria-hidden="true"></i
           ></span>
         </summary>
-        <div class="config-body">
+        <div class="config-body panel-stack">
           <p id="extensionVersion" class="hint"></p>
           <button id="checkExtensionUpdate" class="secondary">Mở phiên bản mới nhất</button>
           <p id="extensionUpdateStatus" role="status" aria-live="polite"></p>
@@ -564,14 +621,14 @@
           </p>
         </div>
       </details>
-      <details class="config-card settings-card" open>
+      <details class="panel-card config-card settings-card" open>
         <summary class="config-summary">
           <span><h2>Giao diện</h2></span
           ><i class="collapse-icon" data-icon="up" aria-hidden="true"></i>
         </summary>
-        <div class="config-body">
+        <div class="config-body panel-stack">
           <div class="toggle-row compact-row side-panel-setting-row">
-            <div><b>Vị trí Side Panel</b></div>
+            <div class="panel-copy"><b>Vị trí Side Panel</b></div>
             <button
               id="openSidePanelSettings"
               class="secondary"
@@ -583,7 +640,7 @@
           </div>
         </div>
       </details>
-      <details class="config-card settings-card" open>
+      <details class="panel-card config-card settings-card" open>
         <summary class="config-summary">
           <span><h2 id="providerTitle">Gemini</h2></span
           ><span class="summary-actions"
@@ -596,7 +653,7 @@
             ><i class="collapse-icon" data-icon="up" aria-hidden="true"></i
           ></span>
         </summary>
-        <div class="config-body">
+        <div class="config-body panel-stack">
           <div class="provider">
             <button id="geminiProvider" class="active">
               <span class="provider-logo" data-icon="gemini" aria-label="Gemini"></span
@@ -614,7 +671,7 @@
           </div>
           <div id="chatgptPane">
             <label for="profiles">Tài khoản / workspace</label>
-            <div class="select-tools">
+            <div class="select-tools panel-row">
               <select id="profiles">
                 <option value="">Chưa kết nối</option></select
               ><button id="addChatGPT" class="icon secondary" title="Thêm tài khoản"></button>
@@ -623,9 +680,9 @@
             ><select id="chatgptModels">
               <option value="">Kết nối để tải danh sách</option>
             </select>
-            <div class="connection-actions">
+            <div class="connection-actions panel-row">
               <button id="connectChatGPT">Kết nối ChatGPT</button>
-              <div class="tool-buttons">
+              <div class="tool-buttons panel-actions">
                 <button id="refreshChatGPT" class="icon secondary" title="Kết nối lại"></button
                 ><button id="disconnectChatGPT" class="icon ghost" title="Ngắt kết nối"></button>
               </div>
@@ -640,7 +697,7 @@
             ></a>
           </div>
           <div id="geminiPane" hidden>
-            <div class="secret compact-secret" hidden>
+            <div class="secret compact-secret panel-row" hidden>
               <input
                 id="geminiKey"
                 type="password"
@@ -649,7 +706,7 @@
               /><button id="toggleGeminiKey" class="icon" title="Hiện/ẩn key"></button>
             </div>
             <div class="key-queue">
-              <div class="label-line">
+              <div class="label-line panel-row">
                 <label>API Key</label
                 ><span class="key-actions"
                   ><a href="https://aistudio.google.com/app/apikey" target="_blank"
@@ -702,14 +759,14 @@
             </div>
           </div>
           <div id="deepseekPane" hidden>
-            <div class="label-line">
+            <div class="label-line panel-row">
               <label for="deepseekKey">DeepSeek API key</label
               ><a href="https://platform.deepseek.com/api_keys" target="_blank"
                 >Tạo API key
                 <span class="external-icon" data-icon="source" aria-hidden="true"></span
               ></a>
             </div>
-            <div class="secret">
+            <div class="secret panel-row">
               <input
                 id="deepseekKey"
                 type="password"
@@ -731,14 +788,14 @@
             </p>
           </div>
           <div id="apiPane" hidden>
-            <div class="label-line">
+            <div class="label-line panel-row">
               <label for="apiKey">OpenAI API key</label
               ><a href="https://platform.openai.com/api-keys" target="_blank"
                 >Tạo API key
                 <span class="external-icon" data-icon="source" aria-hidden="true"></span
               ></a>
             </div>
-            <div class="secret">
+            <div class="secret panel-row">
               <input
                 id="apiKey"
                 type="password"
@@ -761,20 +818,18 @@
         </div>
       </details>
     </aside>
-    <script src="webview-demo.js"></script>
     <script src="activation.js"></script>
     <script src="ui-icons.js"></script>
-    <script src="panel-icons.js"></script>
     <script src="theme.js"></script>
     <script src="reply-preferences.js"></script>
     <script src="remote-config.js"></script>
-    <script src="shared/language.js"></script>
+    <script src="language.js"></script>
     <script src="content-core.js"></script>
     <script src="content-reader.js"></script>
     <script src="panel.js"></script>
-    <script src="learning-feedback.js"></script>
     <script src="tone-controls.js"></script>
     <script src="content-panel.js"></script>
+    <script src="reply-layout.js"></script>
     <script src="extension-updates.js"></script>
     <script src="updates-panel.js"></script>
     <script src="follow-target-panel.js"></script>

@@ -519,6 +519,91 @@ label.switch {
   gap: var(--panel-space-2);
 }
 
+/* Compact utility controls stay flat and use the shared icon set. */
+#feedbackExtraClear {
+  display: grid;
+  place-items: center;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+#feedbackExtraClear .ui-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+/* Keep the excluded-account affordance beside the Tự động label. */
+.reply-live-preview .auto-flow-row > .panel-copy {
+  gap: 6px;
+}
+.reply-live-preview .auto-flow-row .auto-exclusion-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50%;
+  background: transparent !important;
+  color: var(--ui-text, #e7e9ea);
+}
+.reply-live-preview .auto-flow-row .auto-exclusion-toggle.has-data {
+  color: var(--blue, #1d9bf0);
+}
+.reply-live-preview .auto-flow-row .auto-exclusion-toggle svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* The 1px border must be included in the switch box so its thumb is centered. */
+.switch span {
+  box-sizing: border-box;
+}
+.switch span:after {
+  top: 50% !important;
+  transform: translateY(-50%);
+}
+.switch input:checked + span:after {
+  transform: translate(16px, -50%);
+}
+
+/* Tone is its own compact section; keep the label and both choices on one row. */
+.tone-inline-card > .section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--panel-space-2);
+  margin: 0;
+}
+.tone-inline-card > .section-head h2 {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.tone-inline-card > .section-head .tone-choice {
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+.tone-inline-card > .section-head .tone-choice button {
+  flex: 0 1 74px;
+  min-height: 32px;
+  padding: 5px 9px;
+}
+.tone-inline-card > #replyTone {
+  display: none;
+}
+@media (max-width: 330px) {
+  .tone-inline-card > .section-head {
+    align-items: flex-start;
+  }
+  .tone-inline-card > .section-head .tone-choice {
+    flex-wrap: wrap;
+  }
+}
+
 .feedback-post-row {
   gap: var(--panel-space-2);
   padding: 10px;
@@ -559,4 +644,246 @@ label.switch {
   .feedback-card {
     padding: 10px;
   }
+}
+
+/* Content and Follow use the same typography and control rhythm as Reply and
+   Feedback. Keep module-specific layouts, but remove the older oversized
+   headings and full-bleed card treatment. */
+#contentWorkspace,
+#followWorkspace {
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+  color: var(--ui-text, #e7e9ea);
+}
+#contentWorkspace h2,
+#contentWorkspace h3,
+#followWorkspace h2,
+#followWorkspace h3 {
+  margin: 0;
+  font-size: var(--panel-font-title);
+  line-height: 20px;
+  font-weight: 700;
+}
+#contentWorkspace label,
+#followWorkspace label,
+#contentWorkspace summary,
+#followWorkspace summary {
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+  font-weight: 700;
+}
+#contentWorkspace small,
+#followWorkspace small,
+#contentWorkspace .hint,
+#followWorkspace .hint,
+#contentWorkspace [role="status"],
+#followWorkspace [role="status"] {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+#contentWorkspace .content-toolbar {
+  min-height: var(--panel-row-height);
+  margin: 0 0 var(--panel-space-2);
+  color: var(--ui-muted, #71767b);
+}
+#contentWorkspace .content-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--panel-space-2);
+  margin: 0 0 var(--panel-space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+#contentWorkspace .content-tabs button,
+#followWorkspace .follow-tabs button {
+  min-height: var(--panel-control-height);
+  padding: var(--panel-space-2) 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ui-muted, #71767b);
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+  font-weight: 700;
+}
+#followWorkspace .follow-tabs button .follow-tab-label {
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+}
+#contentWorkspace .content-tabs button[aria-selected="true"],
+#followWorkspace .follow-tabs button.active {
+  border-color: var(--blue, #1d9bf0);
+  background: transparent;
+  color: var(--ui-text, #e7e9ea);
+}
+#contentWorkspace details,
+#contentWorkspace .content-card,
+#contentWorkspace #contentResult,
+#followWorkspace .follow-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+#contentWorkspace details > summary {
+  min-height: var(--panel-row-height);
+  padding: var(--panel-space-2) var(--panel-card-padding);
+  color: var(--ui-text, #e7e9ea);
+}
+#contentWorkspace details[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+#contentWorkspace .content-card,
+#contentWorkspace #contentResult,
+#followWorkspace .follow-card {
+  padding: var(--panel-card-padding) !important;
+}
+#contentWorkspace .content-card > .section-head,
+#contentWorkspace #contentResult > .section-head,
+#followWorkspace .follow-card > .section-head {
+  min-height: var(--panel-row-height);
+  margin: 0 0 var(--panel-space-3);
+  padding: 0 0 var(--panel-space-2);
+  border-bottom: 1px solid var(--line);
+}
+#contentWorkspace input,
+#contentWorkspace textarea,
+#contentWorkspace select,
+#followWorkspace input,
+#followWorkspace textarea,
+#followWorkspace select {
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+}
+#contentWorkspace .content-card > label,
+#contentWorkspace .content-card .prompt-label,
+#followWorkspace .follow-filter-label {
+  display: block;
+  margin: 0 0 var(--panel-space-1);
+  color: var(--ui-text, #e7e9ea);
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+}
+#followWorkspace .follow-card > .section-head {
+  align-items: center;
+}
+#followWorkspace .follow-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--panel-space-2);
+  margin: 0 0 var(--panel-space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+#followWorkspace .follow-tools {
+  margin: 0 0 var(--panel-space-2);
+}
+#followWorkspace .follow-tools input {
+  width: 100%;
+  min-height: var(--panel-control-height);
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ui-text, #e7e9ea);
+  font-size: var(--panel-font-body);
+}
+#followWorkspace .follow-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--panel-space-1);
+  margin: 0 0 var(--panel-space-3);
+}
+#followWorkspace .follow-filters button,
+#followWorkspace .follow-sort-wrap {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+#followWorkspace .follow-filters button {
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ui-muted, #71767b);
+}
+#followWorkspace .follow-filters button.active {
+  border-color: var(--blue, #1d9bf0);
+  color: var(--blue, #1d9bf0);
+}
+#followWorkspace .follow-list {
+  max-height: 65vh;
+  border-top: 1px solid var(--line);
+  background: transparent;
+}
+#followWorkspace .follow-row {
+  min-height: 64px;
+  padding: var(--panel-space-2) 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+#followWorkspace .follow-person b {
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+}
+#followWorkspace .follow-person small,
+#followWorkspace .follow-person em,
+#followWorkspace .follow-badges {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+
+/* API-key actions are icon-only controls: keep the hit area, remove the
+   persistent button frame, and retain an accessible focus ring. */
+#settingsArea .key-row > button.key-copy,
+#settingsArea .key-row > button.key-remove {
+  border: 0 !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+#settingsArea .key-row > button.key-copy:focus-visible,
+#settingsArea .key-row > button.key-remove:focus-visible {
+  outline: 2px solid var(--blue, #1d9bf0);
+  outline-offset: 2px;
+}
+
+/* Keep the excluded-account control beside the Tự động label at every panel
+   width. The switch remains on the far edge, while the account button keeps
+   its full hit area instead of being pushed onto a second line. */
+.reply-live-preview .auto-flow-row > .panel-copy {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.reply-live-preview .auto-flow-row > .panel-copy > b {
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.reply-live-preview .auto-flow-row > .panel-copy > .auto-exclusion-toggle {
+  flex: 0 0 24px;
+}
+.reply-live-preview .auto-flow-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.reply-live-preview .auto-flow-label > b {
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.reply-live-preview .auto-flow-label > .auto-exclusion-toggle {
+  flex: 0 0 24px;
 }

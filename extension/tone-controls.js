@@ -5,6 +5,7 @@
   });
   const select = document.getElementById("replyTone");
   if (!select) return;
+  const toneCard = document.getElementById("toneSettings");
   const wrap = document.createElement("div");
   wrap.className = "tone-choice";
   [
@@ -27,22 +28,16 @@
     wrap
       .querySelectorAll("button")
       .forEach((button) => button.classList.toggle("active", button.dataset.tone === select.value));
-    document.querySelector(".inline-tone-field")?.classList.toggle("tone-required", !select.value);
+    toneCard?.classList.toggle("tone-required", !select.value);
   }
   select.addEventListener("change", sync);
-  sync();
-  const toneCard = document.getElementById("toneSettings"),
-    styleField = document.getElementById("stylePickerField");
-  if (toneCard && styleField) {
-    const inline = document.createElement("div");
-    inline.className = "inline-tone-field";
-    const label = document.createElement("label");
-    label.textContent = "Tone";
-    label.htmlFor = "replyTone";
-    inline.append(label, wrap);
-    styleField.before(inline);
-    toneCard.hidden = true;
-    styleField.closest(".config-card")?.classList.add("style-tone-card");
-    sync();
+  if (toneCard) {
+    toneCard.hidden = false;
+    toneCard.classList.add("tone-inline-card");
+    toneCard.querySelector("h2")?.replaceChildren(document.createTextNode("Tone"));
+    toneCard.querySelector(".hint")?.remove();
+    toneCard.querySelector(".section-head")?.append(wrap);
+    select.hidden = true;
   }
+  sync();
 })();

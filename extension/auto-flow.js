@@ -37,17 +37,27 @@
     button.style.background = memory.isPaused ? "#20c997" : "#d64555";
     button.setAttribute("aria-label", memory.isPaused ? "Tiếp tục" : "Tạm dừng");
     button.title = memory.isPaused ? "Tiếp tục" : "Tạm dừng";
+    button.dataset.autoPauseState = memory.isPaused ? "paused" : "running";
   };
   const setPaused = (paused) => {
-    memory.isPaused = !!paused;
+    const nextPaused = !!paused;
+    if (nextPaused && !memory.isPaused && activeRunSegmentStartedAt) {
+      activeRunElapsedMs = activeRunElapsed();
+      activeRunSegmentStartedAt = 0;
+    } else if (!nextPaused && memory.isPaused && running && !memory.isAutoResting) {
+      activeRunSegmentStartedAt = Date.now();
+    }
+    memory.isPaused = nextPaused;
     memory.runState = memory.isPaused ? "paused" : running ? "running" : memory.runState;
     syncPauseButton();
     const status = document.querySelector("#assistant-auto-dashboard [data-auto-session-status]");
     if (status) {
       const elapsed = Math.floor((Date.now() - sessionStart) / 60000);
-      status.textContent = memory.isPaused
-        ? `● Tạm dừng (${elapsed} phút)`
-        : `● ${running ? `Đang chạy (${elapsed} phút)` : "Đã dừng"}`;
+      status.textContent = memory.isAutoResting
+        ? "● Nghỉ tự động"
+        : memory.isPaused
+          ? `● Tạm dừng (${elapsed} phút)`
+          : `● ${running ? `Đang chạy (${elapsed} phút)` : "Đã dừng"}`;
     }
     console.log(`[Assistant Auto] ${memory.isPaused ? "Tạm dừng" : "Tiếp tục"}`);
     sendRuntimeMessage({
@@ -56,54 +66,133 @@
       runId: memory.runId,
     });
   };
-  globalThis.toggleAutoBotPause = () => setPaused(!memory.isPaused);
+  globalThis.toggleAutoBotPause = () => {
+    if (memory.isPaused && !running) return resumeCurrentRun();
+    setPaused(!memory.isPaused);
+  };
   let running = false,
     timer = 0,
-    sessionStart = 0;
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-    waitIfPaused = async () => {
-      while (memory.isPaused && running) await sleep(100);
-      return running;
+    sessionStart = 0,
+    activeRunElapsedMs = 0,
+    activeRunSegmentStartedAt = 0;
+  const activeRunElapsed = () =>
+      activeRunElapsedMs + (activeRunSegmentStartedAt ? Date.now() - activeRunSegmentStartedAt : 0),
+    endAutoRest = () => {
+      if (!memory.isAutoResting) return;
+      memory.isAutoResting = false;
+      memory.autoRestUntil = 0;
+      activeRunElapsedMs = 0;
+      activeRunSegmentStartedAt = memory.isPaused || !running ? 0 : Date.now();
+      log("Hết thời gian nghỉ · tự động chạy tiếp");
+      dashboard();
     },
-    pauseSleep = async (ms) => {
+    startAutoRestIfDue = () => {
+      if (!running || memory.isPaused || memory.isAutoResting || !memory.autoRestEnabled) return;
+      const intervalMs = Math.max(1, Number(memory.autoRestEveryMinutes) || 30) * 60_000;
+      if (activeRunElapsed() < intervalMs) return;
+      activeRunElapsedMs = intervalMs;
+      activeRunSegmentStartedAt = 0;
+      memory.isAutoResting = true;
+      const restDurationMs = Math.round(intervalMs / 5),
+        restDuration =
+          restDurationMs % 60_000 === 0
+            ? `${restDurationMs / 60_000} phút`
+            : `${Math.ceil(restDurationMs / 1000)} giây`;
+      memory.autoRestUntil = Date.now() + restDurationMs;
+      log(`Tạm nghỉ tự động ${restDuration} sau ${memory.autoRestEveryMinutes} phút chạy`);
+      dashboard();
+    };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const waitIfPaused = async () => {
+    while (running) {
+      startAutoRestIfDue();
+      if (memory.isAutoResting && Date.now() >= memory.autoRestUntil) endAutoRest();
+      if (!memory.isPaused && !memory.isAutoResting) return true;
+      if (memory.isAutoResting) {
+        const status = document.querySelector(
+          "#assistant-auto-dashboard [data-auto-session-status]",
+        );
+        if (status) {
+          const remaining = Math.max(0, Math.ceil((memory.autoRestUntil - Date.now()) / 1000));
+          status.textContent = `● Nghỉ tự động (${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")})`;
+        }
+      }
+      await sleep(100);
+    }
+    return false;
+  };
+  const pauseSleep = async (ms) => {
+    if (!(await waitIfPaused())) return false;
+    let remaining = ms;
+    while (remaining > 0) {
       if (!(await waitIfPaused())) return false;
-      let remaining = ms;
-      while (remaining > 0) {
-        if (!(await waitIfPaused())) return false;
-        const step = Math.min(remaining, 100);
-        await sleep(step);
-        remaining -= step;
-      }
-      return running;
-    },
-    log = (...a) => {
-      const now = new Date();
-      const stamp = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-      const message = a.map(String).join(" ");
-      memory.logs = [...(memory.logs || []), `${stamp} ${message}`];
-      console.log("[Assistant Auto]", ...a);
-      const list = document.querySelector("[data-auto-log-list]");
-      if (list) {
-        list.textContent = memory.logs.join("\n") || "Đang chờ bài tiếp theo";
-        list.scrollTop = list.scrollHeight;
-      }
-    },
-    read = (k) => {
-      try {
-        return JSON.parse(localStorage.getItem(k) || "[]");
-      } catch {
-        return [];
-      }
-    },
-    save = (k, v) => localStorage.setItem(k, JSON.stringify(v)),
-    postId = (a) =>
-      a?.querySelector('a[href*="/status/"]')?.href.match(/\/status\/(\d+)/)?.[1] || "",
-    own = () =>
+      const step = Math.min(remaining, 100);
+      await sleep(step);
+      remaining -= step;
+    }
+    return running;
+  };
+  const log = (...a) => {
+    const now = new Date();
+    const stamp = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+    const message = a.map(String).join(" ");
+    memory.logs = [...(memory.logs || []), `${stamp} ${message}`];
+    console.log("[Assistant Auto]", ...a);
+    const list = document.querySelector("[data-auto-log-list]");
+    if (list) {
+      list.textContent = memory.logs.join("\n") || "Đang chờ bài tiếp theo";
+      list.scrollTop = list.scrollHeight;
+    }
+  };
+  ((read = (k) => {
+    try {
+      return JSON.parse(localStorage.getItem(k) || "[]");
+    } catch {
+      return [];
+    }
+  }),
+    (save = (k, v) => localStorage.setItem(k, JSON.stringify(v))),
+    (postId = (a) =>
+      a?.querySelector('a[href*="/status/"]')?.href.match(/\/status\/(\d+)/)?.[1] || ""),
+    (own = () =>
       document
         .querySelector('[data-testid^="UserAvatar-Container-"]')
         ?.getAttribute("data-testid")
         ?.replace("UserAvatar-Container-", "")
-        .toLowerCase() || "";
+        .toLowerCase() || ""));
+  const excludedAuthorSet = async () => {
+    try {
+      const stored = await chrome.storage.local.get("autoReplyExcludedAuthors");
+      return new Set(
+        (Array.isArray(stored.autoReplyExcludedAuthors) ? stored.autoReplyExcludedAuthors : [])
+          .map((value) =>
+            String(value || "")
+              .trim()
+              .replace(/^@/u, "")
+              .toLowerCase(),
+          )
+          .filter((handle) => /^[a-z0-9_]{1,15}$/u.test(handle)),
+      );
+    } catch {
+      return new Set();
+    }
+  };
+  const likeCurrentPostIfEnabled = async (postIdValue) => {
+    let enabled = false;
+    try {
+      enabled = (await chrome.storage.local.get("autoLike"))?.autoLike === true;
+    } catch {}
+    if (!enabled) return false;
+    const article = [...document.querySelectorAll('article[data-testid="tweet"]')].find((candidate) =>
+      [...candidate.querySelectorAll('a[href*="/status/"]')].some((anchor) =>
+        new RegExp(`/status/${postIdValue}(?:$|[?#/])`).test(anchor.href),
+      ),
+    );
+    const like = article?.querySelector('[data-testid="like"]');
+    if (!like) return false;
+    like.click();
+    return true;
+  };
   const createRunId = () => {
     // Keep run IDs independent from extension APIs so a stale content script
     // can still finish its local cleanup after the extension is reloaded.
@@ -124,6 +213,7 @@
         postId: item?.id,
         runId: memory.runId,
         speed: Number(memory.speed || 0),
+        minGapMs: Number(memory.autoMinGapMs || 0),
       },
       { data: { granted: false, reason: "coordinator-unavailable" } },
     ).then((response) => response?.data || { granted: false, reason: "no-coordinator-response" });
@@ -173,7 +263,62 @@
   const flowDelay = (ms) => {
     const speed = Number(memory.speed || 0);
     const jitter = 0.86 + Math.random() * 0.28;
-    return Math.max(350, Math.round(ms * 0.99 * (1 - speed * 0.12) * jitter));
+    // Slow the baseline by another 10%; the slider still applies its relative
+    // adjustment on top of this baseline.
+    return Math.max(350, Math.round(ms * 1.1781 * (1 - speed * 0.12) * jitter));
+  };
+  const readMinimumGapSetting = () => {
+    const value = Math.max(
+        0,
+        Math.min(86_400, Number(localStorage.getItem("assistantAutoMinGapValue")) || 30),
+      ),
+      unit = localStorage.getItem("assistantAutoMinGapUnit") === "minutes" ? "minutes" : "seconds";
+    memory.autoMinGapMs = value * (unit === "minutes" ? 60_000 : 1_000);
+    return { value, unit };
+  };
+  const configureMinimumGapControl = (box) => {
+    if (box.querySelector("[data-auto-min-gap-control]")) return;
+    const speedInput = box.querySelector("[data-auto-speed]"),
+      speedWrap = speedInput?.parentElement;
+    if (!speedWrap) return;
+    const setting = document.createElement("div");
+    setting.dataset.autoMinGapControl = "";
+    setting.style.cssText =
+      "display:flex;align-items:center;flex-wrap:nowrap;gap:8px;padding:8px 0 4px;color:var(--xra-text,#edf1f5);font-size:14px";
+    const label = document.createElement("b");
+    label.textContent = "Thời gian giãn cách tối thiểu";
+    label.style.cssText =
+      "flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.max = "86400";
+    input.step = "1";
+    input.dataset.autoMinGapValue = "";
+    input.setAttribute("aria-label", "Giá trị thời gian giãn cách tối thiểu");
+    input.style.cssText =
+      "width:84px;min-width:84px;box-sizing:border-box;padding:6px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const select = document.createElement("select");
+    select.dataset.autoMinGapUnit = "";
+    select.setAttribute("aria-label", "Đơn vị thời gian giãn cách tối thiểu");
+    select.append(new Option("Giây", "seconds"), new Option("Phút", "minutes"));
+    select.style.cssText =
+      "padding:6px 24px 6px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const sync = () => {
+      const value = Math.max(0, Math.min(86_400, Number(input.value) || 0));
+      input.value = String(value);
+      const unit = select.value === "minutes" ? "minutes" : "seconds";
+      localStorage.setItem("assistantAutoMinGapValue", String(value));
+      localStorage.setItem("assistantAutoMinGapUnit", unit);
+      memory.autoMinGapMs = value * (unit === "minutes" ? 60_000 : 1_000);
+    };
+    const saved = readMinimumGapSetting();
+    input.value = String(saved.value);
+    select.value = saved.unit;
+    input.addEventListener("change", sync);
+    select.addEventListener("change", sync);
+    setting.append(label, input, select);
+    speedWrap.after(setting);
   };
   const domHasOwnReply = (handle) => {
     if (!handle) return false;
@@ -187,6 +332,66 @@
           .includes(handle.toLowerCase()),
       );
   };
+  async function submitSelectedReply(expectedText, handle) {
+    const normalize = (value) =>
+      String(value || "")
+        .replace(/\s+/gu, " ")
+        .trim();
+    const expected = normalize(expectedText);
+    const visible = (node) => {
+      if (!node || !node.isConnected) return false;
+      const rect = node.getBoundingClientRect?.();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+      const style = getComputedStyle(node);
+      return style.display !== "none" && style.visibility !== "hidden";
+    };
+    const findEditor = () => {
+      const editors = [...document.querySelectorAll(
+        '[data-testid^="tweetTextarea_"][contenteditable="true"]',
+      )];
+      return editors.find((candidate) => visible(candidate)) || editors[0] || null;
+    };
+    const findSendButton = (candidate) => {
+      const scope = candidate?.closest('[role="dialog"]') || candidate?.closest("article");
+      const inScope = scope
+        ? [...scope.querySelectorAll('[data-testid="tweetButtonInline"], [data-testid="tweetButton"]')]
+        : [];
+      const all = [...document.querySelectorAll(
+        '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
+      )];
+      return (
+        [...inScope, ...all].find(
+          (button, index, list) =>
+            list.indexOf(button) === index &&
+            visible(button) &&
+            !button.disabled &&
+            button.getAttribute("aria-disabled") !== "true",
+        ) || null
+      );
+    };
+    let editor = null;
+    let send = null;
+    for (let attempt = 0; attempt < 30 && running; attempt++) {
+      if (domHasOwnReply(handle)) return true;
+      editor = findEditor();
+      const editorText = normalize(editor?.innerText || editor?.textContent);
+      if (editor && expected && editorText.includes(expected)) {
+        send = findSendButton(editor);
+        if (send) break;
+      }
+      await pauseSleep(250);
+    }
+    if (!running || !editor || !send || send.disabled) return false;
+    send.click();
+    for (let attempt = 0; attempt < 32 && running; attempt++) {
+      await pauseSleep(250);
+      if (domHasOwnReply(handle)) return true;
+      const currentEditor = findEditor();
+      const remaining = normalize(currentEditor?.innerText || currentEditor?.textContent);
+      if (!remaining || domHasOwnReply(handle)) return true;
+    }
+    return false;
+  }
   async function returnHome() {
     if (location.href.includes("/home") || location.pathname === "/") return true;
     const home = document.querySelector('a[data-testid="AppTabBar_Home_Link"]');
@@ -239,6 +444,12 @@
       if (Number.isNaN(date.getTime())) return "";
       return ` - ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
     };
+    const escapeHtml = (value) =>
+      String(value || "").replace(/[&<>"']/g, (character) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+          character
+        ],
+      );
     const elapsed = Math.floor((Date.now() - sessionStart) / 60000);
     const stats = box.querySelector("[data-auto-stats]");
     if (!stats) return;
@@ -248,15 +459,23 @@
       .forEach((card) => card.style.setProperty("background", "transparent", "important"));
     const sessionStatus = box.querySelector("[data-auto-session-status]");
     if (sessionStatus)
-      sessionStatus.textContent = memory.isPaused
-        ? `● Tạm dừng (${elapsed} phút)`
-        : `● ${running ? `Đang chạy (${elapsed} phút)` : "Đã dừng"}`;
+      sessionStatus.textContent = memory.isAutoResting
+        ? "● Nghỉ tự động"
+        : memory.isPaused
+          ? `● Tạm dừng (${elapsed} phút)`
+          : `● ${running ? `Đang chạy (${elapsed} phút)` : "Đã dừng"}`;
     const processedList = box.querySelector("[data-auto-list]");
     if (processedList) {
       processedList.style.maxHeight = "280px";
       processedList.style.overflowY = "auto";
       processedList.style.overflowX = "hidden";
-      processedList.__autoItems = p.slice().reverse();
+      processedList.__autoItems = [
+        ...p.map((item) => ({ ...item, __autoStatus: "done" })),
+        ...s.map((item) => ({ ...item, __autoStatus: "skipped" })),
+      ].sort(
+        (a, b) =>
+          Number(b.completedAt || b.skippedAt || 0) - Number(a.completedAt || a.skippedAt || 0),
+      );
       processedList.__autoRender = () => {
         const items = processedList.__autoItems || [],
           shown = Math.min(Number(processedList.dataset.rendered || 10), items.length);
@@ -265,7 +484,7 @@
             .slice(0, shown)
             .map(
               (x) =>
-                `<button data-auto-url="${String(x.url).replace(/"/g, "&quot;")}" style="display:block;width:100%;margin:0;padding:7px 0;border:0;border-bottom:1px solid var(--xra-border,#303842);border-radius:0;background:transparent;color:#1d9bf0;text-align:left;font-size:13px;cursor:pointer">${x.displayName || x.handle || "Tên không xác định"} (@${x.handle || "user"})${formatCompletedAt(x.completedAt)}</button>`,
+                `<button data-auto-url="${escapeHtml(x.url)}" style="display:block;width:100%;margin:0;padding:7px 0;border:0;border-bottom:1px solid var(--xra-border,#303842);border-radius:0;background:transparent;color:${x.__autoStatus === "skipped" ? "#f5a623" : "#1d9bf0"};text-align:left;font-size:13px;cursor:pointer">${escapeHtml(x.displayName || x.handle || "Tên không xác định")} (@${escapeHtml(x.handle || "user")})${formatCompletedAt(x.completedAt || x.skippedAt)}${x.__autoStatus === "skipped" && x.reason ? ` (${escapeHtml(x.reason)})` : ""}</button>`,
             )
             .join("") || "<small>Chưa có bài đã xử lý</small>";
         processedList.querySelectorAll("[data-auto-url]").forEach(
@@ -315,18 +534,136 @@
     );
     syncPauseButton();
   }
+  function configureSpeedControl(box) {
+    const input = box?.querySelector("[data-auto-speed]");
+    if (!input) return;
+    input.min = "-5";
+    input.max = "5";
+    input.step = "0.5";
+    const marks = input.nextElementSibling;
+    if (marks)
+      marks.innerHTML =
+        "<span>-5</span><span>-2.5</span><span>0</span><span>2.5</span><span>5</span>";
+    input.value = String(
+      Math.max(
+        -5,
+        Math.min(5, Number(localStorage.getItem("assistantAutoSpeed") || memory.speed || 0)),
+      ),
+    );
+    memory.speed = Number(input.value);
+    const output = box.querySelector("[data-auto-speed-value]");
+    if (output) output.textContent = String(memory.speed);
+  }
+  const AUTO_DASHBOARD_POSITION_KEY = "assistantAutoDashboardPositionV1";
+  function readDashboardPosition() {
+    try {
+      const value = JSON.parse(localStorage.getItem(AUTO_DASHBOARD_POSITION_KEY) || "null");
+      const left = Number(value?.left),
+        top = Number(value?.top);
+      if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+      return {
+        left: Math.max(0, Math.min(Math.max(0, innerWidth - 80), left)),
+        top: Math.max(0, Math.min(Math.max(0, innerHeight - 80), top)),
+      };
+    } catch {
+      return null;
+    }
+  }
+  function saveDashboardPosition(box) {
+    if (!box || box.dataset.minimized === "true") return;
+    const left = Number.parseFloat(box.style.left),
+      top = Number.parseFloat(box.style.top);
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+    try {
+      localStorage.setItem(
+        AUTO_DASHBOARD_POSITION_KEY,
+        JSON.stringify({ left: Math.round(left), top: Math.round(top) }),
+      );
+    } catch {}
+  }
   function dashboardView() {
     let box = document.getElementById("assistant-auto-dashboard");
-    if (box) return box;
+    if (box) {
+      configureSpeedControl(box);
+      configureMinimumGapControl(box);
+      syncPauseButton();
+      return box;
+    }
     box = document.createElement("aside");
     box.id = "assistant-auto-dashboard";
     box.style.cssText =
       "--xra-text:var(--xra-color,#e7e9ea);--xra-border:color-mix(in srgb,var(--xra-color,#e7e9ea) 22%,var(--xra-bg,#000));--xra-muted:color-mix(in srgb,var(--xra-color,#e7e9ea) 60%,var(--xra-bg,#000));position:fixed;right:16px;top:78px;width:min(460px,calc(100vw - 24px));min-width:min(320px,calc(100vw - 24px));min-height:min(280px,calc(100vh - 24px));max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);resize:both;overflow:auto;z-index:2147483647;background:var(--xra-bg,#000);color:var(--xra-color,#e7e9ea);border:1px solid var(--xra-border);border-radius:16px;box-shadow:0 8px 24px #0004;font:13px/1.45 var(--xra-font,system-ui);padding:16px";
+    const savedPosition = readDashboardPosition();
+    if (savedPosition) {
+      box.style.left = `${savedPosition.left}px`;
+      box.style.top = `${savedPosition.top}px`;
+      box.style.right = "auto";
+    }
     box.innerHTML =
       '<div data-auto-drag-handle style="display:flex;align-items:center;gap:8px;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--xra-border,#303842);cursor:move;touch-action:none"><span style="display:flex;align-items:center;gap:8px"><img src="' +
       runtimeAssetUrl("assets/logo.svg") +
       '" alt="Assistant" style="width:28px;height:28px"><strong style="font-size:17px;color:var(--xra-text,#edf1f5)">Tự động</strong></span><span style="display:flex;gap:6px"><button data-auto-pause aria-label="Tạm dừng" title="Tạm dừng" style="width:36px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:0;border:1px solid var(--xra-border,#303842);border-radius:8px;background:#d64555;color:#fff;cursor:pointer;font:700 13px system-ui"><svg viewBox="0 0 12 12" aria-hidden="true" style="width:12px;height:12px;display:block;fill:currentColor"><rect x="1.5" y="1.5" width="9" height="9" rx="1"></rect></svg></button><button data-auto-minimize aria-label="Thu nhỏ" title="Thu nhỏ" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">−</button><button data-auto-close aria-label="Đóng dashboard" title="Đóng dashboard" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">×</button></span></div><h3 style="margin:12px 0 5px;font-size:17px">Thiết lập</h3><div style="padding:8px 0 4px"><div style="display:flex;justify-content:space-between;font-size:15px"><b>Tốc độ xử lý</b><output data-auto-speed-value>0</output></div><input data-auto-speed type="range" min="-3" max="3" step="0.5" value="0" style="width:100%;accent-color:var(--xra-accent,#1d9bf0)"><div style="display:flex;justify-content:space-between;color:var(--xra-muted,#9aa4af);font-size:11px"><span>-3</span><span>-1.5</span><span>0</span><span>1.5</span><span>3</span></div></div><label style="display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px"><input data-auto-vietnamese type="checkbox" checked> Chỉ xử lý bài có nội dung tiếng Việt</label><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 5px"><h3 style="margin:0;font-size:17px">Thông tin phiên</h3><span data-auto-session-status style="color:#20c997;font-size:12px;white-space:nowrap">● Đang chạy (0 phút)</span></div><div data-auto-stats style="font-size:16px;margin:6px 0 10px;color:var(--xra-muted,#9aa4af);padding:4px 0"></div><div style="padding:12px;border:1px solid var(--xra-border,#303842);border-radius:10px;margin-bottom:10px;font-size:14px"><b style="display:flex;align-items:center"><span style="color:#20c997;font-size:10px;margin-right:4px">●</span> Đang xử lý <span data-auto-current-toggle style="margin-left:auto;font-size:16px;line-height:1">⌄</span></b><div data-auto-log-list style="margin-top:7px;max-height:none;overflow:visible;white-space:pre-wrap;font:13px/1.5 system-ui;color:var(--xra-muted,#9aa4af)">Đang chờ bài tiếp theo</div></div><details style="margin-top:12px"><summary style="font-size:14px;font-weight:700;list-style:none;display:flex;justify-content:flex-start;align-items:center;gap:4px;padding:8px 0;border-bottom:1px solid var(--xra-border,#303842);cursor:pointer">Đã xử lý <span data-auto-processed-count></span><span style="margin-left:auto;font-size:16px;line-height:1">⌄</span></summary><div data-auto-list style="max-height:none;overflow:visible;padding:4px 0;background:transparent;font-size:13px"></div></details><button data-auto-reset style="width:100%;margin-top:12px;padding:9px;border:1px solid var(--xra-border,#303842);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font:600 14px system-ui">Reset số liệu</button>';
+    const dragHandle = box.querySelector("[data-auto-drag-handle]");
+    if (dragHandle) {
+      dragHandle.style.position = "sticky";
+      dragHandle.style.top = "-16px";
+      dragHandle.style.zIndex = "5";
+      dragHandle.style.margin = "-16px -16px 12px";
+      dragHandle.style.padding = "16px 16px 12px";
+      dragHandle.style.background = "var(--xra-bg,#000)";
+    }
+    const vietnameseFilter = box.querySelector("[data-auto-vietnamese]")?.closest("label");
+    if (vietnameseFilter) {
+      const restRow = document.createElement("label");
+      restRow.dataset.autoRestRow = "";
+      restRow.style.cssText =
+        "display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px";
+      const enabled = document.createElement("input");
+      enabled.type = "checkbox";
+      enabled.dataset.autoRest = "";
+      enabled.checked = localStorage.getItem("assistantAutoRestEnabled") === "true";
+      const interval = document.createElement("input");
+      interval.type = "number";
+      interval.min = "1";
+      interval.max = "1440";
+      interval.step = "1";
+      interval.dataset.autoRestInterval = "";
+      interval.value = String(
+        Math.max(
+          1,
+          Math.min(1440, Number(localStorage.getItem("assistantAutoRestEveryMinutes")) || 30),
+        ),
+      );
+      interval.setAttribute("aria-label", "Số phút giữa các lần nghỉ");
+      interval.style.cssText =
+        "width:84px;min-width:84px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+      restRow.append(enabled, document.createTextNode("Tạm nghỉ (sau mỗi "), interval);
+      restRow.append(document.createTextNode(" phút)"));
+      vietnameseFilter.before(restRow);
+      const syncRestSettings = () => {
+        const everyMinutes = Math.max(1, Math.min(1440, Number(interval.value) || 30));
+        interval.value = String(everyMinutes);
+        memory.autoRestEnabled = enabled.checked;
+        memory.autoRestEveryMinutes = everyMinutes;
+        localStorage.setItem("assistantAutoRestEnabled", String(enabled.checked));
+        localStorage.setItem("assistantAutoRestEveryMinutes", String(everyMinutes));
+        if (!enabled.checked && memory.isAutoResting) {
+          memory.isAutoResting = false;
+          memory.autoRestUntil = 0;
+          activeRunElapsedMs = 0;
+          activeRunSegmentStartedAt = memory.isPaused || !running ? 0 : Date.now();
+          log("Đã tắt nghỉ tự động · tiếp tục chạy");
+          dashboard();
+        }
+      };
+      memory.autoRestEnabled = enabled.checked;
+      memory.autoRestEveryMinutes = Number(interval.value);
+      enabled.addEventListener("change", syncRestSettings);
+      interval.addEventListener("change", syncRestSettings);
+    }
     document.documentElement.appendChild(box);
+    configureSpeedControl(box);
+    configureMinimumGapControl(box);
     const tabBadge = document.createElement("span");
     memory.tabBadge ||= Math.random().toString(36).slice(2, 6).toUpperCase();
     tabBadge.dataset.autoTabBadge = "";
@@ -347,6 +684,7 @@
         setupTitle,
         setupTitle.nextElementSibling,
         setupTitle.nextElementSibling?.nextElementSibling,
+        setupTitle.nextElementSibling?.nextElementSibling?.nextElementSibling,
       );
     }
     const sessionRow = [...box.querySelectorAll("h3")].find(
@@ -401,31 +739,48 @@
           "display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;padding:0;border:1px solid var(--xra-border);border-radius:50%;background:var(--xra-bg);color:var(--xra-color);cursor:move;line-height:0";
       }
       let dragState = null;
+      let dragMoved = false;
       dragHandle?.addEventListener("pointerdown", (event) => {
         if (!allowInteractive && event.target.closest("button, input, select, textarea, a")) return;
-        dragState = { x: event.clientX - box.offsetLeft, y: event.clientY - box.offsetTop };
+        dragState = {
+          x: event.clientX - box.offsetLeft,
+          y: event.clientY - box.offsetTop,
+          startX: event.clientX,
+          startY: event.clientY,
+        };
+        dragMoved = false;
+        dragHandle.dataset.autoDragMoved = "false";
         dragHandle.setPointerCapture?.(event.pointerId);
       });
       dragHandle?.addEventListener("pointermove", (event) => {
         if (!dragState) return;
-        box.style.left = `${Math.max(0, event.clientX - dragState.x)}px`;
-        box.style.top = `${Math.max(0, event.clientY - dragState.y)}px`;
+        if (
+          Math.abs(event.clientX - dragState.startX) + Math.abs(event.clientY - dragState.startY) >
+          4
+        )
+          dragMoved = true;
+        const minimized = box.dataset.minimized === "true",
+          inset = minimized ? 12 : 0,
+          badgeOverflow = minimized ? 16 : 0,
+          maxLeft = Math.max(inset, innerWidth - box.offsetWidth - inset - badgeOverflow),
+          maxTop = Math.max(inset, innerHeight - box.offsetHeight - inset);
+        box.style.left = `${Math.min(maxLeft, Math.max(inset, event.clientX - dragState.x))}px`;
+        box.style.top = `${Math.min(maxTop, Math.max(inset, event.clientY - dragState.y))}px`;
         box.style.right = "auto";
       });
       dragHandle?.addEventListener("pointerup", () => {
+        if (dragHandle) dragHandle.dataset.autoDragMoved = dragMoved ? "true" : "false";
+        saveDashboardPosition(box);
         dragState = null;
       });
       dragHandle?.addEventListener("pointercancel", () => {
+        if (dragHandle) dragHandle.dataset.autoDragMoved = dragMoved ? "true" : "false";
+        saveDashboardPosition(box);
         dragState = null;
       });
     };
     makeDraggable(box.querySelector("[data-auto-drag-handle]"));
     const speedInput = box.querySelector("[data-auto-speed]");
-    speedInput.value = String(
-      Number(localStorage.getItem("assistantAutoSpeed") || memory.speed || 0),
-    );
-    memory.speed = Number(speedInput.value);
-    box.querySelector("[data-auto-speed-value]").textContent = memory.speed;
     speedInput.oninput = (event) => {
       memory.speed = Number(event.target.value);
       localStorage.setItem("assistantAutoSpeed", String(memory.speed));
@@ -440,7 +795,8 @@
     box.querySelector("[data-auto-pause]").onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      setPaused(!memory.isPaused);
+      globalThis.toggleAutoBotPause?.();
+      syncPauseButton();
       log(memory.isPaused ? "Đã tạm dừng" : "Đã tiếp tục");
     };
     box.querySelector("[data-auto-close]").onclick = () => {
@@ -449,7 +805,23 @@
       notifyPanel(false);
     };
     box.querySelector("[data-auto-minimize]").onclick = () => {
+      const currentRect = box.getBoundingClientRect(),
+        miniInset = 12,
+        miniBadgeOverflow = 16,
+        miniWidth = 42,
+        miniHeight = 42,
+        safeLeft = Math.min(
+          Math.max(miniInset, currentRect.left),
+          Math.max(miniInset, innerWidth - miniWidth - miniInset - miniBadgeOverflow),
+        ),
+        safeTop = Math.min(
+          Math.max(miniInset, currentRect.top),
+          Math.max(miniInset, innerHeight - miniHeight - miniInset),
+        );
       box.dataset.minimized = "true";
+      box.style.left = `${safeLeft}px`;
+      box.style.top = `${safeTop}px`;
+      box.style.right = "auto";
       box.style.width = "42px";
       box.style.height = "42px";
       box.style.minWidth = "0";
@@ -467,7 +839,12 @@
       dashboard();
       makeDraggable(box.querySelector("[data-auto-restore]"));
       box.querySelector("[data-auto-restore]").onclick = (event) => {
-        if (event.detail > 1) return;
+        const restore = box.querySelector("[data-auto-restore]");
+        if (event.detail > 1 || restore?.dataset.autoDragMoved === "true") {
+          if (restore) restore.dataset.autoDragMoved = "false";
+          event.preventDefault();
+          return;
+        }
         const left = box.style.left,
           top = box.style.top;
         box.remove();
@@ -483,7 +860,11 @@
   function stop(reason = "Đã dừng") {
     running = false;
     memory.isPaused = false;
+    memory.isAutoResting = false;
+    memory.autoRestUntil = 0;
+    activeRunSegmentStartedAt = 0;
     globalThis.__assistantAutoFlowRunning = false;
+    document.dispatchEvent(new Event("assistant-auto-flow-state"));
     memory.runState = "stopped";
     clearTimeout(timer);
     log(reason);
@@ -504,7 +885,8 @@
     const p = read(processedKey),
       s = read(skippedKey),
       done = new Set([...p, ...s].map((x) => x.id)),
-      me = own();
+      me = own(),
+      excludedAuthors = await excludedAuthorSet();
     for (const article of document.querySelectorAll('article[data-testid="tweet"]')) {
       if (
         article.querySelector(
@@ -525,6 +907,21 @@
         "unknown";
       const displayName = authorText.split("@")[0].trim() || authorText;
       if (!id || done.has(id) || author === me) continue;
+      if (author && excludedAuthors.has(author)) {
+        s.push({
+          id,
+          url: link.href,
+          handle: author,
+          displayName,
+          reason: "Tài khoản trong danh sách bỏ qua",
+          skippedAt: Date.now(),
+        });
+        done.add(id);
+        save(skippedKey, s);
+        log(`Bỏ qua @${author}: nằm trong danh sách tài khoản loại trừ`);
+        dashboard();
+        continue;
+      }
       const onlyVietnamese = document.querySelector("[data-auto-vietnamese]")?.checked !== false;
       if (onlyVietnamese && !isVietnamesePost(article)) continue;
       clearCurrentProcessing();
@@ -541,20 +938,56 @@
         }
       }
       if (!opened) {
-        s.push({ ...item, reason: "Không mở được bài viết" });
+        s.push({ ...item, reason: "Không mở được bài viết", skippedAt: Date.now() });
         save(skippedKey, s);
         log("Bỏ qua:", id, "Không mở được bài viết");
         clearCurrentProcessing();
         continue;
       }
       await pauseSleep(2000);
+      if ((await excludedAuthorSet()).has(item.handle)) {
+        s.push({ ...item, reason: "Tài khoản trong danh sách bỏ qua", skippedAt: Date.now() });
+        save(skippedKey, s);
+        log(
+          `Đã mở bài của @${item.handle} nhưng tài khoản nằm trong danh sách bỏ qua · quay về Home`,
+        );
+        await returnHome();
+        clearCurrentProcessing();
+        dashboard();
+        break;
+      }
+      if (await likeCurrentPostIfEnabled(id)) log("Đã thả like theo cài đặt");
       // The assistant toolbar is mounted near the reply composer. Do not
       // advance the whole X page while waiting for it; that can run to the
       // bottom of a long conversation when the toolbar is unavailable.
-      const replyComposer = document.querySelector(
+      let replyComposer = document.querySelector(
         '[data-testid="tweetTextarea_0_label"], [data-testid^="tweetTextarea_"]',
       );
       if (!(await waitIfPaused())) return;
+      if (!replyComposer) {
+        // On a status page X may not mount the inline composer until its
+        // native Reply action is opened. Scope the click to this post so it
+        // cannot trigger the global compose flow.
+        const targetArticle = [...document.querySelectorAll('article[data-testid="tweet"]')].find(
+          (candidate) =>
+            [...candidate.querySelectorAll('a[href*="/status/"]')].some((anchor) =>
+              new RegExp(`/status/${id}(?:$|[?#/])`).test(anchor.href),
+            ),
+        );
+        const nativeReply = targetArticle?.querySelector('[data-testid="reply"]');
+        if (nativeReply && !nativeReply.dataset.xraOpened) {
+          nativeReply.dataset.xraOpened = "1";
+          nativeReply.click();
+          log("Đã mở ô Trả lời của bài viết");
+        }
+        for (let composerWait = 0; composerWait < 20; composerWait++) {
+          replyComposer = document.querySelector(
+            '[data-testid="tweetTextarea_0_label"], [data-testid^="tweetTextarea_"]',
+          );
+          if (replyComposer) break;
+          await pauseSleep(300);
+        }
+      }
       replyComposer?.scrollIntoView({ behavior: "auto", block: "center" });
       let replyButton = null;
       for (let toolbarWait = 0; toolbarWait < 20; toolbarWait++) {
@@ -571,7 +1004,7 @@
         const reason = "Không tải được giao diện trợ lý sau khi mở bài";
         log(`Lỗi: ${reason}`);
         await coordinate("release", item);
-        s.push({ ...item, reason });
+        s.push({ ...item, reason, skippedAt: Date.now() });
         save(skippedKey, s);
         await returnHome();
         clearCurrentProcessing();
@@ -584,7 +1017,7 @@
       const myHandle = own();
       if (currentDone.has(id) || domHasOwnReply(myHandle)) {
         log("Trạng thái: Đã trả lời -> Skip");
-        s.push({ ...item, reason: "Đã có reply hoặc đã xử lý" });
+        s.push({ ...item, reason: "Đã có reply hoặc đã xử lý", skippedAt: Date.now() });
         save(skippedKey, s);
         await returnHome();
         clearCurrentProcessing();
@@ -593,7 +1026,10 @@
       }
       const claim = await coordinate("claim", item);
       if (!claim.granted) {
-        log(`Bỏ qua: bài đang được tab khác xử lý (${id})`);
+        const reason = "Bài đang được tab khác xử lý";
+        log(`Bỏ qua: ${reason} (${id})`);
+        s.push({ ...item, reason, skippedAt: Date.now() });
+        save(skippedKey, s);
         await returnHome();
         clearCurrentProcessing();
         dashboard();
@@ -601,9 +1037,8 @@
       }
       if (claim.waitMs) {
         log(
-          `Đã nhận bài · chờ ${Math.ceil(claim.waitMs / 1000)} giây để tránh gửi trùng thời điểm`,
+          `Đã nhận bài · tạo gợi ý trước, sẽ giữ khoảng giãn cách trước khi gửi`,
         );
-        await pauseSleep(claim.waitMs);
       }
       log("Trạng thái: Chưa trả lời");
       let button = null;
@@ -625,7 +1060,7 @@
         const reason = "Giao diện trợ lý không sẵn sàng sau khi chờ";
         log(`Lỗi: ${reason}`);
         await coordinate("release", item);
-        s.push({ ...item, reason });
+        s.push({ ...item, reason, skippedAt: Date.now() });
         save(skippedKey, s);
         await returnHome();
         clearCurrentProcessing();
@@ -637,16 +1072,25 @@
           await coordinate("release", item);
           return;
         }
-        button.click();
-        console.log("[Assistant Auto] Status: Normal (đã yêu cầu tạo gợi ý)");
-        let suggestion = null;
+        let suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
         let providerError = "";
-        while (running && !suggestion) {
-          await pauseSleep(flowDelay(700));
-          suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
-          const errorNode = document.querySelector(".xra-error,[role=alert],.xra-status-error");
-          providerError = errorNode?.textContent?.trim() || "";
-          if (providerError) break;
+        if (suggestion) {
+          log("Đã có gợi ý sẵn · dùng lại, không gọi gợi ý lần hai");
+        } else {
+          globalThis.__assistantAutoFlowRequest = true;
+          try {
+            button.click();
+          } finally {
+            globalThis.__assistantAutoFlowRequest = false;
+          }
+          console.log("[Assistant Auto] Status: Normal (đã yêu cầu tạo gợi ý)");
+          while (running && !suggestion) {
+            await pauseSleep(flowDelay(700));
+            suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
+            const errorNode = document.querySelector(".xra-error,[role=alert],.xra-status-error");
+            providerError = errorNode?.textContent?.trim() || "";
+            if (providerError) break;
+          }
         }
         if (providerError) {
           const retryButton = document.querySelector(
@@ -658,7 +1102,12 @@
               await coordinate("release", item);
               return;
             }
-            retryButton.click();
+            globalThis.__assistantAutoFlowRequest = true;
+            try {
+              retryButton.click();
+            } finally {
+              globalThis.__assistantAutoFlowRequest = false;
+            }
             providerError = "";
             for (let retryWait = 0; retryWait < 60 && running; retryWait++) {
               await pauseSleep(flowDelay(500));
@@ -684,7 +1133,7 @@
           await coordinate("release", item);
           memory.consecutiveFailures += 1;
           memory.sessionFailures += 1;
-          s.push({ ...item, reason: providerError });
+          s.push({ ...item, reason: providerError, skippedAt: Date.now() });
           save(skippedKey, s);
           log(
             `Lỗi gợi ý (${memory.sessionFailures}/5 phiên, ${memory.consecutiveFailures}/3 liên tiếp):`,
@@ -700,11 +1149,22 @@
           break;
         }
         if (suggestion) {
-          const suggestions = document.querySelectorAll(".xra-results .xra-suggestion-wrap");
+          const suggestions = Array.from(
+              document.querySelectorAll(".xra-results .xra-suggestion-wrap"),
+            ),
+            preferredSuggestions =
+              globalThis.AutoReplySelection?.preferAboveScore(suggestions, 30) || suggestions;
           log("Kết quả gợi ý: " + suggestions.length);
-          const chosen = Math.floor(Math.random() * suggestions.length) + 1;
-          log("Lựa chọn: " + chosen);
-          suggestion = suggestions[chosen - 1]?.querySelector(".xra-chip-main") || suggestion;
+          if (preferredSuggestions.length < suggestions.length)
+            log(`Ưu tiên câu trên 30% (${preferredSuggestions.length}/${suggestions.length})`);
+          else if (
+            suggestions.length &&
+            !suggestions.some((item) => Number(item.dataset.relevanceScore) > 30)
+          )
+            log("Không có câu trên 30% · dùng danh sách hiện có");
+          const chosen = Math.floor(Math.random() * preferredSuggestions.length);
+          log("Lựa chọn: " + (chosen + 1));
+          suggestion = preferredSuggestions[chosen]?.querySelector(".xra-chip-main") || suggestion;
           const submitSlot = await coordinate("commit", item);
           if (!submitSlot.granted) {
             log(`Không thể nhận slot gửi comment: ${submitSlot.reason || "lease hết hạn"}`);
@@ -724,7 +1184,24 @@
             await coordinate("release", item);
             return;
           }
+          const selectedReply =
+            suggestion.querySelector(":scope > span:first-child")?.textContent?.trim() ||
+            suggestion.textContent?.trim() ||
+            "";
           suggestion.click();
+          const submitted = await submitSelectedReply(selectedReply, myHandle);
+          if (!submitted) {
+            const reason = "Không xác nhận được nút Trả lời sau khi chọn gợi ý";
+            log(`Lỗi: ${reason}`);
+            await coordinate("release", item);
+            s.push({ ...item, reason, skippedAt: Date.now() });
+            save(skippedKey, s);
+            await returnHome();
+            clearCurrentProcessing();
+            dashboard();
+            break;
+          }
+          await coordinate("sent", item);
           await coordinate("release", item);
           memory.consecutiveFailures = 0;
           p.push({ ...item, completedAt: Date.now() });
@@ -750,6 +1227,45 @@
       if (running && !memory.isPaused) timer = setTimeout(loop, flowDelay(2200));
     }
   }
+  const resumeCurrentRun = () => {
+    if (running) {
+      setPaused(false);
+      return;
+    }
+    if (!memory.isPaused || memory.runState !== "paused") return;
+    memory.runId ||= createRunId();
+    memory.runStartedAt ||= Date.now();
+    sessionStart = Number(memory.runStartedAt) || Date.now();
+    processedKey = runStorageKey(memory.runId, "processed");
+    skippedKey = runStorageKey(memory.runId, "skipped");
+    memory.processed = read(processedKey);
+    memory.skipped = read(skippedKey);
+    activeRunSegmentStartedAt = memory.isAutoResting ? 0 : Date.now();
+    memory.isPaused = false;
+    memory.runState = "running";
+    running = true;
+    globalThis.__assistantAutoFlowRunning = true;
+    document.dispatchEvent(new Event("assistant-auto-flow-state"));
+    syncPauseButton();
+    log("Tiếp tục phiên hiện tại · giữ nguyên số liệu");
+    dashboard();
+    notifyPanel(true);
+    sendRuntimeMessage({
+      type: "autoFlowPauseState",
+      paused: false,
+      runId: memory.runId,
+    });
+    (async () => {
+      if (!location.href.includes("/home") && location.pathname !== "/") {
+        log("Đang chuyển về Home để tiếp tục phiên");
+        await returnHome();
+      }
+      await loop();
+    })().catch((error) => {
+      log("Lỗi khi tiếp tục:", error);
+      stop("Đã dừng do lỗi khi tiếp tục");
+    });
+  };
   try {
     chrome.runtime.onMessage.addListener((m, _s, send) => {
       if (m?.type === "autoFlowIdentity") {
@@ -768,10 +1284,19 @@
       stop("Đã reset phiên");
       if (m.enabled) {
         sessionStart = Date.now();
+        memory.autoRestEnabled = localStorage.getItem("assistantAutoRestEnabled") === "true";
+        memory.autoRestEveryMinutes = Math.max(
+          1,
+          Math.min(1440, Number(localStorage.getItem("assistantAutoRestEveryMinutes")) || 30),
+        );
         memory.runId = createRunId();
         memory.runStartedAt = sessionStart;
         memory.runState = "running";
         memory.isPaused = false;
+        memory.isAutoResting = false;
+        memory.autoRestUntil = 0;
+        activeRunElapsedMs = 0;
+        activeRunSegmentStartedAt = sessionStart;
         processedKey = runStorageKey(memory.runId, "processed");
         skippedKey = runStorageKey(memory.runId, "skipped");
         memory.sessionFailures = 0;
@@ -781,20 +1306,24 @@
         memory.logs = [];
         save(processedKey, []);
         save(skippedKey, []);
-        const autoSuggest = document.querySelector("#panelAutoSuggest");
-        if (autoSuggest?.checked) {
-          autoSuggest.checked = false;
-          autoSuggest.dispatchEvent(new Event("change", { bubbles: true }));
-        }
         running = true;
         globalThis.__assistantAutoFlowRunning = true;
+        document.dispatchEvent(new Event("assistant-auto-flow-state"));
         notifyPanel(true);
         log(`Bắt đầu phiên tự động · ID ${memory.runId}`);
         dashboardView();
         dashboard();
         (async () => {
           if (!location.href.includes("/home") && location.pathname !== "/") {
-            log("Đang chuyển về Home (click 2 lần)");
+            const currentAuthor = location.pathname
+                .match(/^\/([^/]+)\/status\//i)?.[1]
+                ?.toLowerCase(),
+              excluded = await excludedAuthorSet();
+            log(
+              currentAuthor && excluded.has(currentAuthor)
+                ? `Bài của @${currentAuthor} nằm trong danh sách bỏ qua · chuyển về Home`
+                : "Đang chuyển về Home (click 2 lần)",
+            );
             const home = document.querySelector("a[data-testid=AppTabBar_Home_Link]");
             home?.click();
             await pauseSleep(700);

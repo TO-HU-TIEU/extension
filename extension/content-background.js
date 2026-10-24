@@ -41,7 +41,7 @@
           matches: allowed,
           js: [
             "remote-config.js",
-            "shared/language.js",
+            "language.js",
             "content-core.js",
             "content-reader.js",
             "content-extractor.js",
@@ -59,7 +59,7 @@
             target: { tabId: tab.id },
             files: [
               "remote-config.js",
-              "shared/language.js",
+              "language.js",
               "content-core.js",
               "content-reader.js",
               "content-extractor.js",
@@ -371,7 +371,7 @@
       target: { tabId: tab.id },
       files: [
         "remote-config.js",
-        "shared/language.js",
+        "language.js",
         "content-core.js",
         "content-reader.js",
         "content-extractor.js",

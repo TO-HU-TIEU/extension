@@ -70,17 +70,122 @@
       ? map[key]
       : null;
   };
+  function classifyType(post = {}) {
+    const text = String(post.target_text || post.text || "").trim(),
+      hasText = !!text,
+      hasMedia =
+        Number(post.mediaCount ?? post.media_count ?? 0) > 0 ||
+        (Array.isArray(post.mediaUrls) && post.mediaUrls.length > 0) ||
+        (Array.isArray(post.media_urls) && post.media_urls.length > 0) ||
+        (Array.isArray(post.mediaInline) && post.mediaInline.length > 0) ||
+        (Array.isArray(post.media_inline) && post.media_inline.length > 0) ||
+        (!!post.mediaKind && post.mediaKind !== "none") ||
+        (!!post.media_kind && post.media_kind !== "none");
+    let context = post.context || post.embedded || "";
+    if (typeof context === "string") {
+      try {
+        context = JSON.parse(context);
+      } catch {
+        context = {};
+      }
+    }
+    const embedded = Array.isArray(context?.embedded)
+        ? context.embedded
+        : Array.isArray(post.embedded)
+          ? post.embedded
+          : [],
+      hasLink = embedded.some((item) => /quoted_post|link_preview/i.test(String(item?.type || "")));
+    if (hasText && hasMedia) return hasLink ? "text+media+link" : "text+media";
+    if (hasText && hasLink) return "text+link";
+    if (hasText) return "text";
+    if (hasMedia) return hasLink ? "media+link" : "media-only";
+    if (hasLink) return "link-only";
+    return "other";
+  }
+  function languageOf(post = {}) {
+    const text = String(post.target_text || post.text || "").trim(),
+      declared = String(post.lang || post.language_hint || "");
+    try {
+      return text && globalThis.X_REPLY_LANGUAGE
+        ? String(globalThis.X_REPLY_LANGUAGE(text, declared) || "").split("-")[0]
+        : String(declared).split("-")[0];
+    } catch {
+      return String(declared).split("-")[0];
+    }
+  }
+  function corpusHint(post, corpus) {
+    if (!Array.isArray(corpus)) return "";
+    const type = classifyType(post),
+      language = languageOf(post),
+      typed = corpus.filter(
+        (item) => item && item.type === type && typeof item.reply === "string" && item.reply.trim(),
+      );
+    if (!typed.length) return "";
+    const sameLanguage = language ? typed.filter((item) => item.language === language) : [],
+      languageGroups = new Map();
+    if (sameLanguage.length) {
+      languageGroups.set(language, sameLanguage);
+    } else if (!language) {
+      for (const item of typed) {
+        const key = item.language || "";
+        languageGroups.set(key, [...(languageGroups.get(key) || []), item]);
+      }
+    }
+    const chosenLanguage = sameLanguage.length
+      ? language
+      : [...languageGroups.entries()].sort((a, b) => b[1].length - a[1].length)[0]?.[0];
+    let relevant = languageGroups.get(chosenLanguage) || [];
+    if (!relevant.length) return "";
+    const mediaKind = String(post.mediaKind || post.media_kind || ""),
+      sameMediaKind = mediaKind ? relevant.filter((item) => item.mediaKind === mediaKind) : [];
+    if (sameMediaKind.length >= 2) relevant = sameMediaKind;
+    const wordCounts = relevant.map((item) => (item.reply.trim().match(/\S+/gu) || []).length),
+      averageWords = Math.round(wordCounts.reduce((sum, n) => sum + n, 0) / wordCounts.length),
+      punctuation = relevant.reduce((counts, item) => {
+        const end = item.reply.trim().slice(-1),
+          key = end === "!" ? "!" : end === "?" ? "?" : /[.!?…]$/u.test(end) ? "period" : "none";
+        counts[key] = (counts[key] || 0) + 1;
+        return counts;
+      }, {}),
+      ending = Object.entries(punctuation).sort((a, b) => b[1] - a[1])[0]?.[0] || "none",
+      examples = relevant
+        .slice()
+        .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+        .slice(0, 3)
+        .map((item) => item.reply.trim());
+    const confidence =
+      relevant.length < 5 ? "Dữ liệu còn ít, chỉ tham khảo" : "Xu hướng từ tập mẫu";
+    return `\nMẫu tự viết theo loại bài ${type}${mediaKind ? `/${mediaKind}` : ""}${chosenLanguage ? `, ngôn ngữ ${chosenLanguage}` : ""} (${relevant.length} mẫu; ${confidence}): thường khoảng ${averageWords} từ, kiểu kết câu ${ending}. Chỉ xem đây là xu hướng giọng văn; dùng tối đa các ví dụ gần ngữ cảnh sau để học nhịp/cách diễn đạt, không sao chép câu hoặc lấy nội dung làm dữ kiện: ${JSON.stringify(examples)}`;
+  }
   function resolve(post, s) {
     const person = personFor(s, post.url),
       list = catalog(s),
       preset = person && (list.find((x) => x.id === person.styleId) || person);
-    const style = preset
+    const baseStyle = preset
       ? `${preset.prompt || ""}${person.extraPrompt ? "\nYêu cầu riêng cho tài khoản này: " + String(person.extraPrompt).slice(0, 2000) : ""}`
-      : list.find((x) => x.id === s.styleId)?.prompt ||
-        post.style ||
+      : post.style ||
+        list.find((x) => x.id === s.styleId)?.prompt ||
         s.stylePrompt ||
         defaults[0].prompt;
-    return { ...post, style: String(style).slice(0, 2000), fastMode: !!s.fastReplyMode };
+    const learnedHint = corpusHint(post, s.replyStyleCorpus),
+      extraContext = String(post.feedbackExtraContext || "").trim().slice(0, 500),
+      feedbackHint = extraContext
+        ? `\nNgữ cảnh bổ sung từ người dùng cho phản hồi (chỉ áp dụng khi phù hợp): ${extraContext}`
+        : "";
+    const styleAdditions = `${learnedHint}${feedbackHint}`,
+      baseLimit = Math.max(0, 8000 - styleAdditions.length);
+    return {
+      ...post,
+      style: `${String(baseStyle).slice(0, baseLimit)}${styleAdditions}`,
+      fastMode: !!s.fastReplyMode,
+    };
   }
-  globalThis.ReplyPreferences = { handle, catalog, resolve, label, person: personFor };
+  globalThis.ReplyPreferences = {
+    handle,
+    catalog,
+    resolve,
+    label,
+    person: personFor,
+    classifyType,
+  };
 })();

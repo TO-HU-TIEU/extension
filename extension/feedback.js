@@ -4,6 +4,7 @@
 (() => {
   if (globalThis.__assistantFeedbackScanner) return;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const feedbackReplyLocks = new Set();
   const autoFlowBusy = () => globalThis.__assistantAutoFlowRunning === true;
   const autoFlowBusyResult = () => ({
     ok: false,
@@ -15,8 +16,43 @@
       ?.getAttribute("data-testid")
       ?.replace("UserAvatar-Container-", "")
       .toLowerCase() || "";
-  const postId = (article) =>
-    article?.querySelector('a[href*="/status/"]')?.href.match(/\/status\/(\d+)/)?.[1] || "";
+  const postId = (article, preferredId = "") => {
+    const links = [...(article?.querySelectorAll('a[href*="/status/"]') || [])];
+    const ids = links.map((link) => link.href.match(/\/status\/(\d+)/)?.[1] || "").filter(Boolean);
+    if (preferredId && ids.includes(String(preferredId))) return String(preferredId);
+    // A post can contain a quoted status before its own permalink. Prefer the
+    // bare permalink belonging to the article author, not /photo, /analytics,
+    // or the quoted account's status URL.
+    const handle =
+      article
+        ?.querySelector('[data-testid="User-Name"] a[href^="/"]')
+        ?.getAttribute("href")
+        ?.replace(/^\//, "")
+        ?.split("/")[0]
+        ?.toLowerCase() || "";
+    const ownBare = links.find((link) => {
+      try {
+        const url = new URL(link.href);
+        const parts = url.pathname.split("/").filter(Boolean);
+        return (
+          parts.length === 3 &&
+          parts[1] === "status" &&
+          (!handle || parts[0].toLowerCase() === handle)
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (ownBare) return ownBare.href.match(/\/status\/(\d+)/)?.[1] || "";
+    const bare = links.find((link) => {
+      try {
+        return new URL(link.href).pathname.split("/").filter(Boolean).length === 3;
+      } catch {
+        return false;
+      }
+    });
+    return bare?.href.match(/\/status\/(\d+)/)?.[1] || ids[0] || "";
+  };
   const author = (article) => {
     const node = article?.querySelector('[data-testid="User-Name"]');
     return {
@@ -75,6 +111,9 @@
       text: text(article),
       publishedAt: publishedAt(article),
       replyCount: replyCount(article),
+      // A pinned post can be older than the selected range while appearing
+      // before today's posts. It must not trigger the cutoff early.
+      pinned: /^\s*đã ghim\b/i.test(article?.innerText || ""),
       ...identity,
     };
   }
@@ -104,17 +143,18 @@
   }
   function profilePosts() {
     const seen = new Set();
-    const own = ownHandle();
+    // The profile URL remains stable even when X changes the avatar testid.
+    const profileHandle = location.pathname.match(/^\/([^/]+)/)?.[1]?.toLowerCase() || "";
     return [...document.querySelectorAll('main article[data-testid="tweet"]')]
       .filter((article) => !isReplyOrReshare(article))
       .map(currentPost)
       .filter(
         (item) =>
           item &&
-          (!own ||
+          (!profileHandle ||
             String(item.handle || "")
               .replace(/^@/, "")
-              .toLowerCase() === own) &&
+              .toLowerCase() === profileHandle) &&
           !seen.has(item.id) &&
           seen.add(item.id),
       );
@@ -144,29 +184,43 @@
       rangeMode === "day" || (!rangeMode && sinceHours === undefined)
         ? new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
         : Date.now() - Math.max(1, Number(rangeMode ?? sinceHours) || 24) * 3600000;
+    // X virtualizes profile timelines: articles that have already scrolled
+    // past are removed from the DOM. Keep a map while scrolling instead of
+    // reading only the final viewport (which used to produce an empty list).
+    const collected = new Map();
     let stable = 0,
-      last = 0;
+      lastScrollY = window.scrollY;
     for (let i = 0; i < 45; i++) {
       if (autoFlowBusy()) return autoFlowBusyResult();
       if (scanCancelled) break;
-      const before = profilePosts().length;
+      const visible = profilePosts();
+      const beforeSize = collected.size;
+      for (const item of visible) {
+        if (item?.id && !collected.has(item.id)) collected.set(item.id, item);
+      }
       window.scrollBy({ top: Math.max(420, innerHeight * 0.8), behavior: "smooth" });
       await sleep(700);
-      const count = profilePosts().length;
-      const reachedCutoff = profilePosts().some(
+      const afterVisible = profilePosts();
+      for (const item of afterVisible) {
+        if (item?.id && !collected.has(item.id)) collected.set(item.id, item);
+      }
+      const reachedCutoff = [...collected.values()].some(
         (item) =>
+          !item.pinned &&
           item.publishedAt &&
           !Number.isNaN(Date.parse(item.publishedAt)) &&
           Date.parse(item.publishedAt) < cutoff,
       );
-      stable = count === before ? stable + 1 : 0;
-      if (count === last) stable++;
-      last = count;
+      const scrollY = window.scrollY;
+      const changed = collected.size > beforeSize || Math.abs(scrollY - lastScrollY) > 2;
+      stable = changed ? 0 : stable + 1;
+      lastScrollY = scrollY;
       if (reachedCutoff || stable >= 5) break;
     }
-    const posts = profilePosts();
+    const posts = [...collected.values()];
     const reachedCutoff = posts.some(
       (item) =>
+        !item.pinned &&
         item.publishedAt &&
         !Number.isNaN(Date.parse(item.publishedAt)) &&
         Date.parse(item.publishedAt) < cutoff,
@@ -189,31 +243,58 @@
   }
   async function inspectPost({ expectedPostId = "", ownHandleOverride = "" } = {}) {
     if (autoFlowBusy()) return autoFlowBusyResult();
-    let stable = 0,
-      last = 0;
-    for (let i = 0; i < 20; i++) {
-      if (autoFlowBusy()) return autoFlowBusyResult();
-      const count = document.querySelectorAll('main article[data-testid="tweet"]').length;
-      window.scrollBy({ top: Math.max(360, innerHeight * 0.75), behavior: "smooth" });
-      await sleep(600);
-      const next = document.querySelectorAll('main article[data-testid="tweet"]').length;
-      stable = next === count && next === last ? stable + 1 : 0;
-      last = next;
-      if (stable >= 4) break;
+    const requestedId = String(expectedPostId || "");
+    // `tabs.onUpdated(..., complete)` can fire before X has mounted the root
+    // article. Wait briefly for the requested status instead of treating a
+    // transient empty DOM as a mismatched post and dropping the row.
+    let initialArticles = [...document.querySelectorAll('main article[data-testid="tweet"]')];
+    if (requestedId) {
+      const started = Date.now();
+      while (
+        !initialArticles.some((article) => postId(article) === requestedId) &&
+        Date.now() - started < 9000
+      ) {
+        await sleep(300);
+        initialArticles = [...document.querySelectorAll('main article[data-testid="tweet"]')];
+      }
     }
-    const articles = [...document.querySelectorAll('main article[data-testid="tweet"]')];
-    const rootId = postId(articles[0]);
-    if (expectedPostId && rootId !== String(expectedPostId))
+    // X virtualizes the thread while scrolling and can remove the root post
+    // from the DOM. Capture the expected root ID before loading comments.
+    const initialRootId = requestedId || postId(initialArticles[0]) || "";
+    const initialHasRequested =
+      !requestedId ||
+      initialArticles.some((article) => postId(article, requestedId) === requestedId);
+    const rootArticle =
+      initialArticles.find((article) => postId(article, initialRootId) === initialRootId) || null;
+    const rootId = initialRootId || postId(rootArticle);
+    const requestedIndex = requestedId
+      ? initialArticles.findIndex((article) => postId(article, requestedId) === requestedId)
+      : -1;
+    if (requestedId && !initialHasRequested)
       return {
         ok: false,
         error: "Trang bài đăng chưa khớp bài cần quét.",
         postId: rootId,
         comments: [],
       };
+    // Opening a continuation status shows the earlier root post first and the
+    // requested status after it. It is a thread continuation, not a separate
+    // main post for the profile feedback list.
+    if (requestedId && requestedIndex > 0) {
+      const rootPostId = postId(initialArticles[0]);
+      return {
+        ok: false,
+        continuation: true,
+        error: "Đây là bài nối tiếp trong cùng chuỗi, không phải bài đăng chính.",
+        postId: requestedId,
+        rootPostId,
+        comments: [],
+      };
+    }
     // A self-reply can appear as a sibling in the profile timeline. Once its
     // status page is opened, X exposes the reply relationship in social
     // context; reject it before it reaches the feedback list.
-    if (articles[0] && isReplyOrReshare(articles[0])) {
+    if (rootArticle && isReplyOrReshare(rootArticle)) {
       return {
         ok: false,
         error: "Đây là phản hồi, không phải bài đăng gốc.",
@@ -224,27 +305,57 @@
     const own = String(ownHandleOverride || ownHandle())
       .replace(/^@/, "")
       .toLowerCase();
+    // X virtualizes long threads too. Accumulate each visible comment across
+    // scrolls so the final result is not limited to the last viewport.
+    const commentsById = new Map();
     const comments = [];
     let lastUnanswered = null;
-    for (const article of articles.slice(1)) {
-      const item = currentPost(article);
-      if (!item) continue;
-      const isOwnReply =
-        own &&
-        String(item.handle || "")
-          .replace(/^@/, "")
-          .toLowerCase() === own;
-      if (isOwnReply) {
-        if (lastUnanswered) lastUnanswered.responded = true;
-        continue;
+    const collectVisibleComments = () => {
+      const visible = [...document.querySelectorAll('main article[data-testid="tweet"]')];
+      const rootIndex = visible.findIndex((article) => postId(article, rootId) === rootId);
+      const candidates = visible.slice(rootIndex >= 0 ? rootIndex + 1 : 0);
+      for (const article of candidates) {
+        const item = currentPost(article);
+        if (!item || item.id === rootId) continue;
+        const isOwnReply =
+          own &&
+          String(item.handle || "")
+            .replace(/^@/, "")
+            .toLowerCase() === own;
+        if (isOwnReply) {
+          if (lastUnanswered) lastUnanswered.responded = true;
+          continue;
+        }
+        // A reaction-only or interaction-request comment has no useful
+        // response. Exclude it without consuming the requested target.
+        if (isEmojiOnly(item.text) || isInteractionRequest(item.text)) continue;
+        const key = String(item.id);
+        const existing = commentsById.get(key);
+        if (existing) {
+          lastUnanswered = existing;
+          continue;
+        }
+        const comment = { ...item, postId: rootId, responded: false };
+        commentsById.set(key, comment);
+        comments.push(comment);
+        lastUnanswered = comment;
       }
-      // A reaction-only comment has no message to answer. Exclude it from
-      // the candidate list so it never consumes the requested reply target;
-      // the runner continues with the next comment instead.
-      if (isEmojiOnly(item.text) || isInteractionRequest(item.text)) continue;
-      const comment = { ...item, postId: rootId, responded: false };
-      comments.push(comment);
-      lastUnanswered = comment;
+      return visible.length;
+    };
+    let stable = 0;
+    let lastScrollY = window.scrollY;
+    for (let i = 0; i < 24; i++) {
+      if (autoFlowBusy()) return autoFlowBusyResult();
+      const beforeSize = comments.length;
+      collectVisibleComments();
+      window.scrollBy({ top: Math.max(360, innerHeight * 0.75), behavior: "smooth" });
+      await sleep(600);
+      collectVisibleComments();
+      const scrollY = window.scrollY;
+      const changed = comments.length > beforeSize || Math.abs(scrollY - lastScrollY) > 2;
+      stable = changed ? 0 : stable + 1;
+      lastScrollY = scrollY;
+      if (stable >= 4) break;
     }
     return { ok: true, postId: rootId, comments };
   }
@@ -252,7 +363,13 @@
     const started = Date.now();
     while (Date.now() - started < timeout) {
       const box = document.querySelector(".xra-box");
-      if (box?.isConnected) return box;
+      if (box?.isConnected) {
+        // Reply execution should stop at the assistant reply box. Do not use
+        // a repeated page scroll here: it makes X keep loading the thread to
+        // the bottom and interferes with the next comment.
+        box.scrollIntoView?.({ block: "center", inline: "nearest", behavior: "auto" });
+        return box;
+      }
       await sleep(250);
     }
     return null;
@@ -276,18 +393,25 @@
   };
   async function threadHasOwnReply(handle) {
     if (!handle) return false;
-    let stable = 0;
-    for (let attempt = 0; attempt < 16; attempt++) {
-      if (autoFlowBusy()) return false;
-      if (domHasOwnReply(handle)) return true;
-      const before = document.querySelectorAll('main article[data-testid="tweet"]').length;
-      window.scrollBy({ top: Math.max(420, innerHeight * 0.8), behavior: "smooth" });
-      await sleep(550);
-      const after = document.querySelectorAll('main article[data-testid="tweet"]').length;
-      stable = after === before ? stable + 1 : 0;
-      if (stable >= 4) break;
-    }
+    if (autoFlowBusy()) return false;
+    // The scan already stored the comment/replied checkpoint. At execution
+    // time only inspect what X has mounted for this status; never scroll the
+    // whole thread just to look for a self-reply.
     return domHasOwnReply(handle);
+  }
+  async function likeCurrentPostIfEnabled(expectedId = "") {
+    let enabled = false;
+    try {
+      enabled = (await chrome.storage.local.get("autoLike"))?.autoLike === true;
+    } catch {}
+    if (!enabled) return false;
+    const article = [...document.querySelectorAll('main article[data-testid="tweet"]')].find(
+      (candidate) => postId(candidate, expectedId) === String(expectedId),
+    );
+    const like = article?.querySelector('[data-testid="like"]');
+    if (!like) return false;
+    like.click();
+    return true;
   }
   async function waitForChip(box, timeout = 45000) {
     const started = Date.now();
@@ -301,48 +425,64 @@
   }
   async function replyComment({ commentUrl = "", extraContext = "", ownHandleOverride = "" } = {}) {
     if (autoFlowBusy()) return autoFlowBusyResult();
-    if (commentUrl && !location.href.startsWith(commentUrl)) {
-      location.href = commentUrl;
-      return { ok: false, reload: true };
+    const replyKey = String(commentUrl || location.href);
+    if (feedbackReplyLocks.has(replyKey)) {
+      return { ok: false, duplicate: true, error: "Comment này đang được xử lý." };
     }
-    if (extraContext)
-      await chrome.storage.local
-        .set({ feedbackExtraContext: String(extraContext).slice(0, 500) })
-        .catch(() => {});
-    const expectedOwnHandle = String(ownHandleOverride || ownHandle())
-      .replace(/^@/, "")
-      .toLowerCase();
-    if (await threadHasOwnReply(expectedOwnHandle)) {
-      return { ok: false, alreadyReplied: true, error: "Comment đã được phản hồi trước đó." };
+    feedbackReplyLocks.add(replyKey);
+    const previousFeedbackFlag = globalThis.__assistantFeedbackReplyRunning;
+    globalThis.__assistantFeedbackReplyRunning = true;
+    try {
+      if (commentUrl && !location.href.startsWith(commentUrl)) {
+        location.href = commentUrl;
+        return { ok: false, reload: true };
+      }
+      const currentId = String(commentUrl || location.href).match(/\/status\/(\d+)/)?.[1] || "";
+      await likeCurrentPostIfEnabled(currentId);
+      if (extraContext)
+        await chrome.storage.local
+          .set({ feedbackExtraContext: String(extraContext).slice(0, 500) })
+          .catch(() => {});
+      const expectedOwnHandle = String(ownHandleOverride || ownHandle())
+        .replace(/^@/, "")
+        .toLowerCase();
+      if (await threadHasOwnReply(expectedOwnHandle)) {
+        return { ok: false, alreadyReplied: true, error: "Comment đã được phản hồi trước đó." };
+      }
+      if (autoFlowBusy()) return autoFlowBusyResult();
+      const box = await waitForReplyBox();
+      if (!box) return { ok: false, error: "Chưa thấy khung gợi ý phản hồi trên bài viết." };
+      const generate = box.querySelector(".xra-generate");
+      if (!generate) return { ok: false, error: "Chưa thấy nút tạo gợi ý phản hồi." };
+      // X can finish rendering the thread after the reply box appears. Check
+      // the DOM one final time immediately before generating so an existing
+      // self-reply can never trigger another suggestion/comment.
+      if (await threadHasOwnReply(expectedOwnHandle)) {
+        return { ok: false, alreadyReplied: true, error: "Comment đã được phản hồi trước đó." };
+      }
+      if (autoFlowBusy()) return autoFlowBusyResult();
+      generate.click();
+      const chip = await waitForChip(box);
+      if (!chip)
+        return {
+          ok: false,
+          error: box.querySelector(".xra-error")?.textContent || "Không tạo được gợi ý phản hồi.",
+        };
+      chip.click();
+      await sleep(150);
+      const submit =
+        box.closest("article")?.querySelector('[data-testid="tweetButtonInline"]') ||
+        document.querySelector('[data-testid="tweetButtonInline"]');
+      if (!submit || submit.disabled) return { ok: false, error: "Chưa thấy nút đăng phản hồi." };
+      submit.click();
+      await sleep(700);
+      return { ok: true };
+    } finally {
+      feedbackReplyLocks.delete(replyKey);
+      if (previousFeedbackFlag === undefined)
+        delete globalThis.__assistantFeedbackReplyRunning;
+      else globalThis.__assistantFeedbackReplyRunning = previousFeedbackFlag;
     }
-    if (autoFlowBusy()) return autoFlowBusyResult();
-    const box = await waitForReplyBox();
-    if (!box) return { ok: false, error: "Chưa thấy khung gợi ý phản hồi trên bài viết." };
-    const generate = box.querySelector(".xra-generate");
-    if (!generate) return { ok: false, error: "Chưa thấy nút tạo gợi ý phản hồi." };
-    // X can finish rendering the thread after the reply box appears. Check
-    // the DOM one final time immediately before generating so an existing
-    // self-reply can never trigger another suggestion/comment.
-    if (await threadHasOwnReply(expectedOwnHandle)) {
-      return { ok: false, alreadyReplied: true, error: "Comment đã được phản hồi trước đó." };
-    }
-    if (autoFlowBusy()) return autoFlowBusyResult();
-    generate.click();
-    const chip = await waitForChip(box);
-    if (!chip)
-      return {
-        ok: false,
-        error: box.querySelector(".xra-error")?.textContent || "Không tạo được gợi ý phản hồi.",
-      };
-    chip.click();
-    await sleep(150);
-    const submit =
-      box.closest("article")?.querySelector('[data-testid="tweetButtonInline"]') ||
-      document.querySelector('[data-testid="tweetButtonInline"]');
-    if (!submit || submit.disabled) return { ok: false, error: "Chưa thấy nút đăng phản hồi." };
-    submit.click();
-    await sleep(700);
-    return { ok: true };
   }
   const api = {
     scanProfile,

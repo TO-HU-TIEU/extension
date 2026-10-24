@@ -12,6 +12,7 @@
     mounting = false,
     observer,
     hideAdsEnabled = false;
+  const removedHomeAds = new Map();
   const discreet = (text) =>
     String(text || "")
       .replace(/X Reply Assistant|Reply Assistant/gi, "Assistant")
@@ -111,6 +112,11 @@
     );
   }
   function currentArticle(id) {
+    // On a post/Article page X also renders recommended posts after the target.
+    // The reply composer can appear after those recommendations in DOM order,
+    // so proximity to the composer must never outrank the status ID in the URL.
+    const exact = articleFor(id);
+    if (exact) return exact;
     const e = document.querySelector('[data-testid="tweetTextarea_0"]'),
       articles = [...document.querySelectorAll('main article[data-testid="tweet"]')];
     if (e) {
@@ -121,8 +127,6 @@
       );
       if (before.length) return before.at(-1);
     }
-    const exact = articleFor(id);
-    if (exact) return exact;
     return articles.at(-1) || null;
   }
   const originalLabel = /^(?:hiện|xem) bản gốc$|^show original$|^view original$/i,
@@ -145,9 +149,26 @@
       contains =
         /(?:promoted|sponsored|advertisement|được\s+quảng\s+cáo|quảng\s+cáo|được\s+tài\s+trợ|tài\s+trợ)/iu,
       translation = /được\s+dịch\s+từ|translated\s+from|hiện\s+bản\s+gốc|show\s+original/iu,
-      markers = [...article.querySelectorAll('[data-testid="socialContext"],[aria-label],span,div')]
-        .filter((e) => e.closest("article") === article && !insideQuote(e, article))
-        .slice(0, 1200);
+      ownAdLabel = (element) => {
+        if (
+          element.closest("article") !== article ||
+          element.closest('[data-testid="quoteTweet"]') ||
+          element.closest('[data-testid="tweetText"]')
+        )
+          return false;
+        const aria = (element.getAttribute("aria-label") || "").trim().replace(/\s+/g, " "),
+          text = (element.textContent || "").trim().replace(/\s+/g, " ");
+        return exact.test(aria) || exact.test(text);
+      };
+    // X currently renders the localized "Quảng cáo" badge as plain nested
+    // div/span text without a stable test id. Detect the exact label in the
+    // post header, independent of X's role=link wrappers.
+    if ([...article.querySelectorAll("[aria-label],span,div")].some(ownAdLabel)) return true;
+    const markers = [
+      ...article.querySelectorAll('[data-testid="socialContext"],[aria-label],span,div'),
+    ]
+      .filter((e) => e.closest("article") === article && !insideQuote(e, article))
+      .slice(0, 1200);
     return markers.some((e) => {
       const label = (e.getAttribute("aria-label") || "").trim().replace(/\s+/g, " "),
         text = (e.textContent || "").trim().replace(/\s+/g, " "),
@@ -163,17 +184,31 @@
   }
   function applyAdHiding() {
     document.documentElement.classList.toggle("xra-hide-ads-enabled", hideAdsEnabled);
-    // Never remove articles from profile, post, replies, or media pages.
-    // X reuses article markup there for pinned/media content and false positives
-    // would otherwise delete real user posts from the DOM.
-    if (!/^\/(?:home|explore|search)(?:\/|$)/i.test(location.pathname)) return;
+    // Limit filtering to timelines and a status conversation. The exact target
+    // post is always preserved; only posts carrying explicit ad markers qualify.
+    if (
+      !/^\/(?:home|explore|search)(?:\/|$)|^\/[^/]+\/status\/\d+(?:\/|$)/i.test(location.pathname)
+    )
+      return;
     const currentId = location.pathname.match(/\/status\/(\d+)/)?.[1],
-      root = currentId ? articleFor(currentId) : null;
+      root = currentId ? articleFor(currentId) : null,
+      isHome = /^\/home(?:\/|$)/i.test(location.pathname);
+    if (!hideAdsEnabled && isHome) {
+      for (const [article, placeholder] of removedHomeAds) {
+        if (placeholder.isConnected) placeholder.replaceWith(article);
+        removedHomeAds.delete(article);
+      }
+    }
     for (const article of [...document.querySelectorAll('article[data-testid="tweet"]')]) {
-      if (article === root || !promotedArticle(article)) continue;
-      if (hideAdsEnabled) {
-        article.remove();
-      } else article.classList.remove("xra-hidden-ad");
+      const shouldHide = article !== root && hideAdsEnabled && promotedArticle(article);
+      if (isHome && shouldHide) {
+        if (!removedHomeAds.has(article)) {
+          const placeholder = document.createComment("xra-hidden-ad");
+          article.before(placeholder);
+          removedHomeAds.set(article, placeholder);
+          article.remove();
+        }
+      } else article.classList.toggle("xra-hidden-ad", shouldHide);
     }
   }
   function originalTextNode(article) {
@@ -194,7 +229,16 @@
         }
         return true;
       });
-    return originalForeign || notTranslated || nodes[0] || null;
+    return (
+      originalForeign ||
+      notTranslated ||
+      nodes[0] ||
+      globalThis.XArticleContent?.node(article) ||
+      null
+    );
+  }
+  function postText(article, node = originalTextNode(article)) {
+    return globalThis.XArticleContent?.text(article, node) || node?.innerText?.trim() || "";
   }
   function mediaFor(article) {
     if (!article) return { mediaUrls: [], mediaCount: 0, mediaKind: "none" };
@@ -272,7 +316,7 @@
     const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
       article = currentArticle(id),
       node = originalTextNode(article),
-      text = node?.innerText?.trim() || "",
+      text = postText(article, node),
       author = location.pathname.match(/^\/([^/]+)\/status/)?.[1];
     if (!id || !article) return null;
     const ownMedia = mediaFor(article),
@@ -295,7 +339,7 @@
         return {
           turn: index + 1,
           author: urlPath(link?.href).split("/")[1] || "",
-          text: originalTextNode(a).innerText.trim(),
+          text: postText(a),
           media_count: turnMedia.mediaCount,
           media_indexes: mediaIndexes,
         };
@@ -372,7 +416,7 @@
       id = link?.href.match(/\/status\/(\d+)/)?.[1],
       author = urlPath(link?.href || "").split("/")[1] || "",
       node = originalTextNode(article),
-      text = node?.innerText?.trim() || "",
+      text = postText(article, node),
       ownMedia = mediaFor(article),
       embedded = embeddedContext(article).embedded,
       authorNode = article.querySelector('[data-testid="User-Name"]'),
@@ -578,6 +622,9 @@
       clearQuoteButtons();
       return;
     }
+    // The current target already has its control. Most X mutations are feed
+    // updates; avoid rescanning every article for the same target each time.
+    if (target.dataset.xraQuoteButton) return;
     for (const article of document.querySelectorAll('article[data-testid="tweet"]')) {
       if (article !== target) {
         article
@@ -641,7 +688,202 @@
       }
     }
   }
-  const editor = () => document.querySelector('[data-testid="tweetTextarea_0"]');
+  const replyTextareaSelector = '[data-testid^="tweetTextarea_"][contenteditable="true"]',
+    replySendButtonSelector = '[data-testid="tweetButtonInline"],[data-testid="tweetButton"]';
+  const isReplyControlVisible = (node) => {
+    if (!node || !node.isConnected) return false;
+    const rect = node.getBoundingClientRect?.();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+    const style = getComputedStyle(node);
+    return style.display !== "none" && style.visibility !== "hidden";
+  };
+  const editor = () => {
+    const editors = [...document.querySelectorAll(replyTextareaSelector)];
+    return (
+      editors.find((candidate) => isReplyControlVisible(candidate)) ||
+      editors[0] ||
+      document.querySelector('[data-testid="tweetTextarea_0"]')
+    );
+  };
+  const modelFilledEditors = new WeakSet();
+  const manuallyEditedEditors = new WeakSet();
+  const manualReplyDrafts = new WeakMap();
+  const autoFlowMutedSetting = (key) =>
+    globalThis.__assistantAutoFlowRunning === true && ["autoReply", "autoSuggest"].includes(key);
+  function syncAutoFlowSettingUi() {
+    const update = (control, key) => {
+      if (!["autoReply", "autoSuggest"].includes(key)) return;
+      const muted = autoFlowMutedSetting(key),
+        savedValue = control.dataset.savedEnabled === "true",
+        value = muted ? false : savedValue;
+      control.disabled = false;
+      if (control.matches("button")) {
+        control.classList.toggle("active", value);
+        control.setAttribute("aria-pressed", String(value));
+      } else control.checked = value;
+      control.title = muted ? "Tạm tắt trong tab đang chạy tự động" : "";
+    };
+    document
+      .querySelectorAll(".xra-box .xra-auto-reply,.xra-box .xra-auto-suggest")
+      .forEach((button) => update(button, button.dataset.xraSettingKey));
+    document
+      .querySelectorAll(
+        '.xra-auto-panel input[data-key="autoReply"],.xra-auto-panel input[data-key="autoSuggest"]',
+      )
+      .forEach((input) => update(input, input.dataset.key));
+  }
+  document.addEventListener("assistant-auto-flow-state", syncAutoFlowSettingUi);
+  let insertingGeneratedReply = false;
+  const clearSubmittedEditorMarker = (editor) =>
+    setTimeout(() => {
+      if (!String(editor?.innerText || editor?.textContent || "").trim()) {
+        modelFilledEditors.delete(editor);
+        manuallyEditedEditors.delete(editor);
+      }
+    }, 800);
+  const replyEditorFrom = (node) => {
+    const direct = node?.closest?.(replyTextareaSelector);
+    if (direct) return direct;
+    // X's active composer is a nested div region, not a form/dialog. Walk up
+    // from the send control until its nearest shared container includes the
+    // editable textbox; do not rely on a form wrapper that X does not render.
+    for (let root = node; root && root !== document.documentElement; root = root.parentElement) {
+      const candidate = root.matches?.(replyTextareaSelector)
+        ? root
+        : root.querySelector?.(replyTextareaSelector);
+      if (candidate && root.querySelector?.(replySendButtonSelector)) return candidate;
+    }
+    return null;
+  };
+  function replyContextType(editor, replyText) {
+    const postId = location.pathname.match(/\/status\/(\d+)/)?.[1],
+      article = editor?.closest?.('article[data-testid="tweet"]') || currentArticle(postId),
+      textNode = originalTextNode(article),
+      text = postText(article, textNode),
+      media = mediaFor(article),
+      embedded = article ? embeddedContext(article).embedded : [],
+      postType =
+        globalThis.ReplyPreferences?.classifyType?.({
+          text,
+          mediaCount: media.mediaCount,
+          mediaKind: media.mediaKind,
+          mediaUrls: media.mediaUrls,
+          embedded,
+        }) || "other";
+    let language = "";
+    try {
+      language = scriptLanguage(replyText, "") || "";
+    } catch {}
+    return { type: postType, language: String(language).split("-")[0], mediaKind: media.mediaKind };
+  }
+  async function rememberManualReply(editor, submittedText = "", submittedContext = null) {
+    if (!editor || modelFilledEditors.has(editor) || !manuallyEditedEditors.has(editor)) return;
+    const draft = manualReplyDrafts.get(editor),
+      text = String(submittedText || draft?.text || editor.innerText || editor.textContent || "")
+        .replace(/\s+/gu, " ")
+        .trim();
+    if (Array.from(text).length < 2) return;
+    const context = submittedContext || draft?.context || replyContextType(editor, text),
+      fresh = await safeGet(["replyStyleCorpus"]);
+    if (!fresh || context.type === "other") return;
+    const corpus = Array.isArray(fresh.replyStyleCorpus) ? fresh.replyStyleCorpus : [],
+      sample = {
+        type: context.type,
+        language: context.language,
+        mediaKind: context.mediaKind,
+        reply: Array.from(text).slice(0, 180).join(""),
+        createdAt: Date.now(),
+      },
+      normalized = sample.reply.toLocaleLowerCase(),
+      unique = corpus.filter(
+        (item) =>
+          !(
+            item?.type === sample.type &&
+            item?.language === sample.language &&
+            String(item?.reply || "")
+              .trim()
+              .toLocaleLowerCase() === normalized
+          ),
+      );
+    unique.push(sample);
+    await safeSet({ replyStyleCorpus: unique.slice(-1000) });
+    manuallyEditedEditors.delete(editor);
+    modelFilledEditors.delete(editor);
+    manualReplyDrafts.delete(editor);
+  }
+  const saveSubmittedManualReply = (editor) => {
+    if (!editor || modelFilledEditors.has(editor) || !manuallyEditedEditors.has(editor)) return;
+    const draft = manualReplyDrafts.get(editor),
+      text = String(draft?.text || editor.innerText || editor.textContent || "").trim(),
+      context = draft?.context || replyContextType(editor, text);
+    // Snapshot synchronously: X clears/unmounts its composer immediately after sending.
+    rememberManualReply(editor, text, context).catch(() => {});
+  };
+  document.addEventListener(
+    "input",
+    (event) => {
+      if (insertingGeneratedReply) return;
+      const candidate = event.target?.closest?.(replyTextareaSelector);
+      if (!candidate) return;
+      const text = String(candidate.innerText || candidate.textContent || "").trim();
+      if (!text) {
+        manuallyEditedEditors.delete(candidate);
+        modelFilledEditors.delete(candidate);
+        manualReplyDrafts.delete(candidate);
+      } else if (event.isTrusted) {
+        manuallyEditedEditors.add(candidate);
+        manualReplyDrafts.set(candidate, { text, context: replyContextType(candidate, text) });
+      }
+    },
+    true,
+  );
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (
+        !event.isTrusted ||
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        (!event.ctrlKey && !event.metaKey) ||
+        event.isComposing
+      )
+        return;
+      const candidate = replyEditorFrom(event.target);
+      if (candidate) {
+        if (modelFilledEditors.has(candidate)) {
+          clearSubmittedEditorMarker(candidate);
+          return;
+        }
+        saveSubmittedManualReply(candidate);
+      }
+    },
+    true,
+  );
+  document.addEventListener(
+    "click",
+    (event) => {
+      const sendButton = event.target.closest?.(replySendButtonSelector);
+      if (!sendButton) return;
+      const candidate = replyEditorFrom(event.target);
+      if (!candidate) return;
+      if (modelFilledEditors.has(candidate)) {
+        clearSubmittedEditorMarker(candidate);
+        return;
+      }
+      if (!event.isTrusted) return;
+      saveSubmittedManualReply(candidate);
+    },
+    true,
+  );
+  document.addEventListener(
+    "submit",
+    (event) => {
+      if (!event.isTrusted) return;
+      const candidate = event.target?.querySelector?.(replyTextareaSelector);
+      if (candidate) saveSubmittedManualReply(candidate);
+    },
+    true,
+  );
   function activate() {
     const e = editor();
     if (e) {
@@ -652,21 +894,35 @@
   function fillOnce(text) {
     const e = editor();
     if (!e) return;
-    activate();
-    if ((e.innerText || "").trim()) document.execCommand("selectAll", false);
-    const transfer = new DataTransfer();
-    transfer.setData("text/plain", text);
-    const event = new ClipboardEvent("paste", {
+    modelFilledEditors.add(e);
+    insertingGeneratedReply = true;
+    try {
+      activate();
+      if ((e.innerText || "").trim()) document.execCommand("selectAll", false);
+      const transfer = new DataTransfer();
+      transfer.setData("text/plain", text);
+      const event = new ClipboardEvent("paste", {
         bubbles: true,
         cancelable: true,
         clipboardData: transfer,
-      }),
-      dispatched = e.dispatchEvent(event);
-    if (dispatched && !event.defaultPrevented) document.execCommand("insertText", false, text);
+      });
+      const dispatched = e.dispatchEvent(event);
+      if (dispatched && !event.defaultPrevented) document.execCommand("insertText", false, text);
+    } finally {
+      insertingGeneratedReply = false;
+    }
   }
   function fill(text, auto) {
     fillOnce(text);
-    if (auto)
+    // The feedback runner submits the selected suggestion itself. Its chip
+    // click must not also schedule the toolbar's auto-submit, otherwise X can
+    // receive two clicks for the same reply and reject the second one as a
+    // duplicate comment.
+    if (
+      auto &&
+      globalThis.__assistantFeedbackReplyRunning !== true &&
+      globalThis.__assistantAutoFlowRunning !== true
+    )
       setTimeout(() => document.querySelector('[data-testid="tweetButtonInline"]')?.click(), 90);
   }
   async function openMediaPicker(query, kind = "gif") {
@@ -881,6 +1137,36 @@
       state.liked = true;
     }
   }
+  function appendReplyQualityText(target, value, issues) {
+    const text = String(value || ""),
+      phrases = [...new Set((Array.isArray(issues) ? issues : []).map((x) => String(x).trim()))]
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length);
+    if (!phrases.length) {
+      target.textContent = text;
+      return;
+    }
+    const escaped = phrases.map((phrase) =>
+      [...phrase]
+        .map((character) => {
+          const special = ".^$|?*+()[]{}";
+          return special.includes(character) ? "\\" + character : character;
+        })
+        .join(""),
+    );
+    const matcher = new RegExp(escaped.join("|"), "giu");
+    let cursor = 0;
+    for (const match of text.matchAll(matcher)) {
+      target.append(document.createTextNode(text.slice(cursor, match.index)));
+      const highlight = document.createElement("mark");
+      highlight.className = "reply-quality-highlight";
+      highlight.textContent = match[0];
+      highlight.title = "Cụm sáo bị đánh dấu; điểm phù hợp đã giảm.";
+      target.append(highlight);
+      cursor = match.index + match[0].length;
+    }
+    target.append(document.createTextNode(text.slice(cursor)));
+  }
   function render(box) {
     const results = box.querySelector(".xra-results");
     results.replaceChildren();
@@ -891,6 +1177,11 @@
     state.replies.forEach((item, i) => {
       const wrap = document.createElement("div");
       wrap.className = "xra-suggestion-wrap";
+      wrap.dataset.relevanceScore = Number.isFinite(item.relevance_score)
+        ? String(item.relevance_score)
+        : "";
+      const issues = Array.isArray(item.quality_issues) ? item.quality_issues : [];
+      if (issues.length) wrap.classList.add("quality-flagged");
       const b = document.createElement("button");
       b.className = "xra-chip";
       b.classList.toggle("selected", state.selected === i);
@@ -898,8 +1189,12 @@
         t = document.createElement("span"),
         score = document.createElement("span");
       row.className = "xra-chip-main";
-      t.textContent = item.reply;
+      appendReplyQualityText(t, item.reply, issues);
       score.className = "xra-relevance";
+      if (issues.length) {
+        score.classList.add("quality-low");
+        score.title = "Điểm phù hợp đã giảm do có cụm từ sáo cần cân nhắc.";
+      }
       score.textContent = Number.isFinite(item.relevance_score) ? `${item.relevance_score}%` : "";
       row.append(t, score);
       b.append(row);
@@ -951,7 +1246,6 @@
     mounting = true;
     const saved = await safeGet([
       "autoReply",
-      "autoReplyFlow",
       "autoSuggest",
       "autoLike",
       "usageMode",
@@ -989,7 +1283,7 @@
       mounting = false;
       return;
     }
-    if (saved.autoSuggest && !saved.autoReplyFlow)
+    if (saved.autoSuggest && globalThis.__assistantAutoFlowRunning !== true)
       globalThis.XReplyMedia?.prime(currentArticle(currentId), !!saved.fastReplyMode);
     let e = editor();
     if (!e) {
@@ -1072,17 +1366,27 @@
       countMenu.hidden = !countMenu.hidden;
     };
     const toggle = (button, key, value) => {
-      button.classList.toggle("active", value);
-      button.setAttribute("aria-pressed", String(value));
+      button.dataset.xraSettingKey = key;
+      button.dataset.savedEnabled = String(!!value);
+      button.classList.toggle("active", !!value && !autoFlowMutedSetting(key));
+      button.setAttribute("aria-pressed", String(!!value && !autoFlowMutedSetting(key)));
+      button.disabled = false;
       button.onclick = () => {
         const next = !button.classList.contains("active");
+        button.dataset.savedEnabled = String(next);
         button.classList.toggle("active", next);
         button.setAttribute("aria-pressed", String(next));
         try {
           chrome.storage.local.set({ [key]: next }).catch(() => {});
         } catch {}
         if (key === "autoLike" && next) likePost();
-        if (key === "autoSuggest" && next && !saved.autoReplyFlow && !state.generated) run(false);
+        if (
+          key === "autoSuggest" &&
+          next &&
+          !globalThis.__assistantAutoFlowRunning &&
+          !state.generated
+        )
+          run(false);
       };
     };
     toggle(box.querySelector(".xra-auto-reply"), "autoReply", !!saved.autoReply);
@@ -1103,23 +1407,39 @@
       '<label><span><b>Tự động gợi ý</b><small>Tạo khi mở bài</small></span><input type="checkbox" data-key="autoSuggest"></label><label><span><b>Tự thả like</b><small>Like khi mở bài</small></span><input type="checkbox" data-key="autoLike"></label><label><span><b>Tự đăng trả lời</b><small>Đăng khi chọn gợi ý</small></span><input type="checkbox" data-key="autoReply"></label><label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
     box.querySelector(".xra-results").before(autoPanel);
     for (const input of autoPanel.querySelectorAll("input")) {
-      input.checked = !!saved[input.dataset.key];
+      input.dataset.savedEnabled = String(!!saved[input.dataset.key]);
+      input.checked = !!saved[input.dataset.key] && !autoFlowMutedSetting(input.dataset.key);
+      input.disabled = false;
       input.onchange = () => {
         const key = input.dataset.key,
           value = input.checked;
+        input.dataset.savedEnabled = String(value);
         chrome.storage.local.set({ [key]: value }).catch(() => {});
         box
           .querySelector(`.xra-${key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}`)
           ?.classList.toggle("active", value);
         if (key === "autoLike" && value) likePost();
-        if (key === "autoSuggest" && value && !saved.autoReplyFlow && !state.generated) run(false);
+        if (
+          key === "autoSuggest" &&
+          value &&
+          !globalThis.__assistantAutoFlowRunning &&
+          !state.generated
+        )
+          run(false);
       };
     }
     gear.onclick = () => {
       autoPanel.hidden = !autoPanel.hidden;
       gear.classList.toggle("active", !autoPanel.hidden);
     };
+    syncAutoFlowSettingUi();
     run = async (force) => {
+      // Auto-flow owns the single generation request for the current post.
+      // Other triggers (autoSuggest, style changes, or a second click) must
+      // not start a competing request while that flow is active. The auto
+      // loop sets this short-lived flag only for its deliberate click.
+      if (globalThis.__assistantAutoFlowRunning === true && !globalThis.__assistantAutoFlowRequest)
+        return;
       if (running) {
         pending = true;
         return;
@@ -1145,7 +1465,12 @@
           "geminiModel",
           "deepseekKey",
           "deepseekModel",
+          "styleId",
           "stylePrompt",
+          "styleMinWords",
+          "styleMaxWords",
+          "replyStyleCatalog",
+          "customStyles",
           "replyTone",
           "replyMediaSuggestions",
           "feedbackExtraContext",
@@ -1168,6 +1493,23 @@
               : provider === "deepseek"
                 ? s.deepseekModel || "deepseek-flash"
                 : s.apiModel || "gpt-4.1-mini";
+        const styleCatalog = [
+          ...(Array.isArray(s.replyStyleCatalog) ? s.replyStyleCatalog : []),
+          ...(Array.isArray(s.customStyles) ? s.customStyles : []),
+        ];
+        const selectedStyle = styleCatalog.find((item) => item?.id === s.styleId) || null;
+        const selectedStylePrompt = selectedStyle?.prompt || s.stylePrompt || "";
+        // Keep the numeric constraint alongside the prompt. A style can be
+        // enriched by preferences/corpus hints later, so it is safer to pass
+        // the user setting as structured data instead of re-parsing the prompt.
+        const styleMinWords = Math.min(100, Math.max(1, Number(s.styleMinWords) || 6));
+        const styleWordRange = {
+          min: styleMinWords,
+          max: Math.min(
+            100,
+            Math.max(styleMinWords, Number(s.styleMaxWords) || 10),
+          ),
+        };
         const data = await request({
           provider,
           apiKey: s.apiKey,
@@ -1178,17 +1520,16 @@
           force,
           post: {
             ...post,
+            feedbackExtraContext: String(s.feedbackExtraContext || "").slice(0, 500),
             style:
-              (s.stylePrompt || "") +
-              (s.feedbackExtraContext
-                ? ` Additional feedback context from the user: ${String(s.feedbackExtraContext).slice(0, 500)}`
-                : "") +
+              selectedStylePrompt +
               " " +
               (s.replyTone === "male"
                 ? "The reply author is male. Use a natural masculine voice while preserving the post's original language; do not mention gender."
                 : s.replyTone === "female"
                   ? "The reply author is female. Use a natural feminine voice while preserving the post's original language; do not mention gender."
                   : ""),
+            styleWordRange,
             replyCount,
             fastMode: !!s.fastReplyMode,
             excludeReplies: force ? state.replyHistory : [],
@@ -1232,7 +1573,8 @@
     render(box);
     applyAiIconMask(box);
     if (saved.autoLike) likePost();
-    if (saved.autoSuggest && !saved.autoReplyFlow && !state.generated) run(false);
+    if (saved.autoSuggest && globalThis.__assistantAutoFlowRunning !== true && !state.generated)
+      run(false);
     mounting = false;
   }
   document.addEventListener(
@@ -1270,7 +1612,10 @@
     });
   };
   const scheduleMount = () => {
-    clearTimeout(mountTimer);
+    // Coalesce X's frequent feed mutations instead of restarting a full-page
+    // scan for every small DOM update. A fixed window also avoids starvation
+    // while X is continuously streaming timeline changes.
+    if (mountTimer) return;
     mountTimer = setTimeout(() => {
       mountTimer = 0;
       // Ads are injected lazily as the feed streams in. Re-run the ad pass
@@ -1278,9 +1623,22 @@
       // settings change.
       applyAdHiding();
       safeMount();
-    }, 120);
+    }, 250);
   };
-  observer = new MutationObserver(scheduleMount);
+  const assistantOwnedMutation = (node) => {
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    return !!element?.closest?.(
+      ".xra-box,.xra-sticky-user,.xra-assistant-fab,.xra-quote-top-wrap,.xra-quote-floating",
+    );
+  };
+  observer = new MutationObserver((records) => {
+    const relevant = records.some((record) => {
+      if (assistantOwnedMutation(record.target)) return false;
+      const changed = [...record.addedNodes, ...record.removedNodes];
+      return !changed.length || changed.some((node) => !assistantOwnedMutation(node));
+    });
+    if (relevant) scheduleMount();
+  });
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
