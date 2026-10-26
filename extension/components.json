@@ -164,8 +164,8 @@
       "contexts": ["panel"]
     },
     {
-      "id": "core.ui-icons",
-      "path": "ui-icons.js",
+      "id": "core.lucide-icons",
+      "path": "lucide-icons.js",
       "domain": "core",
       "contexts": ["content", "panel"]
     },
@@ -208,7 +208,7 @@
       "content-background.js"
     ],
     "content": [
-      "ui-icons.js",
+      "lucide-icons.js",
       "theme.js",
       "language.js",
       "reply-preferences.js",
@@ -227,7 +227,7 @@
     ],
     "panel": [
       "activation.js",
-      "ui-icons.js",
+      "lucide-icons.js",
       "theme.js",
       "reply-preferences.js",
       "remote-config.js",

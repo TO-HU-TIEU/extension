@@ -248,7 +248,12 @@
   const autoFollowIsVerified = (root) => {
     const author = root?.querySelector?.('[data-testid="User-Name"],[data-testid="UserName"]'),
       scope = author || root;
-    return !!scope?.querySelector?.(autoFollowVerifiedIconSelector);
+    const icon =
+      scope?.querySelector?.(autoFollowVerifiedIconSelector) ||
+      root?.querySelector?.(autoFollowVerifiedIconSelector);
+    if (!icon) return false;
+    const details = `${icon.getAttribute("data-testid") || ""} ${icon.getAttribute("aria-label") || ""} ${icon.outerHTML || ""}`;
+    return !/(?:business|government|organization|gold|yellow|gray|grey|silver|d18800|829aab|32-a|32-b|vàng|xám)/i.test(details);
   };
   const autoFollowPostId = (article) =>
     article?.querySelector('a[href*="/status/"]')?.href.match(/\/status\/(\d+)/)?.[1] || "";
@@ -274,8 +279,16 @@
     });
   };
   const autoFollowAlreadyFollowing = (root) => {
-    const label = text(root?.textContent || "");
-    return /(?:Following|Đang theo dõi|Unfollow|Ngừng theo dõi)/i.test(label);
+    if (!root) return false;
+    const nodes = [
+      ...(root.matches?.("button,[role=button]") ? [root] : []),
+      ...(root.querySelectorAll?.("button,[role=button]") || []),
+    ];
+    return nodes.some((node) =>
+      /(?:Following|Đang theo dõi|Unfollow|Ngừng theo dõi)/i.test(
+        text(node.textContent || node.getAttribute("aria-label")),
+      ),
+    );
   };
   const AUTO_FOLLOW_SOURCE_TAB_XPATH =
     '//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div/div/div/div[1]/div[1]/div[2]/div[2]/div[2]/div[3]/button';
@@ -390,10 +403,19 @@
           handle: author.handle,
           profileUrl: author.url,
           text: text(article.querySelector('[data-testid="tweetText"]')?.textContent || ""),
+          isFollowing: autoFollowAlreadyFollowing(article),
         };
       })
       .filter(Boolean)
       .filter((item, index, all) => all.findIndex((candidate) => candidate.handle === item.handle) === index);
+  const autoFollowLoggedHandlesForPost = (state, postId) =>
+    new Set(
+      (state.logs || [])
+        .filter((entry) => String(entry.postId || "") === String(postId || ""))
+        .flatMap((entry) => entry.people || [])
+        .map((person) => String(person.handle || "").replace(/^@/, "").toLowerCase())
+        .filter(Boolean),
+    );
   const autoFollowScrollComments = async (postId, token) => {
     const found = new Map();
     let stable = 0,
@@ -459,7 +481,19 @@
   const autoFollowProcessProfile = async (state, token) => {
     const candidate = state.currentCandidate;
     if (!candidate || token !== autoFollowToken) return;
-    const profileRoot = document.querySelector("main") || document.body;
+    const profileHandle = location.pathname.split("/")[1]?.toLowerCase() || "";
+    if (profileHandle && profileHandle !== String(candidate.handle || "").toLowerCase()) {
+      state.currentCandidate = null;
+      state.commentIndex = Number(state.commentIndex || 0) + 1;
+      state.phase = "post";
+      await autoFollowSaveState(state);
+      location.href = state.currentPost?.url || AUTO_FOLLOW_SOURCE;
+      return;
+    }
+    const profileRoot =
+      document.querySelector('[data-testid="UserProfileHeader"]') ||
+      document.querySelector("main") ||
+      document.body;
     if (!autoFollowIsVerified(profileRoot)) {
       state.currentCandidate = null;
       state.commentIndex = Number(state.commentIndex || 0) + 1;
@@ -503,14 +537,22 @@
     }
     const all = await autoFollowScrollComments(state.currentPost.id, token),
       currentOnlyVietnamese = state.onlyVietnamese !== false;
+    const loggedHandles = autoFollowLoggedHandlesForPost(state, state.currentPost.id);
+    state.currentTotal = all.length;
     state.comments = all.filter(
-      (comment) => !currentOnlyVietnamese || autoFollowVietnamese(comment.text),
+      (comment) =>
+        (!currentOnlyVietnamese || autoFollowVietnamese(comment.text)) &&
+        !comment.isFollowing &&
+        !loggedHandles.has(String(comment.handle || "").toLowerCase()),
     );
-    state.currentTotal = state.comments.length;
     state.commentIndex = Number(state.commentIndex || 0);
     await autoFollowSaveState(state);
     if (!state.comments.length) {
-      return autoFollowFinishPost(state, token, "Bỏ qua bài: không có bình luận tiếng Việt phù hợp.");
+      return autoFollowFinishPost(
+        state,
+        token,
+        "Bỏ qua bài: không có bình luận tiếng Việt phù hợp hoặc không có người tích xanh chưa follow.",
+      );
     }
     const articles = [...document.querySelectorAll('article[data-testid="tweet"]')];
     while (state.commentIndex < state.comments.length && token === autoFollowToken) {
@@ -521,20 +563,10 @@
         return autoFollowWait(state, token);
       }
       const comment = state.comments[state.commentIndex],
-        article = articles.find((node) => autoFollowAuthor(node)?.handle === comment.handle),
-        button = autoFollowControl(article);
-      if (button) {
-        button.click();
-        await autoFollowSleep(900, token);
-        state.followedInWindow = Number(state.followedInWindow || 0) + 1;
-        state.followedInPost = Number(state.followedInPost || 0) + 1;
-        state.currentPeople = [
-          ...(state.currentPeople || []),
-          { name: comment.handle, handle: `@${comment.handle}`, followedAt: Date.now() },
-        ];
+        article = articles.find((node) => autoFollowAuthor(node)?.handle === comment.handle);
+      if (comment.isFollowing || autoFollowAlreadyFollowing(article)) {
         state.commentIndex += 1;
         await autoFollowSaveState(state);
-        autoFollowSend({ state, status: `Đã follow @${comment.handle} · ${state.followedInWindow}/${state.targetLimit} lượt này.` });
         continue;
       }
       state.currentCandidate = comment;
@@ -551,6 +583,8 @@
       return;
     }
     if (token !== autoFollowToken || !state.enabled) return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    await autoFollowSleep(350, token);
     if (state.nextRunAt && state.nextRunAt > Date.now()) return autoFollowWait(state, token);
     if (!Array.isArray(state.queue) || !state.queue.length || state.postIndex >= state.queue.length) {
       state.queue = await autoFollowCollectPosts(token);

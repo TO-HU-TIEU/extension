@@ -5,14 +5,34 @@
     dialog,
     styleMenu,
     timer;
-  const P = globalThis.ReplyPreferences,
-    CHEVRON_PATH =
-      "M12.7071 14.7071C12.3166 15.0976 11.6834 15.0976 11.2929 14.7071L6.29289 9.70711C5.90237 9.31658 5.90237 8.68342 6.29289 8.29289C6.68342 7.90237 7.31658 7.90237 7.70711 8.29289L12 12.5858L16.2929 8.29289C16.6834 7.90237 17.3166 7.90237 17.7071 8.29289C18.0976 8.68342 18.0976 9.31658 17.7071 9.70711L12.7071 14.7071Z";
+  const P = globalThis.ReplyPreferences;
   const save = async (patch) => {
     await chrome.storage.local.set(patch);
     settings = { ...settings, ...patch };
     update();
     document.dispatchEvent(new CustomEvent("xra-preferences-changed"));
+  };
+  const normalizeExcludedAuthor = (value) =>
+    String(value || "")
+      .trim()
+      .replace(/^@/u, "")
+      .toLowerCase();
+  const readExcludedAuthors = async () => {
+    const stored = await chrome.storage.local.get("autoReplyExcludedAuthors");
+    return Array.isArray(stored.autoReplyExcludedAuthors)
+      ? stored.autoReplyExcludedAuthors.map(normalizeExcludedAuthor).filter(Boolean)
+      : [];
+  };
+  const toggleExcludedAuthor = async (handle) => {
+    const normalized = normalizeExcludedAuthor(handle);
+    if (!normalized) return false;
+    const current = await readExcludedAuthors();
+    const excluded = current.includes(normalized);
+    const next = excluded
+      ? current.filter((value) => value !== normalized)
+      : [...new Set([...current, normalized])];
+    await chrome.storage.local.set({ autoReplyExcludedAuthors: next });
+    return !excluded;
   };
   function account(target) {
     const a = target.closest?.("a[href]");
@@ -118,13 +138,33 @@
     menu.className = "xra-person-menu";
     menu.setAttribute("role", "menu");
     menu.style.left = Math.min(event.clientX, innerWidth - 260) + "px";
-    menu.style.top = Math.min(event.clientY, innerHeight - 50) + "px";
+    menu.style.top = Math.max(8, Math.min(event.clientY, innerHeight - 100)) + "px";
+    const excludedButton = document.createElement("button");
+    excludedButton.textContent = "Bỏ qua khi tự động trả lời";
+    excludedButton.onclick = async () => {
+      excludedButton.disabled = true;
+      try {
+        const excluded = await toggleExcludedAuthor(handle);
+        excludedButton.textContent = excluded
+          ? "Đã thêm vào danh sách bỏ qua"
+          : "Đã bỏ khỏi danh sách bỏ qua";
+        setTimeout(() => menu?.remove(), 450);
+      } catch {
+        excludedButton.disabled = false;
+      }
+    };
     const b = document.createElement("button");
     b.textContent = P.person(settings, handle)
       ? "Thay đổi phong cách trả lời riêng"
       : "Gán phong cách trả lời riêng";
     b.onclick = () => open(handle);
-    menu.append(b);
+    menu.append(excludedButton, b);
+    readExcludedAuthors()
+      .then((authors) => {
+        if (authors.includes(normalizeExcludedAuthor(handle)))
+          excludedButton.textContent = "Bỏ khỏi danh sách tự động bỏ qua";
+      })
+      .catch(() => {});
     document.body.append(menu);
   });
   document.addEventListener("click", (event) => {
@@ -221,7 +261,7 @@
         check = document.createElement("i");
       name.textContent = item.name;
       summary.textContent = styleSummary(item);
-      check.textContent = item.id === current ? "✓" : "";
+      check.innerHTML = item.id === current ? globalThis.AssistantIcons?.svg("check") || "" : "";
       text.append(name, summary);
       option.append(text, check);
       option.onclick = async (event) => {
@@ -264,18 +304,11 @@
         select.setAttribute("aria-label", "Phong cách trả lời");
         const label = document.createElement("span");
         label.className = "xra-style-label";
-        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        icon.className.baseVal = "xra-dropdown-icon";
-        icon.setAttribute("viewBox", "0 0 24 24");
-        icon.setAttribute("fill", "none");
-        icon.setAttribute("aria-hidden", "true");
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("fill-rule", "evenodd");
-        path.setAttribute("clip-rule", "evenodd");
-        path.setAttribute("d", CHEVRON_PATH);
-        path.setAttribute("fill", "currentColor");
-        icon.append(path);
-        select.append(label, icon);
+        const iconHost = document.createElement("span");
+        iconHost.innerHTML = globalThis.AssistantIcons?.svg("dropdown") || "";
+        const icon = iconHost.firstElementChild;
+        icon?.classList.add("xra-dropdown-icon");
+        select.append(label, iconHost);
         count.before(select);
         select.onclick = (event) => {
           event.preventDefault();
@@ -286,6 +319,13 @@
             list.push({ id: person.styleId, name: P.label(person), prompt: person.prompt });
           openStyleMenu(box, select, list);
         };
+      }
+      // Recover gracefully if a toolbar created by an older content-script
+      // instance contains the style button without its label child.
+      if (!select.querySelector(".xra-style-label")) {
+        const label = document.createElement("span");
+        label.className = "xra-style-label";
+        select.prepend(label);
       }
       const list = P.catalog(settings),
         person = P.person(settings, location.href);
@@ -301,9 +341,7 @@
       if (!fast) {
         fast = document.createElement("button");
         fast.className = "xra-button xra-fast";
-        const flashIcon =
-          globalThis.AssistantIcons?.svg("flash") ||
-          '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16v-5m4 5V8m4 8v-2M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6M19 2v3m0 3V5m0 0h3m-3 0h-3"/></svg>';
+        const flashIcon = globalThis.AssistantIcons?.svg("flash") || "";
         fast.innerHTML =
           flashIcon.replace("ui-icon-flash", "xra-icon-outline") +
           flashIcon.replace("ui-icon-flash", "xra-icon-filled");

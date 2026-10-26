@@ -8,7 +8,7 @@
   --reply-accent: #1d9bf0;
   --reply-ai-start: #1d9bf0;
   --reply-ai-end: #a855f7;
-  --reply-font: Arial, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --reply-font: Roboto, "Segoe UI", Arial, sans-serif;
 }
 .ai-icon {
   display: inline-flex;

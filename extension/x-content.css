@@ -394,6 +394,12 @@
   color: #f1f3f4;
   cursor: pointer;
 }
+.xra-auto-panel label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .xra-auto-panel label + label {
   border-top: 1px solid #343a40;
 }
@@ -413,6 +419,24 @@
   width: 34px;
   height: 18px;
   accent-color: #fff;
+  cursor: pointer;
+}
+.xra-enter-send {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  margin-right: 8px;
+  color: var(--xra-color, #e7e9ea);
+  font: 500 12px/18px Arial, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.xra-enter-send input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #1d9bf0;
   cursor: pointer;
 }
 .xra-settings {
@@ -731,7 +755,7 @@
   box-shadow:
     0 20px 60px #000b,
     0 0 0 1px #ffffff0a;
-  font: 13px var(--xra-font, Arial, system-ui);
+  font: 13px var(--xra-font, Roboto, "Segoe UI", Arial, sans-serif);
 }
 .xra-style-menu-title {
   padding: 4px 20px 12px;
@@ -925,7 +949,7 @@
 .xra-person-menu,
 .xra-person-tag,
 .xra-tool-label {
-  font-family: var(--xra-font, Arial, system-ui, sans-serif);
+  font-family: var(--xra-font, Roboto, "Segoe UI", Arial, sans-serif);
 }
 .ui-icon {
   display: block;

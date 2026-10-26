@@ -1,9 +1,9 @@
 :root {
   color-scheme: dark;
   font:
-    14px/1.45 system-ui,
-    -apple-system,
-    Segoe UI,
+    14px/1.45 Roboto,
+    "Segoe UI",
+    Arial,
     sans-serif;
   background: #080a0d;
   color: #f1f4f7;
@@ -416,28 +416,6 @@ input#models {
 }
 .module-nav span {
   font-size: 15px;
-}
-.mode-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin: 0 0 11px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: #090c10;
-}
-.mode-tabs button {
-  padding: 8px;
-  background: transparent;
-  color: var(--muted);
-}
-.mode-tabs button.active {
-  color: #fff;
-  background: #20262d;
-  box-shadow:
-    inset 2px 2px 5px #080a0c,
-    inset -2px -2px 5px #313944;
 }
 .x-mode-card > .hint {
   margin: 12px 0;
@@ -1279,11 +1257,6 @@ input#models {
   text-decoration: none;
   color: #dce4ec;
 }
-.release-icon:before {
-  content: "↗";
-  font-size: 16px;
-  line-height: 1;
-}
 .settings-card .connection-state-wrap {
   margin-left: auto;
 }
@@ -1402,13 +1375,6 @@ button {
 .module-nav button {
   padding: 6px 4px;
 }
-.mode-tabs {
-  margin-bottom: 8px;
-  padding: 3px;
-}
-.mode-tabs button {
-  padding: 6px;
-}
 .setup-card {
   margin: 8px 0;
   border-radius: 11px;
@@ -1517,7 +1483,7 @@ button {
   align-items: center;
 }
 .key-queue .label-line label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: #eef2f6;
@@ -2563,8 +2529,7 @@ hr {
 /* Reference-derived platform tokens */
 :root {
   --ui-font:
-    TwitterChirp, Chirp, Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Arial, sans-serif;
+    Roboto, "Segoe UI", Arial, sans-serif;
   --ui-font-size: 15px;
   --ui-line-height: 20px;
   --ui-weight-regular: 400;
@@ -2976,15 +2941,17 @@ html[data-theme="light"] .unfollow-button {
   width: 18px;
   height: 18px;
   display: block;
+  fill: none !important;
+  stroke: currentColor;
 }
 .follow-tick.blue svg {
-  fill: #1d9bf0;
+  color: #1d9bf0;
 }
 .follow-tick.gold svg {
-  fill: #eab308;
+  color: #eab308;
 }
 .follow-tick.gray svg {
-  fill: #829aab;
+  color: #829aab;
 }
 .follow-filters {
   display: flex !important;
@@ -3183,9 +3150,6 @@ html[data-theme="light"] .follow-sort {
   width: 13px;
   height: 13px;
   margin-left: 3px;
-}
-.release-icon:before {
-  content: none;
 }
 html[data-theme="light"] .assistant-mark {
   color: #17202a;
@@ -4288,7 +4252,8 @@ html[data-theme="light"] .follow-row {
   display: block;
   width: 15px;
   height: 15px;
-  fill: currentColor;
+  fill: none;
+  stroke: currentColor;
 }
 .follow-filter-icon[data-follow-filter="tickNone"] {
   justify-items: center;
@@ -4302,23 +4267,6 @@ html[data-theme="light"] .follow-row {
 .follow-filter-icon.tick-blue,
 .follow-filter-icon.tick-gold {
   position: relative;
-}
-.follow-filter-icon.tick-gray::after,
-.follow-filter-icon.tick-blue::after,
-.follow-filter-icon.tick-gold::after {
-  content: "✓";
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  transform: translateY(1px);
-  color: #fff;
-  font:
-    700 8px/1 Arial,
-    sans-serif;
-  -webkit-text-stroke: 0.2px rgba(0, 0, 0, 0.35);
-  text-shadow: 0 0 1px rgba(0, 0, 0, 0.55);
-  pointer-events: none;
 }
 .follow-filter-icon[data-follow-filter="tickNone"] svg {
   transform: translateX(2px);
@@ -4991,9 +4939,25 @@ html[data-theme="light"] .reply-layout-settings > .reply-layout-title {
   background: #1d9bf01a;
   color: #1d9bf0;
 }
-.tone-choice button.active:after {
-  content: " ✓";
-  font-size: 11px;
+.tone-choice button .tone-check {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 5px;
+  border-radius: 50%;
+  color: #fff;
+  background: #1d9bf0;
+  vertical-align: -3px;
+}
+.tone-choice button .tone-check:empty {
+  display: none;
+}
+.tone-choice button .tone-check svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: #fff;
 }
 .prompt-collapse {
   margin: 12px 0 0;
@@ -5076,21 +5040,8 @@ html[data-theme="light"] .reply-layout-settings > .reply-layout-title {
   margin-bottom: 0;
   cursor: pointer;
 }
-.reply-layout-settings.is-collapsed > .reply-layout-title:after {
-  content: "⌄";
-  margin-left: auto;
-  color: var(--ui-muted, #8b98a6);
-}
-.reply-layout-settings:not(.is-collapsed) > .reply-layout-title:after {
-  content: "⌃";
-  margin-left: auto;
-  color: var(--ui-muted, #8b98a6);
-}
 .reply-layout-settings.is-collapsed > :not(.reply-layout-title) {
   display: none !important;
-}
-.reply-layout-settings > .reply-layout-title:after {
-  content: none !important;
 }
 .reply-layout-collapse-icon {
   display: grid;
@@ -5359,23 +5310,6 @@ html[data-theme="light"] .reply-layout-settings .reply-preview-button:hover {
 .quote-post-source:hover {
   text-decoration: underline;
 }
-.follow-tick.gold,
-.follow-tick.gray {
-  position: relative;
-}
-.follow-tick.gold::after,
-.follow-tick.gray::after {
-  content: "✓";
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font:
-    700 11px/1 Arial,
-    sans-serif;
-  pointer-events: none;
-}
 .follow-tabs {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -5393,47 +5327,6 @@ html[data-theme="light"] .reply-layout-settings .reply-preview-button:hover {
   display: none;
 }
 
-/* Keep the verification mark readable in both themes. */
-.follow-tick.blue,
-.follow-tick.gold,
-.follow-tick.gray {
-  position: relative;
-}
-.follow-tick.blue::after,
-.follow-tick.gold::after,
-.follow-tick.gray::after {
-  content: "✓";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  transform: translateY(1px);
-  color: #fff;
-  font:
-    700 8px/1 Arial,
-    sans-serif;
-  text-shadow: 0 0 1px rgba(0, 0, 0, 0.7);
-  pointer-events: none;
-}
-html[data-theme="dark"] .follow-tick.blue::after,
-html[data-theme="dark"] .follow-tick.gold::after,
-html[data-theme="dark"] .follow-tick.gray::after {
-  color: #fff;
-  text-shadow: 0 0 1px rgba(0, 0, 0, 0.7);
-}
-html[data-theme="light"] .follow-filter-icon.tick-gray::after,
-html[data-theme="light"] .follow-filter-icon.tick-blue::after,
-html[data-theme="light"] .follow-filter-icon.tick-gold::after {
-  color: #fff;
-  text-shadow: 0 0 1px rgba(0, 0, 0, 0.7);
-}
-html[data-theme="dark"] .follow-filter-icon.tick-gray::after,
-html[data-theme="dark"] .follow-filter-icon.tick-blue::after,
-html[data-theme="dark"] .follow-filter-icon.tick-gold::after {
-  color: #fff;
-  text-shadow: 0 0 1px rgba(0, 0, 0, 0.7);
-}
 html[data-theme="light"] .follow-filter-icon.tick-gray {
   color: #829aab !important;
 }
@@ -5846,7 +5739,6 @@ section,
 .results-compact,
 .reply-layout-settings,
 .suggestion-card,
-.mode-tabs,
 .segment,
 .provider button,
 .connection-state,
@@ -5874,7 +5766,6 @@ html[data-theme="light"] .x-mode-card,
 html[data-theme="light"] .results-compact,
 html[data-theme="light"] .reply-layout-settings,
 html[data-theme="light"] .suggestion-card,
-html[data-theme="light"] .mode-tabs,
 html[data-theme="light"] .segment,
 html[data-theme="light"] .provider button,
 html[data-theme="light"] .connection-state,
@@ -5891,7 +5782,6 @@ html[data-theme="light"] .key-editor input {
 /* Complete no-fill treatment for side-panel controls. */
 button:not(.primary):not(.connect-strong):not(.submit-button):not(.create-button),
 .module-nav button,
-.mode-tabs button,
 .segment button,
 .provider button,
 .switch span,
@@ -5908,7 +5798,6 @@ button:not(.primary):not(.connect-strong):not(.submit-button):not(.create-button
 }
 button:not(.primary):not(.connect-strong):not(.submit-button):not(.create-button),
 .module-nav button,
-.mode-tabs button,
 .segment button,
 .provider button,
 .suggestion-card,
@@ -5936,7 +5825,6 @@ button:not(.primary):not(.connect-strong):not(.submit-button):not(.create-button
   background: var(--blue) !important;
 }
 .module-nav button.active,
-.mode-tabs button.active,
 .segment button.active {
   background: transparent !important;
   box-shadow: none !important;
@@ -5979,7 +5867,6 @@ html[data-theme] .x-mode-card,
 html[data-theme] .results-compact,
 html[data-theme] .reply-layout-settings,
 html[data-theme] .suggestion-card,
-html[data-theme] .mode-tabs,
 html[data-theme] .segment,
 html[data-theme] .provider button {
   background: transparent !important;
@@ -5993,7 +5880,6 @@ html[data-theme] button {
   box-shadow: none !important;
 }
 html[data-theme] .module-nav button.active,
-html[data-theme] .mode-tabs button.active,
 html[data-theme] .segment button.active,
 html[data-theme] .provider > button.active,
 html[data-theme] .follow-tabs button.active {
@@ -6148,7 +6034,7 @@ html[data-theme="light"] body.settings-open .settings-title {
 .feedback-methods {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px 10px;
+  gap: 0 10px;
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--ui-border, #303842);
@@ -6164,7 +6050,7 @@ html[data-theme="light"] body.settings-open .settings-title {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 32px;
+  min-height: 28px;
 }
 .feedback-method {
   width: 100%;
@@ -6172,7 +6058,7 @@ html[data-theme="light"] body.settings-open .settings-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 28px;
   padding: 0;
   color: var(--ui-muted, #9aa4af);
   font-size: 12px;
@@ -6631,7 +6517,7 @@ body.settings-open .prompt-collapse {
 }
 
 .auto-follow-card {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 .auto-follow-card .section-head {
   align-items: center;
@@ -6640,9 +6526,9 @@ body.settings-open .prompt-collapse {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  padding: 10px 0;
+  padding: 8px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -6655,22 +6541,18 @@ body.settings-open .prompt-collapse {
 .auto-follow-option input {
   accent-color: var(--accent);
 }
-.auto-follow-limit {
-  color: var(--muted);
-  font-size: var(--panel-font-small, 12px);
-}
 #autoFollowStatus {
-  min-height: 20px;
-  margin: 10px 0 0;
+  min-height: 18px;
+  margin: 8px 0 0;
 }
 .auto-follow-stop {
   width: 100%;
   margin-top: 8px;
 }
 .auto-follow-log-details {
-  margin-top: 10px;
+  margin-top: 8px;
   border-top: 1px solid var(--line);
-  padding-top: 8px;
+  padding-top: 6px;
 }
 .auto-follow-log-details summary {
   cursor: pointer;
@@ -6693,6 +6575,42 @@ body.settings-open .prompt-collapse {
   cursor: pointer;
   color: var(--panel-text);
   font-size: var(--panel-font-small, 12px);
+}
+
+/* API key actions keep a theme-matched icon and outline in every state. */
+html[data-theme="dark"] #addGeminiQueueKey,
+html[data-theme="dark"] #addGeminiQueueKey:hover,
+html[data-theme="dark"] #addGeminiQueueKey:active,
+html[data-theme="dark"] #addGeminiQueueKey:focus-visible {
+  border: 1px solid #fff !important;
+  border-color: #fff !important;
+  background: transparent !important;
+  color: #fff !important;
+}
+html[data-theme="light"] #addGeminiQueueKey,
+html[data-theme="light"] #addGeminiQueueKey:hover,
+html[data-theme="light"] #addGeminiQueueKey:active,
+html[data-theme="light"] #addGeminiQueueKey:focus-visible {
+  border: 1px solid #000 !important;
+  border-color: #000 !important;
+  background: transparent !important;
+  color: #000 !important;
+}
+html[data-theme="light"] .key-actions a {
+  color: #0969da !important;
+}
+
+/* The X control inside an excluded-account chip is icon-only and borderless. */
+.auto-exclusion-chip > button,
+.auto-exclusion-chip > button:hover,
+.auto-exclusion-chip > button:active,
+.auto-exclusion-chip > button:focus,
+.auto-exclusion-chip > button:focus-visible {
+  border: 0 !important;
+  border-color: transparent !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
 }
 .auto-follow-log ul {
   margin: 7px 0 0;

@@ -15,7 +15,7 @@
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.tone = value;
-    button.textContent = label;
+    button.innerHTML = `<span>${label}</span><span class="tone-check" aria-hidden="true"></span>`;
     button.addEventListener("click", () => {
       select.value = select.value === value ? "" : value;
       select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -27,7 +27,12 @@
   function sync() {
     wrap
       .querySelectorAll("button")
-      .forEach((button) => button.classList.toggle("active", button.dataset.tone === select.value));
+      .forEach((button) => {
+        const active = button.dataset.tone === select.value;
+        button.classList.toggle("active", active);
+        const check = button.querySelector(".tone-check");
+        if (check) check.innerHTML = active ? globalThis.AssistantIcons?.svg("check") || "" : "";
+      });
     toneCard?.classList.toggle("tone-required", !select.value);
   }
   select.addEventListener("change", sync);

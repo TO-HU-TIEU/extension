@@ -446,7 +446,7 @@
         ? "Vuốt trái một bài trong Quét nội dung để tạo content tại đây."
         : config?.enabled
           ? "Mở nguồn đã lưu và lướt qua các bài để thu thập Content."
-          : "Thêm nguồn và bật quét tự động trong Cài đặt → Nguồn Content.";
+          : "Thêm nguồn và bật quét tự động trong Cài đặt, mục Nguồn Content.";
     $c("contentScanInfo").textContent =
       `${config?.enabled ? "Đang bật quét" : "Chưa bật quét"} · ${config?.sources.length || 0} nguồn`;
     $c("contentCapacity").hidden = state.items.length < ContentCore.limit("maxArticles", 120);

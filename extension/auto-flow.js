@@ -19,6 +19,13 @@
       return Promise.resolve(fallback);
     }
   };
+  const markXUsageMode = () => {
+    try {
+      return Promise.resolve(chrome.storage.local.set({ usageMode: "x" })).catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  };
   const isInvalidatedContext = (error) =>
     /extension context invalidated/i.test(String(error?.message || error || ""));
   // X can reject a send attempt with a page-level anti-automation warning.
@@ -58,12 +65,16 @@
   const syncPauseButton = () => {
     const button = document.querySelector("#assistant-auto-dashboard [data-auto-pause]");
     if (!button) return;
-    button.innerHTML = memory.isPaused
-      ? '<svg viewBox="0 0 12 14" aria-hidden="true" style="width:12px;height:14px;display:block;fill:currentColor"><path d="M2 1.1 11 7l-9 5.9z"></path></svg>'
-      : '<svg viewBox="0 0 12 12" aria-hidden="true" style="width:12px;height:12px;display:block;fill:currentColor"><rect x="1.5" y="1.5" width="9" height="9" rx="1"></rect></svg>';
+    const label = memory.isPaused ? "Tiếp tục" : "Tạm dừng";
+    button.innerHTML = `${globalThis.AssistantIcons?.svg(memory.isPaused ? "play" : "pause") || ""}<span>${label}</span>`;
+    button.style.width = "auto";
+    button.style.minWidth = "84px";
+    button.style.padding = "0 10px";
+    button.style.gap = "5px";
+    button.style.lineHeight = "1";
     button.style.background = memory.isPaused ? "#20c997" : "#d64555";
-    button.setAttribute("aria-label", memory.isPaused ? "Tiếp tục" : "Tạm dừng");
-    button.title = memory.isPaused ? "Tiếp tục" : "Tạm dừng";
+    button.setAttribute("aria-label", label);
+    button.title = label;
     button.dataset.autoPauseState = memory.isPaused ? "paused" : "running";
   };
   const setPaused = (paused) => {
@@ -211,10 +222,11 @@
       enabled = (await chrome.storage.local.get("autoLike"))?.autoLike === true;
     } catch {}
     if (!enabled) return false;
-    const article = [...document.querySelectorAll('article[data-testid="tweet"]')].find((candidate) =>
-      [...candidate.querySelectorAll('a[href*="/status/"]')].some((anchor) =>
-        new RegExp(`/status/${postIdValue}(?:$|[?#/])`).test(anchor.href),
-      ),
+    const article = [...document.querySelectorAll('article[data-testid="tweet"]')].find(
+      (candidate) =>
+        [...candidate.querySelectorAll('a[href*="/status/"]')].some((anchor) =>
+          new RegExp(`/status/${postIdValue}(?:$|[?#/])`).test(anchor.href),
+        ),
     );
     const like = article?.querySelector('[data-testid="like"]');
     if (!like) return false;
@@ -338,7 +350,7 @@
     const setting = document.createElement("label");
     setting.dataset.autoDailyLimitControl = "";
     setting.style.cssText =
-      "display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px";
+      "display:flex;align-items:center;gap:7px;padding:6px 0;color:var(--xra-text,#edf1f5);font-size:13px";
     const input = document.createElement("input");
     input.type = "number";
     input.min = "1";
@@ -357,7 +369,7 @@
     input.value = String(readDailyReplyLimit());
     input.addEventListener("change", sync);
     setting.append(document.createTextNode("Giới hạn trả lời/ngày:"), input);
-    vietnameseFilter.before(setting);
+    vietnameseFilter.after(setting);
   };
   const configureMinimumGapControl = (box) => {
     if (box.querySelector("[data-auto-min-gap-control]")) return;
@@ -367,11 +379,10 @@
     const setting = document.createElement("div");
     setting.dataset.autoMinGapControl = "";
     setting.style.cssText =
-      "display:flex;align-items:center;flex-wrap:nowrap;gap:8px;padding:8px 0 4px;color:var(--xra-text,#edf1f5);font-size:14px";
+      "display:flex;align-items:center;flex-wrap:nowrap;gap:6px;padding:6px 0 3px;color:var(--xra-text,#edf1f5);font-size:13px";
     const label = document.createElement("b");
     label.textContent = "Thời gian giãn cách tối thiểu";
-    label.style.cssText =
-      "flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+    label.style.cssText = "flex:0 0 auto;min-width:0;white-space:nowrap;font-weight:400";
     const input = document.createElement("input");
     input.type = "number";
     input.min = "0";
@@ -380,13 +391,13 @@
     input.dataset.autoMinGapValue = "";
     input.setAttribute("aria-label", "Giá trị thời gian giãn cách tối thiểu");
     input.style.cssText =
-      "width:84px;min-width:84px;box-sizing:border-box;padding:6px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+      "width:60px;min-width:60px;box-sizing:border-box;padding:6px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
     const select = document.createElement("select");
     select.dataset.autoMinGapUnit = "";
     select.setAttribute("aria-label", "Đơn vị thời gian giãn cách tối thiểu");
     select.append(new Option("Giây", "seconds"), new Option("Phút", "minutes"));
     select.style.cssText =
-      "padding:6px 24px 6px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+      "width:85px;min-width:85px;padding:6px 18px 6px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
     const sync = () => {
       const value = Math.max(0, Math.min(86_400, Number(input.value) || 0));
       input.value = String(value);
@@ -402,6 +413,24 @@
     select.addEventListener("change", sync);
     setting.append(label, input, select);
     speedWrap.after(setting);
+  };
+  const reorderAutoSetupControls = (box) => {
+    const controls = [
+      box.querySelector("[data-auto-min-gap-control]"),
+      box.querySelector("[data-auto-daily-limit-control]"),
+      box.querySelector("[data-auto-rest-row]"),
+      box.querySelector("[data-auto-vietnamese]")?.closest("label"),
+    ];
+    const parent = controls.find(Boolean)?.parentElement;
+    if (!parent || controls.some((node) => !node || node.parentElement !== parent)) return;
+    const sessionRow = [...box.querySelectorAll("h3")].find(
+      (node) => node.textContent.trim() === "Thông tin phiên",
+    )?.parentElement;
+    if (sessionRow?.parentElement === parent) {
+      controls.forEach((node) => parent.insertBefore(node, sessionRow));
+    } else {
+      controls.forEach((node) => parent.append(node));
+    }
   };
   const domHasOwnReply = (handle) => {
     if (!handle) return false;
@@ -429,19 +458,25 @@
       return style.display !== "none" && style.visibility !== "hidden";
     };
     const findEditor = () => {
-      const editors = [...document.querySelectorAll(
-        '[data-testid^="tweetTextarea_"][contenteditable="true"]',
-      )];
+      const editors = [
+        ...document.querySelectorAll('[data-testid^="tweetTextarea_"][contenteditable="true"]'),
+      ];
       return editors.find((candidate) => visible(candidate)) || editors[0] || null;
     };
     const findSendButton = (candidate) => {
       const scope = candidate?.closest('[role="dialog"]') || candidate?.closest("article");
       const inScope = scope
-        ? [...scope.querySelectorAll('[data-testid="tweetButtonInline"], [data-testid="tweetButton"]')]
+        ? [
+            ...scope.querySelectorAll(
+              '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
+            ),
+          ]
         : [];
-      const all = [...document.querySelectorAll(
-        '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
-      )];
+      const all = [
+        ...document.querySelectorAll(
+          '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
+        ),
+      ];
       return (
         [...inScope, ...all].find(
           (button, index, list) =>
@@ -543,18 +578,34 @@
       return ` - ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
     };
     const escapeHtml = (value) =>
-      String(value || "").replace(/[&<>"']/g, (character) =>
-        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-          character
-        ],
+      String(value || "").replace(
+        /[&<>"']/g,
+        (character) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character],
       );
     const elapsed = Math.floor((Date.now() - sessionStart) / 60000);
     const stats = box.querySelector("[data-auto-stats]");
     if (!stats) return;
-    stats.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px"><div style="display:grid;grid-template-columns:34% 66%;align-items:stretch;min-height:76px;padding:0;border-radius:10px;overflow:hidden;background:transparent;border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;font-size:25px;color:#35a7ee">↗</span><span style="display:flex;flex-direction:column;justify-content:center;padding:7px"><strong style="display:block;font-size:22px;color:#35a7ee">${(p.length / mins).toFixed(2)}</strong><small style="display:block;color:var(--xra-muted,#9aa4af)">trả lời/phút</small></span></div><div style="display:grid;grid-template-columns:34% 66%;align-items:stretch;min-height:76px;padding:0;border-radius:10px;overflow:hidden;background:var(--xra-panel,#202832);border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;font-size:25px;color:#20c997">✓</span><span style="display:flex;flex-direction:column;justify-content:center;padding:7px"><strong style="display:block;font-size:22px;color:#20c997">${p.length}</strong><small style="display:block;color:var(--xra-muted,#9aa4af)">Hoàn thành</small></span></div><div style="display:grid;grid-template-columns:34% 66%;align-items:stretch;min-height:76px;padding:0;border-radius:10px;overflow:hidden;background:var(--xra-panel,#202832);border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;font-size:25px;color:#ff5864">×</span><span style="display:flex;flex-direction:column;justify-content:center;padding:7px"><strong style="display:block;font-size:22px;color:#ff5864">${s.length}</strong><small style="display:block;color:var(--xra-muted,#9aa4af)">Bỏ qua</small></span></div></div>`;
-    box
-      .querySelectorAll("[data-auto-stats] > div > div")
-      .forEach((card) => card.style.setProperty("background", "transparent", "important"));
+    const iconMarkup = (name) => globalThis.AssistantIcons?.svg(name) || "";
+    stats.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:8px"><div style="display:grid;grid-template-columns:40px minmax(0,1fr);align-items:stretch;min-height:62px;padding:0;border-radius:8px;overflow:hidden;background:transparent;border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;width:40px;min-width:40px;height:100%;padding-left:5px;box-sizing:border-box;color:#35a7ee">${iconMarkup("arrow")}</span><span style="display:flex;min-width:0;flex:1;flex-direction:column;justify-content:center;padding:5px 7px"><strong style="display:block;font-size:18px;color:#35a7ee">${(p.length / mins).toFixed(2)}</strong><small style="display:block;color:var(--xra-muted,#9aa4af);font-size:10px;white-space:nowrap">trả lời/phút</small></span></div><div style="display:grid;grid-template-columns:40px minmax(0,1fr);align-items:stretch;min-height:62px;padding:0;border-radius:8px;overflow:hidden;background:transparent;border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;width:40px;min-width:40px;height:100%;padding-left:5px;box-sizing:border-box;color:#20c997">${iconMarkup("badge-check")}</span><span style="display:flex;min-width:0;flex:1;flex-direction:column;justify-content:center;padding:5px 7px"><strong style="display:block;font-size:18px;color:#20c997">${p.length}</strong><small style="display:block;color:var(--xra-muted,#9aa4af);font-size:10px;white-space:nowrap">Hoàn thành</small></span></div><div style="display:grid;grid-template-columns:40px minmax(0,1fr);align-items:stretch;min-height:62px;padding:0;border-radius:8px;overflow:hidden;background:transparent;border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;width:40px;min-width:40px;height:100%;padding-left:5px;box-sizing:border-box;color:#ff5864">${iconMarkup("circle-x")}</span><span style="display:flex;min-width:0;flex:1;flex-direction:column;justify-content:center;padding:5px 7px"><strong style="display:block;font-size:18px;color:#ff5864">${s.length}</strong><small style="display:block;color:var(--xra-muted,#9aa4af);font-size:10px;white-space:nowrap">Bỏ qua</small></span></div></div>`;
+    box.querySelectorAll("[data-auto-stats] > div > div").forEach((card) => {
+      card.style.setProperty("background", "transparent", "important");
+      card.style.gridTemplateColumns = "40px minmax(0,1fr)";
+      card.style.minHeight = "62px";
+      card.style.borderRadius = "8px";
+      const icon = card.querySelector("span:first-child");
+      icon?.style.setProperty("width", "40px");
+      icon?.style.setProperty("min-width", "40px");
+      icon?.style.setProperty("padding-left", "5px");
+      icon?.style.setProperty("box-sizing", "border-box");
+      icon?.style.setProperty("font-size", "36px");
+      icon?.querySelector("svg")?.style.setProperty("width", "36px");
+      icon?.querySelector("svg")?.style.setProperty("height", "36px");
+      card.querySelector("strong")?.style.setProperty("font-size", "18px");
+      card.querySelector("small")?.style.setProperty("font-size", "10px");
+      card.querySelector("span:nth-child(2)")?.style.setProperty("min-width", "0");
+      card.querySelector("span:nth-child(2)")?.style.setProperty("padding", "5px 7px");
+    });
     const sessionStatus = box.querySelector("[data-auto-session-status]");
     if (sessionStatus)
       sessionStatus.textContent = memory.isAutoResting
@@ -615,6 +666,7 @@
         });
       }
       processedList.__autoRender();
+      box.__autoResizeProcessedCard?.();
     }
     const processedCount = box.querySelector("[data-auto-processed-count]");
     if (processedCount)
@@ -685,23 +737,45 @@
       configureSpeedControl(box);
       configureMinimumGapControl(box);
       configureDailyReplyLimitControl(box);
+      reorderAutoSetupControls(box);
       syncPauseButton();
       return box;
     }
     box = document.createElement("aside");
     box.id = "assistant-auto-dashboard";
     box.style.cssText =
-      "--xra-text:var(--xra-color,#e7e9ea);--xra-border:color-mix(in srgb,var(--xra-color,#e7e9ea) 22%,var(--xra-bg,#000));--xra-muted:color-mix(in srgb,var(--xra-color,#e7e9ea) 60%,var(--xra-bg,#000));position:fixed;right:16px;top:78px;width:min(460px,calc(100vw - 24px));min-width:min(320px,calc(100vw - 24px));min-height:min(280px,calc(100vh - 24px));max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);resize:both;overflow:auto;z-index:2147483647;background:var(--xra-bg,#000);color:var(--xra-color,#e7e9ea);border:1px solid var(--xra-border);border-radius:16px;box-shadow:0 8px 24px #0004;font:13px/1.45 var(--xra-font,system-ui);padding:16px";
+      "--xra-font:Roboto,Segoe UI,Arial,sans-serif;--xra-text:var(--xra-color,#e7e9ea);--xra-border:color-mix(in srgb,var(--xra-color,#e7e9ea) 22%,var(--xra-bg,#000));--xra-muted:color-mix(in srgb,var(--xra-color,#e7e9ea) 60%,var(--xra-bg,#000));position:fixed;right:14px;top:72px;width:min(440px,calc(100vw - 24px));min-width:min(300px,calc(100vw - 24px));min-height:min(260px,calc(100vh - 24px));max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);resize:both;overflow:auto;z-index:2147483647;background:var(--xra-bg,#000);color:var(--xra-color,#e7e9ea);border:1px solid var(--xra-border);border-radius:12px;box-shadow:0 8px 24px #0004;font:12px/1.4 var(--xra-font);padding:12px";
     const savedPosition = readDashboardPosition();
     if (savedPosition) {
       box.style.left = `${savedPosition.left}px`;
       box.style.top = `${savedPosition.top}px`;
       box.style.right = "auto";
     }
-    box.innerHTML =
-      '<div data-auto-drag-handle style="display:flex;align-items:center;gap:8px;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--xra-border,#303842);cursor:move;touch-action:none"><span style="display:flex;align-items:center;gap:8px"><img src="' +
-      runtimeAssetUrl("assets/logo.svg") +
-      '" alt="Assistant" style="width:28px;height:28px"><strong style="font-size:17px;color:var(--xra-text,#edf1f5)">Tự động</strong></span><span style="display:flex;gap:6px"><button data-auto-pause aria-label="Tạm dừng" title="Tạm dừng" style="width:36px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:0;border:1px solid var(--xra-border,#303842);border-radius:8px;background:#d64555;color:#fff;cursor:pointer;font:700 13px system-ui"><svg viewBox="0 0 12 12" aria-hidden="true" style="width:12px;height:12px;display:block;fill:currentColor"><rect x="1.5" y="1.5" width="9" height="9" rx="1"></rect></svg></button><button data-auto-minimize aria-label="Thu nhỏ" title="Thu nhỏ" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">−</button><button data-auto-close aria-label="Đóng dashboard" title="Đóng dashboard" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">×</button></span></div><h3 style="margin:12px 0 5px;font-size:17px">Thiết lập</h3><div style="padding:8px 0 4px"><div style="display:flex;justify-content:space-between;font-size:15px"><b>Tốc độ xử lý</b><output data-auto-speed-value>0</output></div><input data-auto-speed type="range" min="-3" max="3" step="0.5" value="0" style="width:100%;accent-color:var(--xra-accent,#1d9bf0)"><div style="display:flex;justify-content:space-between;color:var(--xra-muted,#9aa4af);font-size:11px"><span>-3</span><span>-1.5</span><span>0</span><span>1.5</span><span>3</span></div></div><label style="display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px"><input data-auto-vietnamese type="checkbox" checked> Chỉ xử lý bài có nội dung tiếng Việt</label><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 5px"><h3 style="margin:0;font-size:17px">Thông tin phiên</h3><span data-auto-session-status style="color:#20c997;font-size:12px;white-space:nowrap">● Đang chạy (0 phút)</span></div><div data-auto-stats style="font-size:16px;margin:6px 0 10px;color:var(--xra-muted,#9aa4af);padding:4px 0"></div><div style="padding:12px;border:1px solid var(--xra-border,#303842);border-radius:10px;margin-bottom:10px;font-size:14px"><b style="display:flex;align-items:center"><span style="color:#20c997;font-size:10px;margin-right:4px">●</span> Đang xử lý <span data-auto-current-toggle style="margin-left:auto;font-size:16px;line-height:1">⌄</span></b><div data-auto-log-list style="margin-top:7px;max-height:none;overflow:visible;white-space:pre-wrap;font:13px/1.5 system-ui;color:var(--xra-muted,#9aa4af)">Đang chờ bài tiếp theo</div></div><details style="margin-top:12px"><summary style="font-size:14px;font-weight:700;list-style:none;display:flex;justify-content:flex-start;align-items:center;gap:4px;padding:8px 0;border-bottom:1px solid var(--xra-border,#303842);cursor:pointer">Đã xử lý <span data-auto-processed-count></span><span style="margin-left:auto;font-size:16px;line-height:1">⌄</span></summary><div data-auto-list style="max-height:none;overflow:visible;padding:4px 0;background:transparent;font-size:13px"></div></details><button data-auto-reset style="width:100%;margin-top:12px;padding:9px;border:1px solid var(--xra-border,#303842);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font:600 14px system-ui">Reset số liệu</button>';
+    const iconMarkup = (name) => globalThis.AssistantIcons?.svg(name) || "";
+    box.innerHTML = `<div data-auto-drag-handle style="display:flex;align-items:center;gap:8px;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--xra-border,#303842);cursor:move;touch-action:none"><span style="display:flex;align-items:center;gap:8px"><img src="${runtimeAssetUrl("assets/logo.svg")}" alt="Assistant" style="width:28px;height:28px"><strong style="font-size:17px;color:var(--xra-text,#edf1f5)">Tự động</strong></span><span style="display:flex;gap:6px"><button data-auto-pause aria-label="Tạm dừng" title="Tạm dừng" style="width:36px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:0;border:1px solid var(--xra-border,#303842);border-radius:8px;background:#d64555;color:#fff;cursor:pointer;font:700 13px system-ui">${iconMarkup("pause")}</button><button data-auto-minimize aria-label="Thu nhỏ" title="Thu nhỏ" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">${iconMarkup("minus")}</button><button data-auto-close aria-label="Đóng dashboard" title="Đóng dashboard" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">${iconMarkup("close")}</button></span></div><h3 style="margin:12px 0 5px;font-size:17px">Thiết lập</h3><div style="padding:8px 0 4px"><div style="display:flex;justify-content:space-between;font-size:15px"><b>Tốc độ xử lý</b><output data-auto-speed-value>0</output></div><input data-auto-speed type="range" min="-3" max="3" step="0.5" value="0" style="width:100%;accent-color:var(--xra-accent,#1d9bf0)"><div style="display:flex;justify-content:space-between;color:var(--xra-muted,#9aa4af);font-size:11px"><span>-3</span><span>-1.5</span><span>0</span><span>1.5</span><span>3</span></div></div><label style="display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px"><input data-auto-vietnamese type="checkbox" checked> Chỉ xử lý bài có nội dung tiếng Việt</label><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 5px"><h3 style="margin:0;font-size:17px">Thông tin phiên</h3><span data-auto-session-status style="color:#20c997;font-size:12px;white-space:nowrap">Đang chạy (0 phút)</span></div><div data-auto-stats style="font-size:16px;margin:6px 0 10px;color:var(--xra-muted,#9aa4af);padding:4px 0"></div><div style="padding:12px;border:1px solid var(--xra-border,#303842);border-radius:10px;margin-bottom:10px;font-size:14px"><b style="display:flex;align-items:center"><span style="color:#20c997;font-size:10px;margin-right:4px">●</span> Đang xử lý <span data-auto-current-toggle data-auto-dropdown style="margin-left:auto;font-size:16px;line-height:1"></span></b><div data-auto-log-list style="margin-top:7px;max-height:none;overflow:visible;white-space:pre-wrap;font:13px/1.5 system-ui;color:var(--xra-muted,#9aa4af)">Đang chờ bài tiếp theo</div></div><details style="margin-top:12px"><summary style="font-size:14px;font-weight:700;list-style:none;display:flex;justify-content:flex-start;align-items:center;gap:4px;padding:8px 0;border-bottom:1px solid var(--xra-border,#303842);cursor:pointer">Đã xử lý <span data-auto-processed-count></span><span data-auto-dropdown style="margin-left:auto;font-size:16px;line-height:1"></span></summary><div data-auto-list style="max-height:none;overflow:visible;padding:4px 0;background:transparent;font-size:13px"></div></details><button data-auto-reset style="width:100%;margin-top:12px;padding:9px;border:1px solid var(--xra-border,#303842);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font:600 14px system-ui">Reset số liệu</button>`;
+    const dashboardFont = "Roboto, Segoe UI, Arial, sans-serif";
+    box.style.setProperty("font-family", dashboardFont, "important");
+    box.querySelectorAll("*").forEach((node) => {
+      node.style.setProperty("font-family", dashboardFont, "important");
+    });
+    // Keep the dashboard dense enough for smaller screens while preserving
+    // the existing layout and controls.
+    box.querySelector("[data-auto-drag-handle] img")?.style.setProperty("width", "24px");
+    box.querySelector("[data-auto-drag-handle] img")?.style.setProperty("height", "24px");
+    box.querySelector("[data-auto-drag-handle] strong")?.style.setProperty("font-size", "15px");
+    box.querySelectorAll("h3").forEach((node) => node.style.setProperty("font-size", "15px"));
+    box.querySelectorAll("label").forEach((node) => node.style.setProperty("font-size", "13px"));
+    box
+      .querySelectorAll("[data-auto-log-list],[data-auto-list]")
+      .forEach((node) => node.style.setProperty("font-size", "12px"));
+    const speedLabel = box
+      .querySelector("[data-auto-speed]")
+      ?.previousElementSibling?.querySelector("b");
+    if (speedLabel) {
+      speedLabel.style.fontSize = "13px";
+      speedLabel.style.fontWeight = "400";
+      speedLabel.style.lineHeight = "1.4";
+    }
     const dragHandle = box.querySelector("[data-auto-drag-handle]");
     if (dragHandle) {
       dragHandle.style.position = "sticky";
@@ -716,7 +790,7 @@
       const restRow = document.createElement("label");
       restRow.dataset.autoRestRow = "";
       restRow.style.cssText =
-        "display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px";
+        "display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:6px 0;color:var(--xra-text,#edf1f5);font-size:13px";
       const enabled = document.createElement("input");
       enabled.type = "checkbox";
       enabled.dataset.autoRest = "";
@@ -735,9 +809,9 @@
       );
       interval.setAttribute("aria-label", "Số phút giữa các lần nghỉ");
       interval.style.cssText =
-        "width:84px;min-width:84px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
-      restRow.append(enabled, document.createTextNode("Tạm nghỉ (sau mỗi "), interval);
-      restRow.append(document.createTextNode(" phút)"));
+        "width:60px;min-width:60px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+      restRow.append(enabled, document.createTextNode("Tạm nghỉ sau mỗi "), interval);
+      restRow.append(document.createTextNode(" phút"));
       vietnameseFilter.before(restRow);
       const syncRestSettings = () => {
         const everyMinutes = Math.max(1, Math.min(1440, Number(interval.value) || 30));
@@ -761,9 +835,11 @@
       interval.addEventListener("change", syncRestSettings);
     }
     document.documentElement.appendChild(box);
+    syncPauseButton();
     configureSpeedControl(box);
     configureMinimumGapControl(box);
     configureDailyReplyLimitControl(box);
+    reorderAutoSetupControls(box);
     const tabBadge = document.createElement("span");
     memory.tabBadge ||= Math.random().toString(36).slice(2, 6).toUpperCase();
     tabBadge.dataset.autoTabBadge = "";
@@ -778,14 +854,19 @@
     if (setupTitle) {
       const setupCard = document.createElement("section");
       setupCard.style.cssText =
-        "padding:12px;border:1px solid var(--xra-border);border-radius:10px;background:transparent;margin-bottom:12px";
+        "padding:10px;border:1px solid var(--xra-border);border-radius:10px;background:transparent;margin-bottom:10px";
       setupTitle.parentNode.insertBefore(setupCard, setupTitle);
-      setupCard.append(
-        setupTitle,
-        setupTitle.nextElementSibling,
-        setupTitle.nextElementSibling?.nextElementSibling,
-        setupTitle.nextElementSibling?.nextElementSibling?.nextElementSibling,
-      );
+      setupCard.append(setupTitle);
+      // Keep every setup control (including the daily limit and Vietnamese
+      // filter) in the same card. Stop before the session information row.
+      while (setupCard.nextElementSibling) {
+        const next = setupCard.nextElementSibling;
+        const isSessionRow = [...next.querySelectorAll("h3")].some(
+          (node) => node.textContent.trim() === "Thông tin phiên",
+        );
+        if (isSessionRow) break;
+        setupCard.append(next);
+      }
     }
     const sessionRow = [...box.querySelectorAll("h3")].find(
       (node) => node.textContent.trim() === "Thông tin phiên",
@@ -805,10 +886,24 @@
     box.querySelector("[data-auto-reset]")?.remove();
     box.querySelectorAll("[data-auto-stats] > div > div").forEach((card) => {
       card.style.setProperty("background", "transparent", "important");
+      card.style.gridTemplateColumns = "26% 74%";
+      card.style.minHeight = "62px";
+      card.style.borderRadius = "8px";
+      card.querySelector("span:first-child")?.style.setProperty("font-size", "18px");
+      const statIcon = card.querySelector("span:first-child .ui-icon");
+      if (statIcon) {
+        statIcon.style.width = "34px";
+        statIcon.style.height = "34px";
+      }
+      card.querySelector("strong")?.style.setProperty("font-size", "18px");
+      card.querySelector("small")?.style.setProperty("font-size", "10px");
+      card.querySelector("span:nth-child(2)")?.style.setProperty("padding", "5px");
     });
     const speedStyle = document.createElement("style");
     speedStyle.textContent =
       "#assistant-auto-dashboard [data-auto-speed]{accent-color:var(--xra-accent,var(--xra-color,#1d9bf0));color-scheme:light dark;background:transparent}#assistant-auto-dashboard [data-auto-speed]::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:color-mix(in srgb,var(--xra-color,#e7e9ea) 28%,var(--xra-bg,#000))}#assistant-auto-dashboard [data-auto-speed]::-webkit-slider-thumb{margin-top:-5px;width:14px;height:14px;border:0;border-radius:50%;background:var(--xra-accent,#1d9bf0);-webkit-appearance:none}#assistant-auto-dashboard [data-auto-speed]::-moz-range-track{height:4px;border-radius:4px;background:color-mix(in srgb,var(--xra-color,#e7e9ea) 28%,var(--xra-bg,#000))}#assistant-auto-dashboard [data-auto-speed]::-moz-range-progress{height:4px;border-radius:4px;background:var(--xra-accent,#1d9bf0)}#assistant-auto-dashboard [data-auto-speed]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--xra-accent,#1d9bf0)}";
+    speedStyle.textContent +=
+      "#assistant-auto-dashboard{scrollbar-width:none;-ms-overflow-style:none}#assistant-auto-dashboard::-webkit-scrollbar{width:0;height:0;display:none}";
     box.appendChild(speedStyle);
     const processedCard = box.querySelector("details");
     if (processedCard) {
@@ -816,25 +911,58 @@
         "margin-top:12px;padding:12px;border:1px solid var(--xra-border,#303842);border-radius:10px;background:transparent";
       const summary = processedCard.querySelector("summary");
       if (summary) summary.style.padding = "0 0 8px";
+      const resizeProcessedCard = () => {
+        if (!processedCard.open) {
+          box.style.height = "660px";
+          box.style.minHeight = "660px";
+          processedCard.style.height = "";
+          const list = processedCard.querySelector("[data-auto-list]");
+          if (list) {
+            list.style.height = "";
+            list.style.maxHeight = "280px";
+          }
+          return;
+        }
+        box.style.height = "900px";
+        box.style.minHeight = "900px";
+        requestAnimationFrame(() => {
+          const boxRect = box.getBoundingClientRect();
+          const cardRect = processedCard.getBoundingClientRect();
+          const cardHeight = Math.max(160, box.clientHeight - (cardRect.top - boxRect.top) - 12);
+          processedCard.style.height = `${cardHeight}px`;
+          processedCard.style.boxSizing = "border-box";
+          const list = processedCard.querySelector("[data-auto-list]"),
+            summaryHeight = processedCard.querySelector("summary")?.offsetHeight || 30,
+            listHeight = Math.max(100, cardHeight - summaryHeight - 24);
+          if (list) {
+            list.style.height = `${listHeight}px`;
+            list.style.maxHeight = `${listHeight}px`;
+          }
+        });
+      };
+      box.__autoResizeProcessedCard = resizeProcessedCard;
+      processedCard.addEventListener("toggle", resizeProcessedCard);
     }
-    box.style.width = "min(460px, calc(100vw - 24px))";
-    box.style.maxHeight = "calc(100vh - 24px)";
-    box.style.minWidth = "min(320px, calc(100vw - 24px))";
-    box.style.minHeight = "min(280px, calc(100vh - 24px))";
+    box.style.width = "min(380px, calc(100vw - 24px))";
+    box.style.height = "660px";
+    box.style.minWidth = "min(380px, calc(100vw - 24px))";
+    box.style.minHeight = "660px";
+    box.style.maxHeight = "none";
     box.style.resize = "both";
     box.style.overflow = "auto";
+    box.style.scrollbarWidth = "none";
+    box.style.msOverflowStyle = "none";
     const dropdownSvg = globalThis.AssistantIcons?.svg?.("dropdown");
     if (dropdownSvg)
-      box.querySelectorAll("span").forEach((span) => {
-        if (span.textContent.trim() === "⌄") span.innerHTML = dropdownSvg;
+      box.querySelectorAll("[data-auto-dropdown]").forEach((span) => {
+        span.innerHTML = dropdownSvg;
       });
     const makeDraggable = (
       dragHandle,
       allowInteractive = dragHandle?.matches("[data-auto-restore]"),
     ) => {
       if (allowInteractive && dragHandle) {
-        dragHandle.innerHTML =
-          '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"></path></svg>';
+        dragHandle.innerHTML = globalThis.AssistantIcons?.svg("maximize") || "";
         dragHandle.style.cssText =
           "display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;padding:0;border:1px solid var(--xra-border);border-radius:50%;background:var(--xra-bg);color:var(--xra-color);cursor:move;line-height:0";
       }
@@ -935,7 +1063,9 @@
       box.style.padding = "0";
       box.style.boxShadow = "none";
       box.innerHTML =
-        '<button data-auto-restore aria-label="Mở dashboard" title="Mở dashboard" style="display:grid;place-items:center;width:42px;height:42px;padding:0;border:1px solid var(--xra-border);border-radius:50%;background:var(--xra-bg);color:var(--xra-color);font-size:20px;line-height:1;cursor:pointer">↗</button><span data-auto-mini-badge style="position:absolute;right:-8px;top:-9px;display:flex;align-items:stretch;overflow:hidden;border:1px solid var(--xra-border);border-radius:999px;background:var(--xra-bg);box-shadow:0 2px 7px #0008;color:#fff;font:700 9px/1 system-ui;white-space:nowrap"><span data-auto-mini-rate style="padding:3px 4px;background:#168bd1;color:#fff">0/p</span><span data-auto-mini-done style="padding:3px 4px;background:#129b78;color:#fff">0</span><span data-auto-mini-skipped style="padding:3px 4px;background:#d84252;color:#fff">0</span></span>';
+        '<button data-auto-restore aria-label="Mở dashboard" title="Mở dashboard" style="display:grid;place-items:center;width:42px;height:42px;padding:0;border:1px solid var(--xra-border);border-radius:50%;background:var(--xra-bg);color:var(--xra-color);font-size:20px;line-height:1;cursor:pointer">' +
+        (globalThis.AssistantIcons?.svg("arrow") || "") +
+        '</button><span data-auto-mini-badge style="position:absolute;right:-8px;top:-9px;display:flex;align-items:stretch;overflow:hidden;border:1px solid var(--xra-border);border-radius:999px;background:var(--xra-bg);box-shadow:0 2px 7px #0008;color:#fff;font:700 9px/1 system-ui;white-space:nowrap"><span data-auto-mini-rate style="padding:3px 4px;background:#168bd1;color:#fff">0/p</span><span data-auto-mini-done style="padding:3px 4px;background:#129b78;color:#fff">0</span><span data-auto-mini-skipped style="padding:3px 4px;background:#d84252;color:#fff">0</span></span>';
       dashboard();
       makeDraggable(box.querySelector("[data-auto-restore]"));
       box.querySelector("[data-auto-restore]").onclick = (event) => {
@@ -1009,9 +1139,7 @@
     }
     for (const article of document.querySelectorAll('article[data-testid="tweet"]')) {
       if (
-        article.querySelector(
-          '[data-testid*="promoted" i],[data-testid*="sponsor" i]',
-        ) ||
+        article.querySelector('[data-testid*="promoted" i],[data-testid*="sponsor" i]') ||
         /được quảng bá|promoted/i.test(article.textContent || "")
       )
         continue;
@@ -1099,6 +1227,7 @@
           nativeReply.dataset.xraOpened = "1";
           nativeReply.click();
           log("Đã mở ô Trả lời của bài viết");
+          window.dispatchEvent(new Event("assistant-auto-flow-mount"));
         }
         for (let composerWait = 0; composerWait < 20; composerWait++) {
           replyComposer = document.querySelector(
@@ -1108,6 +1237,7 @@
           await pauseSleep(300);
         }
       }
+      window.dispatchEvent(new Event("assistant-auto-flow-mount"));
       replyComposer?.scrollIntoView({ behavior: "auto", block: "center" });
       let replyButton = null;
       for (let toolbarWait = 0; toolbarWait < 20; toolbarWait++) {
@@ -1156,9 +1286,7 @@
         break;
       }
       if (claim.waitMs) {
-        log(
-          `Đã nhận bài · tạo gợi ý trước, sẽ giữ khoảng giãn cách trước khi gửi`,
-        );
+        log(`Đã nhận bài · tạo gợi ý trước, sẽ giữ khoảng giãn cách trước khi gửi`);
       }
       log("Trạng thái: Chưa trả lời");
       let button = null;
@@ -1403,6 +1531,7 @@
     memory.runState = "running";
     running = true;
     globalThis.__assistantAutoFlowRunning = true;
+    markXUsageMode();
     document.dispatchEvent(new Event("assistant-auto-flow-state"));
     syncPauseButton();
     log("Tiếp tục phiên hiện tại · giữ nguyên số liệu");
@@ -1469,6 +1598,7 @@
         save(skippedKey, []);
         running = true;
         globalThis.__assistantAutoFlowRunning = true;
+        markXUsageMode();
         document.dispatchEvent(new Event("assistant-auto-flow-state"));
         notifyPanel(true);
         log(

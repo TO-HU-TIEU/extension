@@ -1,21 +1,23 @@
 /* Side-panel spacing and typography contract.
    Keep this stylesheet last in panel.html; injected X reply UI uses its own styles. */
 :root {
-  --panel-space-1: 4px;
-  --panel-space-2: 8px;
-  --panel-space-3: 12px;
-  --panel-space-4: 16px;
-  --panel-space-5: 20px;
-  --panel-font-xs: 11px;
-  --panel-font-sm: 12px;
-  --panel-font-body: 13px;
-  --panel-font-title: 14px;
-  --panel-font-app-title: 16px;
+  /* Compact rhythm: keep text size readable while reducing empty space. */
+  --panel-font-family: Roboto, "Segoe UI", Arial, sans-serif;
+  --panel-space-1: 3px;
+  --panel-space-2: 6px;
+  --panel-space-3: 8px;
+  --panel-space-4: 12px;
+  --panel-space-5: 16px;
+  --panel-font-xs: 10px;
+  --panel-font-sm: 11px;
+  --panel-font-body: 12px;
+  --panel-font-title: 13px;
+  --panel-font-app-title: 15px;
   --panel-line-tight: 16px;
   --panel-line-body: 19px;
-  --panel-control-height: 36px;
-  --panel-card-padding: 12px;
-  --panel-row-height: 44px;
+  --panel-control-height: 32px;
+  --panel-card-padding: 8px;
+  --panel-row-height: 38px;
 }
 
 /* Reusable layout roles for panel markup; avoid styling anonymous nested divs. */
@@ -95,8 +97,16 @@
 
 body {
   padding: var(--panel-space-3);
+  font-family: var(--panel-font-family);
   font-size: var(--panel-font-body);
   line-height: 1.45;
+}
+
+body button,
+body input,
+body select,
+body textarea {
+  font-family: var(--panel-font-family) !important;
 }
 
 /* The style editor uses one typography scale for its three sibling controls. */
@@ -114,6 +124,28 @@ body {
   font-size: var(--panel-font-body);
   line-height: var(--panel-line-body);
   color: var(--ui-text, #e7e9ea);
+}
+#replySettings > .config-card {
+  /* Keep the editor inside the side-panel viewport.  The previous full
+     viewport minimum was added on top of the header/nav and made the page
+     grow taller than the panel. */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#replySettings #stylePrompt {
+  flex: 0 1 auto;
+  height: clamp(180px, calc(100dvh - 430px), 420px);
+  min-height: 180px;
+  max-height: calc(100dvh - 300px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  resize: none;
+  box-sizing: border-box;
+}
+#replySettings #stylePrompt::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 .style-length-fields {
   font-weight: 500;
@@ -595,13 +627,290 @@ label.switch {
 .tone-inline-card > #replyTone {
   display: none;
 }
-@media (max-width: 330px) {
+
+/* Tone and suggestion length are compact controls without a title divider. */
+#toneLengthRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  margin: 0 0 var(--panel-space-3);
+}
+#toneSettings,
+#styleLengthSettings {
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+#toneSettings > .section-head {
+  display: block;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+#toneSettings > .section-head h2 {
+  margin: 0 0 var(--panel-space-2);
+  line-height: var(--panel-line-body);
+}
+#toneSettings > .section-head .tone-choice {
+  display: flex;
+  width: 100%;
+  justify-content: stretch;
+  gap: var(--panel-space-1);
+}
+#toneSettings > .section-head .tone-choice button {
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+  height: var(--panel-control-height);
+  min-height: var(--panel-control-height);
+  padding: 4px 8px;
+}
+#styleLengthSettings {
+  padding: var(--panel-card-padding);
+}
+#styleLengthSettings .style-length-row {
+  display: block;
+  margin: 0;
+}
+#styleLengthSettings .style-length-row > label {
+  display: block;
+  margin: 0 0 var(--panel-space-2);
+}
+#styleLengthSettings .style-length-fields {
+  display: flex;
+  justify-content: flex-start;
+  gap: var(--panel-space-1);
+}
+#styleLengthSettings .style-length-fields input {
+  width: 48px;
+  flex: 1 1 48px;
+  min-width: 0;
+  min-height: var(--panel-control-height);
+}
+/* Keep both compact cards side by side in the normal narrow side panel.
+   Only stack when there is genuinely no room for the two controls. */
+@media (max-width: 240px) {
+  #toneLengthRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .tone-inline-card > .section-head {
     align-items: flex-start;
   }
   .tone-inline-card > .section-head .tone-choice {
     flex-wrap: wrap;
   }
+}
+
+/* Keep the tab target strip available while the side panel scrolls. */
+#panelTargetBar {
+  position: sticky !important;
+  /* Keep a visible breathing space below the sticky header while scrolling. */
+  top: 60px;
+  z-index: 115;
+  margin: 0 0 var(--panel-space-2) !important;
+  padding: 5px 8px !important;
+  min-height: 0;
+  /* Match the sticky topbar so the page content cannot show through while
+     the target strip is pinned during scrolling. */
+  background: var(--ui-surface-raised, #1d232b) !important;
+  background-clip: padding-box;
+  box-shadow: 0 1px 0 var(--ui-border, #2f3336);
+}
+#panelTargetRadios label,
+#panelTargetRadios label:has(input:checked) {
+  min-height: 25px;
+  padding: 4px 6px;
+  font-size: var(--panel-font-sm) !important;
+}
+#panelTargetRadios::before {
+  top: 3px;
+  bottom: 3px;
+}
+body.settings-open > #panelTargetBar {
+  display: none !important;
+}
+html[data-theme="dark"] #panelTargetBar {
+  background: #171b21 !important;
+  border-color: #303842 !important;
+}
+html[data-theme="light"] #panelTargetBar {
+  background: #f7f9fb !important;
+}
+
+/* Keep the sticky header, target-tab strip and module tabs on one continuous
+   themed surface.  The wrapper owns the sticky position so the gaps between
+   the three rows cannot reveal the page background while scrolling. */
+.panel-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -16px 0 12px;
+  padding: 16px 0 8px;
+  background: #101419;
+}
+.panel-chrome > header,
+.panel-chrome > #panelTargetBar,
+.panel-chrome > .module-nav {
+  position: relative !important;
+  top: auto !important;
+  z-index: auto !important;
+  margin-top: 0;
+}
+.panel-chrome > header {
+  margin-bottom: 0;
+}
+.panel-chrome > #panelTargetBar {
+  margin: 0 !important;
+}
+.panel-chrome > .module-nav {
+  margin-bottom: 0;
+}
+html[data-theme="dark"] .panel-chrome {
+  background: #101419 !important;
+}
+html[data-theme="light"] .panel-chrome {
+  background: #f7f9fb !important;
+}
+body.settings-open > .panel-chrome {
+  display: none !important;
+}
+
+/* Keep the style actions square when the picker is narrow. */
+#stylePickerField .style-picker-heading {
+  grid-template-columns: auto minmax(72px, 1fr) max-content;
+}
+#stylePickerField .style-picker-actions {
+  min-width: max-content;
+  gap: 6px;
+}
+#stylePickerField .style-picker-actions > .icon {
+  flex: 0 0 32px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  aspect-ratio: 1;
+}
+
+/* Compact the feedback method list without changing its two-column layout. */
+.feedback-method-row,
+.feedback-method {
+  min-height: 24px;
+}
+.feedback-method {
+  gap: 6px;
+  line-height: 1.2;
+}
+.feedback-method span,
+.feedback-method > span.feedback-continuous-copy {
+  line-height: 1.2;
+}
+
+/* Keep the add icon optically centered and make chip remove controls truly
+   borderless. */
+.auto-exclusion-entry > button {
+  display: grid !important;
+  place-items: center;
+  align-content: center;
+  justify-content: center;
+  line-height: 0;
+}
+.auto-exclusion-entry > button > .ui-icon,
+.auto-exclusion-entry > button > svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.auto-exclusion-chip > button {
+  display: grid !important;
+  place-items: center;
+  width: 19px !important;
+  min-width: 19px !important;
+  max-width: 19px !important;
+  height: 19px !important;
+  min-height: 19px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0;
+  box-shadow: none !important;
+  line-height: 0;
+}
+.auto-exclusion-chip > button > .ui-icon,
+.auto-exclusion-chip > button > svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+
+/* The section heading already supplies the divider; avoid a doubled line
+   immediately below “Tự động follow”. */
+.auto-follow-card .auto-follow-options {
+  border-top: 0;
+}
+
+/* Keep the assistant top bar close to the side-panel chrome instead of
+   leaving a large blank band above it. */
+.panel-chrome {
+  padding-top: 5px;
+  row-gap: 5px;
+}
+.panel-chrome > header button.theme-button {
+  margin-right: 5px;
+}
+.panel-chrome > header {
+  margin-top: 5px;
+}
+
+/* Bring the top-bar label closer to the visual weight of the assistant mark. */
+.panel-chrome > header h1 {
+  font-size: 16px;
+  line-height: 21px;
+}
+.panel-chrome > header .app-version {
+  font-size: 11px;
+}
+
+/* The target strip is part of the wrapper now, so it must not receive the
+   former standalone sticky offset. Keep its border aligned with the header. */
+.panel-chrome > #panelTargetBar {
+  top: auto !important;
+  padding: 3px 8px !important;
+  border-color: var(--ui-border, #2f3336) !important;
+}
+.panel-chrome > #panelTargetBar #panelTargetRadios label,
+.panel-chrome > #panelTargetBar #panelTargetRadios label:has(input:checked) {
+  min-height: 23px;
+  padding: 3px 6px;
+}
+.panel-chrome > .module-nav {
+  border-color: var(--ui-border, #2f3336) !important;
+}
+
+/* Reduce the vertical footprint of the style picker row. */
+#stylePickerField {
+  margin: 6px 0 8px !important;
+}
+#stylePickerField .style-picker-heading .style-open {
+  height: 32px !important;
+  min-height: 32px !important;
+}
+
+/* When there is no target strip, retain the same gap below the header. */
+.module-nav {
+  top: 60px !important;
 }
 
 .feedback-post-row {
@@ -886,4 +1195,114 @@ label.switch {
 }
 .reply-live-preview .auto-flow-label > .auto-exclusion-toggle {
   flex: 0 0 24px;
+}
+
+/* Keep style edit/delete actions beside the style label, not in the card title. */
+#stylePickerField {
+  display: block !important;
+  margin: 12px 0 14px;
+}
+#stylePickerField .style-picker-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--panel-space-2);
+  min-width: 0;
+}
+#stylePickerField .style-picker-heading > label {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--panel-font-sm);
+  line-height: var(--panel-line-tight);
+  font-weight: 700;
+  color: var(--ui-text, #e7e9ea);
+}
+#stylePickerField .style-picker-heading .style-open {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  box-sizing: border-box;
+  margin: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--panel-space-2);
+}
+#stylePickerField .style-picker-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--panel-space-1);
+}
+#stylePickerField .style-picker-actions .icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* Settings order: connection first, then panel appearance, then updates. */
+#settingsArea {
+  display: flex;
+  flex-direction: column;
+}
+#settingsArea > .settings-title {
+  order: 0;
+}
+#settingsArea > #connectionSettingsCard {
+  order: 1;
+}
+#settingsArea > #interfaceSettingsCard {
+  order: 2;
+}
+#settingsArea > #updateSettingsCard {
+  order: 3;
+}
+
+/* Provider choices stay readable as text without competing logo artwork. */
+.settings-card .provider-name {
+  display: block;
+  font-size: var(--panel-font-body);
+  line-height: var(--panel-line-body);
+  font-weight: 750;
+}
+
+/* Keep each API key row compact while preserving the existing hit targets. */
+.settings-card .key-queue-list {
+  gap: 2px;
+  margin-top: 5px;
+}
+.settings-card .key-row {
+  min-height: 30px;
+  gap: 5px;
+  padding: 3px 5px;
+}
+.settings-card .key-row label {
+  gap: 5px;
+  font-size: var(--panel-font-xs);
+}
+.settings-card .key-order {
+  width: 16px;
+  font-size: var(--panel-font-xs);
+}
+.settings-card .key-row .key-name {
+  font-size: var(--panel-font-xs);
+  line-height: var(--panel-line-tight);
+}
+.settings-card .key-row .key-mask {
+  margin-top: 0;
+  font-size: 9px;
+  line-height: 12px;
+}
+.settings-card .key-row > .key-copy,
+.settings-card .key-row > .key-remove {
+  width: 24px;
+  height: 24px;
 }

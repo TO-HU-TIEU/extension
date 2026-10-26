@@ -392,14 +392,8 @@
 .scanned-card,
 .draft-card {
   font-family:
-    TwitterChirp,
-    Chirp,
-    Inter,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
     Roboto,
+    "Segoe UI",
     Arial,
     sans-serif;
   font-size: 15px;

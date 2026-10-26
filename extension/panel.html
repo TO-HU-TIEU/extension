@@ -10,10 +10,11 @@
     <link rel="stylesheet" href="panel-rhythm.css" />
   </head>
   <body>
+    <div id="panelChrome" class="panel-chrome">
     <header>
       <img class="logo assistant-mark" src="assets/logo.svg" alt="Assistant" />
       <hgroup class="panel-copy">
-        <h1>Assistant <small class="app-version">1.0.0</small></h1>
+        <h1>Assistant <small class="app-version">1.5.23</small></h1>
         <p id="connection"></p>
       </hgroup>
       <button
@@ -22,11 +23,13 @@
         data-theme-toggle
         title="Chuyển sang giao diện sáng"
         aria-label="Chuyển sang giao diện sáng"
-      ></button
+        ><span data-icon="light" aria-hidden="true"></span></button
       ><button
         id="settingsToggle"
         class="icon ghost settings-button"
         title="Cài đặt chung và hệ thống"
+        aria-label="Cài đặt chung và hệ thống"
+        ><span data-icon="setting" aria-hidden="true"></span
       ></button>
     </header>
     <nav class="module-nav">
@@ -40,105 +43,11 @@
         <span class="panel-nav-icon" data-icon="follow" aria-hidden="true"></span
         ><span class="panel-nav-label">Follow</span></button
       ><button id="feedbackModule">
-        <span class="panel-nav-icon" data-icon="reply" aria-hidden="true"></span
+        <span class="panel-nav-icon" data-icon="message-square" aria-hidden="true"></span
         ><span class="panel-nav-label">Phản hồi</span>
       </button>
     </nav>
-    <div class="mode-tabs" role="tablist" hidden>
-      <button id="xMode" class="active" role="tab">Trực tiếp</button>
     </div>
-
-    <main id="workspace">
-      <details class="panel-card setup-card" open>
-        <summary><span>Cài đặt nhanh</span><i data-icon="up" aria-hidden="true"></i></summary>
-        <div class="setup-body">
-          <span class="group-label">Khi mở bài</span>
-          <div class="toggle-row">
-            <div class="panel-copy">
-              <b>Đọc khi mở bài</b><small>Đọc bài khi mở liên kết chi tiết</small>
-            </div>
-            <label class="switch"><input id="autoDetect" type="checkbox" /><span></span></label>
-          </div>
-          <div class="toggle-row">
-            <div class="panel-copy">
-              <b>Gợi ý khi mở bài</b><small>Tạo ngay sau khi đọc bài</small>
-            </div>
-            <label class="switch"
-              ><input id="panelAutoSuggest" type="checkbox" /><span></span
-            ></label>
-          </div>
-          <div class="toggle-row">
-            <div class="panel-copy">
-              <b>Trả lời ngay sau khi chọn</b><small>Đăng ngay thay vì chỉ điền nội dung</small>
-            </div>
-            <label class="switch"><input id="panelAutoReply" type="checkbox" /><span></span></label>
-          </div>
-          <div class="quick-grid">
-            <div class="style-field panel-field">
-              <span>Phong cách</span
-              ><button id="panelStyleButton" class="style-open" type="button"></button
-              ><select id="panelQuickStyle" hidden></select>
-            </div>
-            <label for="panelReplyCount">Số gợi ý<select id="panelReplyCount"></select></label>
-          </div>
-          <label class="field-label" for="quickContext">Yêu cầu thêm</label
-          ><textarea
-            id="quickContext"
-            rows="2"
-            maxlength="1000"
-            placeholder="Yêu cầu riêng cho lần này…"
-          ></textarea>
-        </div>
-      </details>
-      <section class="panel-card post-card reply-surface">
-        <div class="url-row panel-row">
-          <input id="postUrl" type="url" placeholder="Dán liên kết bài viết…" /><button
-            id="clearUrl"
-            class="clear-url"
-            title="Xoá liên kết"
-            aria-label="Xoá liên kết"
-          >
-            ×
-          </button>
-        </div>
-        <div class="post-author panel-row">
-          <img id="postAvatar" alt="" hidden />
-          <div class="panel-copy">
-            <b id="postDisplayName">Chưa có bài viết</b><small id="postMeta"></small>
-          </div>
-          <button id="read" class="icon" title="Tải lại bài viết"></button>
-        </div>
-        <div id="postPreview" class="post-preview" hidden></div>
-        <textarea
-          id="postText"
-          rows="3"
-          maxlength="12000"
-          placeholder="Nội dung bài viết…"
-        ></textarea>
-        <p id="warning" class="warning" hidden></p>
-        <div class="actions reply-toolbar panel-actions">
-          <button
-            id="generate"
-            class="primary reply-tool reply-generate"
-            title="Tạo gợi ý"
-            aria-label="Tạo gợi ý"
-          >
-            <span class="ai-icon" aria-hidden="true"></span></button
-          ><button
-            id="regenerate"
-            class="icon reply-tool"
-            title="Tạo lại"
-            aria-label="Tạo lại"
-          ></button
-          ><button id="cancel" class="secondary" hidden>Hủy</button>
-        </div>
-      </section>
-      <p id="status" role="status"></p>
-      <section id="results" class="panel-card results-compact reply-surface" hidden>
-        <h2>Gợi ý</h2>
-        <div id="cards"></div>
-      </section>
-    </main>
     <main id="xWorkspace">
       <section class="panel-card x-mode-card reply-live-preview">
         <div class="section-head">
@@ -165,10 +74,7 @@
                 title="Mở danh sách tài khoản tự động bỏ qua"
                 aria-label="Mở danh sách tài khoản tự động bỏ qua"
               >
-                <svg viewBox="0 0 20 20" aria-hidden="true">
-                  <circle cx="10" cy="6.5" r="3" />
-                  <path d="M4.5 17a5.5 5.5 0 0 1 11 0" />
-                </svg>
+                <span data-icon="user" aria-hidden="true"></span>
               </button>
             </div>
           </div>
@@ -190,7 +96,7 @@
               aria-label="Thêm tài khoản bỏ qua"
               title="Thêm"
             >
-              +
+              <span data-icon="plus" aria-hidden="true"></span>
             </button>
           </div>
           <div id="autoExcludedAuthorsList" class="auto-exclusion-list" aria-live="polite"></div>
@@ -201,6 +107,32 @@
         </div>
       </section>
     </main>
+    <div id="toneLengthRow" class="tone-length-row">
+      <section id="toneSettings" class="panel-card config-card tone-settings">
+        <div class="section-head">
+          <hgroup class="panel-copy">
+            <h2>Tone người dùng</h2>
+            <p class="hint">Chọn Nam hoặc Nữ để điều chỉnh xưng hô và góc nhìn.</p>
+          </hgroup>
+        </div>
+        <select id="replyTone" aria-label="Tone người dùng">
+          <option value="">Chưa chọn</option>
+          <option value="male">Nam</option>
+          <option value="female">Nữ</option>
+        </select>
+      </section>
+      <section id="styleLengthSettings" class="panel-card config-card style-length-settings">
+        <div class="style-length-row">
+          <label for="styleMinWords">Độ dài gợi ý:</label>
+          <span class="style-length-fields">
+            <input id="styleMinWords" type="number" min="1" max="100" value="6" aria-label="Số từ tối thiểu" />
+            <span>đến</span>
+            <input id="styleMaxWords" type="number" min="1" max="100" value="10" aria-label="Số từ tối đa" />
+            <span>từ</span>
+          </span>
+        </div>
+      </section>
+    </div>
     <div id="replySettings" class="module-settings">
       <section class="panel-card config-card">
         <div class="section-head">
@@ -213,14 +145,6 @@
               aria-label="Tạo phong cách mới"
             ></button
             ><button
-              id="deleteStyle"
-              class="icon ghost danger-icon"
-              title="Xoá phong cách"
-              aria-label="Xoá phong cách"
-              hidden
-            ></button
-            ><button id="editConfig" class="icon ghost" title="Chỉnh sửa"></button
-            ><button
               id="saveSettings"
               class="icon ghost"
               title="Lưu phong cách"
@@ -231,9 +155,22 @@
           </div>
         </div>
         <div id="stylePickerField" class="panel-field">
-          <label for="style">Phong cách</label
-          ><button id="styleButton" class="style-open wide" type="button"></button
-          ><select id="style" hidden></select>
+          <div class="style-picker-heading">
+            <label for="style">Phong cách</label>
+            <button id="styleButton" class="style-open wide" type="button"></button>
+            <div class="style-picker-actions">
+              <button id="editConfig" class="icon ghost" type="button" title="Chỉnh sửa" aria-label="Chỉnh sửa"></button>
+              <button
+                id="deleteStyle"
+                class="icon ghost danger-icon"
+                type="button"
+                title="Xoá phong cách"
+                aria-label="Xoá phong cách"
+                hidden
+              ></button>
+            </div>
+          </div>
+          <select id="style" hidden></select>
         </div>
         <div id="customStyleFields" class="panel-stack" hidden>
           <label for="styleName">Tên phong cách</label>
@@ -248,32 +185,10 @@
             ></button>
           </div>
         </div>
-        <div class="style-length-row panel-row">
-          <label for="styleMinWords">Độ dài gợi ý</label>
-          <span class="style-length-fields">
-            <input id="styleMinWords" type="number" min="1" max="100" value="6" aria-label="Số từ tối thiểu" />
-            <span>đến</span>
-            <input id="styleMaxWords" type="number" min="1" max="100" value="10" aria-label="Số từ tối đa" />
-            <span>từ</span>
-          </span>
-        </div>
         <label class="prompt-label" for="stylePrompt">Prompt</label
         ><textarea id="stylePrompt" rows="7"></textarea>
       </section>
     </div>
-    <section id="toneSettings" class="panel-card config-card tone-settings">
-      <div class="section-head">
-        <hgroup class="panel-copy">
-          <h2>Tone người dùng</h2>
-          <p class="hint">Chọn Nam hoặc Nữ để điều chỉnh xưng hô và góc nhìn.</p>
-        </hgroup>
-      </div>
-      <select id="replyTone" aria-label="Tone người dùng">
-        <option value="">Chưa chọn</option>
-        <option value="male">Nam</option>
-        <option value="female">Nữ</option>
-      </select>
-    </section>
     <div
       id="styleModal"
       class="style-modal"
@@ -342,7 +257,7 @@
               class="secondary compact"
             >
               Đọc</button
-            ><button id="clearNewsUrl" class="clear-url" title="Xoá liên kết">×</button>
+            ><button id="clearNewsUrl" class="clear-url" title="Xoá liên kết"></button>
           </div>
           <label for="newsSource">Nội dung</label
           ><textarea
@@ -395,7 +310,7 @@
               <span id="quotePostAuthor" class="quote-post-author"></span
               ><small id="quotePostMeta"></small>
             </div>
-            <button id="clearQuotePost" class="clear-url" title="Xoá bài khỏi panel">×</button>
+            <button id="clearQuotePost" class="clear-url" title="Xoá bài khỏi panel"></button>
           </div>
           <div id="quotePostText" class="quote-post-text"></div>
           <button id="toggleQuotePost" class="quote-post-toggle" hidden>Hiện toàn bộ bài</button>
@@ -407,9 +322,8 @@
         <div class="section-head">
           <div class="panel-copy">
             <h2>Tự động follow</h2>
-            <small>Follow người chưa theo dõi trong Top Posts 24 giờ</small>
           </div>
-          <label class="switch" title="Bật tự động follow">
+          <label class="switch" title="Mỗi lượt 12–15 người · nghỉ 20 phút">
             <input id="autoFollowToggle" type="checkbox" />
             <span></span>
           </label>
@@ -419,7 +333,6 @@
             <input id="autoFollowVietnamese" type="checkbox" checked />
             <span>Chỉ follow người Việt</span>
           </label>
-          <span class="auto-follow-limit">Mỗi lượt 12–15 người · nghỉ 20 phút</span>
         </div>
         <div id="autoFollowStatus" class="hint" role="status">Đang tắt</div>
         <button id="autoFollowStop" class="danger auto-follow-stop" type="button" hidden>Dừng tự động follow</button>
@@ -464,44 +377,28 @@
                 title="Không có tick"
                 aria-label="Không có tick"
               >
-                <svg viewBox="0 0 32 32" aria-hidden="true">
-                  <path
-                    d="M11.2 4.8c6.2 0 11.2 5 11.2 11.2s-5 11.2-11.2 11.2S0 22.2 0 16 5 4.8 11.2 4.8zm.1 12.8 3.6 3.6c.4.4 1.2.4 1.6 0 .4-.4.4-1.1 0-1.6l-3.6-3.6 3.6-3.6c.4-.4.4-1.2 0-1.6-.4-.4-1.2-.4-1.6 0l-3.6 3.6-3.6-3.6c-.4-.4-1.2-.4-1.6 0-.4.4-.4 1.2 0 1.6l3.6 3.6-3.6 3.6c-.4.4-.4 1.2 0 1.6.4.4 1.2.4 1.6 0z"
-                  />
-                </svg></button
+                <span data-icon="circle-x" aria-hidden="true"></span></button
               ><button
                 class="follow-filter-icon tick-gray"
                 data-follow-filter="tickGray"
                 title="Tick xám"
                 aria-label="Tick xám"
               >
-                <svg viewBox="0 0 22 22" aria-hidden="true">
-                  <path
-                    d="M12.05 2.056c-.568-.608-1.532-.608-2.1 0l-1.393 1.49c-.284.303-.685.47-1.1.455L5.42 3.932c-.832-.028-1.514.654-1.486 1.486l.069 2.039c.014.415-.152.816-.456 1.1l-1.49 1.392c-.608.568-.608 1.533 0 2.101l1.49 1.393c.304.284.47.684.456 1.1l-.07 2.038c-.027.832.655 1.514 1.487 1.486l2.038-.069c.415-.014.816.152 1.1.455l1.392 1.49c.569.609 1.533.609 2.102 0l1.393-1.49c.283-.303.684-.47 1.099-.455l2.038.069c.832.029 1.515-.654 1.486-1.486L18 14.542c-.015-.415.152-.815.455-1.099l1.49-1.393c.608-.568.608-1.533 0-2.101l-1.49-1.393c-.303-.283-.47-.684-.455-1.1l.068-2.038c.029-.832-.654-1.514-1.486-1.486l-2.038.07c-.415.013-.816-.153-1.1-.456z"
-                  />
-                </svg></button
+                <span data-icon="badge-check" aria-hidden="true"></span></button
               ><button
                 class="follow-filter-icon tick-blue"
                 data-follow-filter="tickBlue"
                 title="Tick xanh"
                 aria-label="Tick xanh"
               >
-                <svg viewBox="0 0 22 22" aria-hidden="true">
-                  <path
-                    d="M20.4 11c0-.6-.2-1.3-.6-1.8-.4-.5-.9-1-1.4-1.2.2-.6.3-1.3.1-1.9-.1-.6-.4-1.2-.9-1.7-.5-.4-1.1-.8-1.7-.9-.6-.1-1.3-.1-1.9.1-.3-.6-.7-1.1-1.2-1.4-.5-.4-1.2-.6-1.8-.6-.6 0-1.3.2-1.8.6-.5.4-1 .9-1.2 1.4-.6-.2-1.3-.3-1.9-.1-.6.1-1.2.4-1.7.9-.4.5-.8 1.1-.9 1.7-.1.6-.1 1.3.1 1.9-.6.3-1.1.7-1.4 1.2-.4.5-.6 1.2-.6 1.8 0 .6.2 1.3.6 1.8.4.5.9 1 1.4 1.2-.2.6-.3 1.3-.1 1.9.1.6.4 1.2.9 1.7.5.4 1.1.8 1.7.9.6.1 1.3.1 1.9-.1.3.6.7 1.1 1.2 1.4.5.4 1.2.6 1.8.6.6 0 1.3-.2 1.8-.6.5-.4 1-.9 1.2-1.4.6.2 1.3.3 1.9.1.6-.1 1.2-.4 1.7-.9.4-.5.8-1.1.9-1.7.1-.6.1-1.3-.1-1.9.6-.3 1.1-.7 1.4-1.2.4-.5.6-1.2.6-1.8z"
-                  />
-                </svg></button
+                <span data-icon="badge-check" aria-hidden="true"></span></button
               ><button
                 class="follow-filter-icon tick-gold"
                 data-follow-filter="tickGold"
                 title="Tick vàng"
                 aria-label="Tick vàng"
               >
-                <svg viewBox="0 0 22 22" aria-hidden="true">
-                  <path
-                    d="M13.3 3.8 11 1.6 8.7 3.8l-3.2-.4-.6 3.2-2.9 1.5L3.5 11l-1.4 2.9L5 15.6l.6 3.2 3.2-.5L11 20.4l2.3-2.2 3.2.5.6-3.2 2.9-1.5-1.4-2.9L20 8.1l-2.9-1.5-.6-3.2z"
-                  />
-                </svg></button></span></span
+                <span data-icon="badge-check" aria-hidden="true"></span></button></span></span
           ><button data-follow-filter="notFollowsYou">Chưa theo dõi bạn</button
           ><button data-follow-filter="followsYou">Theo dõi bạn</button
           ><button data-follow-filter="isFollowing">Bạn đã theo dõi</button
@@ -568,9 +465,7 @@
               title="Xoá ngữ cảnh bổ sung"
               aria-label="Xoá ngữ cảnh bổ sung"
               hidden
-            >
-              ×
-            </button>
+            ></button>
           </div>
         </section>
         <section class="feedback-methods">
@@ -621,7 +516,7 @@
           aria-label="Đóng cài đặt"
         ></button>
       </div>
-      <details class="panel-card config-card settings-card" open>
+      <details id="updateSettingsCard" class="panel-card config-card settings-card" open>
         <summary class="config-summary">
           <span><h2>Cập nhật extension</h2></span
           ><span class="summary-actions"
@@ -646,7 +541,7 @@
           </p>
         </div>
       </details>
-      <details class="panel-card config-card settings-card" open>
+      <details id="interfaceSettingsCard" class="panel-card config-card settings-card" open>
         <summary class="config-summary">
           <span><h2>Giao diện</h2></span
           ><i class="collapse-icon" data-icon="up" aria-hidden="true"></i>
@@ -665,9 +560,9 @@
           </div>
         </div>
       </details>
-      <details class="panel-card config-card settings-card" open>
+      <details id="connectionSettingsCard" class="panel-card config-card settings-card" open>
         <summary class="config-summary">
-          <span><h2 id="providerTitle">Gemini</h2></span
+          <span><h2 id="providerTitle">Cài đặt kết nối</h2></span
           ><span class="summary-actions"
             ><span class="connection-state-wrap"
               ><button id="credentialState" class="connection-state">
@@ -681,16 +576,16 @@
         <div class="config-body panel-stack">
           <div class="provider">
             <button id="geminiProvider" class="active">
-              <span class="provider-logo" data-icon="gemini" aria-label="Gemini"></span
+              <strong class="provider-name">Gemini</strong
               ><small>Free tier</small></button
             ><button id="deepseekProvider">
-              <span class="provider-logo" data-icon="deepseek" aria-label="DeepSeek"></span
+              <strong class="provider-name">DeepSeek</strong
               ><small>API</small></button
             ><button id="chatgptProvider">
-              <span class="provider-logo" data-icon="chatgpt" aria-label="ChatGPT"></span
+              <strong class="provider-name">ChatGPT</strong
               ><small>Account</small></button
             ><button id="apiProvider">
-              <span class="provider-logo" data-icon="openai" aria-label="OpenAI"></span
+              <strong class="provider-name">OpenAI</strong
               ><small>API</small>
             </button>
           </div>
@@ -844,7 +739,7 @@
       </details>
     </aside>
     <script src="activation.js"></script>
-    <script src="ui-icons.js"></script>
+    <script src="lucide-icons.js"></script>
     <script src="theme.js"></script>
     <script src="reply-preferences.js"></script>
     <script src="remote-config.js"></script>

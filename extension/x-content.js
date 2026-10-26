@@ -1259,6 +1259,7 @@
       "replyCount",
       "fastReplyMode",
       "replyMediaSuggestions",
+      "replyEnterToSend",
     ]);
     if (!saved) {
       mounting = false;
@@ -1324,36 +1325,29 @@
       box = document.createElement("div");
     box.className = "xra-box";
     box.dataset.postId = post?.postId || "";
+    const icon = (name) => globalThis.AssistantIcons?.svg(name) || "";
     box.innerHTML =
-      '<div class="xra-tools"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v6h-6"/></svg></button><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><span class="xra-spacer"></span><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></button><button class="xra-button xra-auto-like" title="Tự like khi mở bài"><svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.9-8.6a5.5 5.5 0 0 0-.1-7.8Z"/></svg></button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4 20-7Z"/></svg></button></div><div class="xra-results"></div>';
+      `<div class="xra-tools"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại">${icon("refresh")}</button><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><span class="xra-spacer"></span><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài">${icon("sparkles")}</button><button class="xra-button xra-auto-like" title="Tự like khi mở bài">${icon("heart")}</button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý">${icon("send")}</button></div><div class="xra-results"></div>`;
+    const tools = box.querySelector(".xra-tools");
     const generate = box.querySelector(".xra-generate"),
       sync = box.querySelector(".xra-sync");
-    sync.innerHTML = globalThis.AssistantIcons?.svg("refresh") || sync.innerHTML;
+    sync.innerHTML = icon("refresh");
     let run,
       running = false,
       pending = false;
-    const pairIcon = (selector, path) => {
+    const pairIcon = (selector, name) => {
       const button = box.querySelector(selector),
         outline = button.querySelector("svg"),
-        filled = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        host = document.createElement("span");
       outline.classList.add("xra-icon-outline");
-      filled.classList.add("xra-icon-filled");
-      filled.setAttribute("viewBox", "0 0 24 24");
-      filled.innerHTML = `<path d="${path}"/>`;
-      button.append(filled);
+      host.innerHTML = icon(name);
+      const filled = host.firstElementChild;
+      filled?.classList.add("xra-icon-filled");
+      if (filled) button.append(filled);
     };
-    pairIcon(
-      ".xra-auto-suggest",
-      "M12 2.5l2.2 6.1 6.3 2.2-6.3 2.2-2.2 6.2-2.2-6.2-6.3-2.2 6.3-2.2L12 2.5Zm7 12.5.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z",
-    );
-    pairIcon(
-      ".xra-auto-like",
-      "M12 21 3.1 12.4a5.5 5.5 0 0 1 7.8-7.8L12 5.7l1-1.1a5.5 5.5 0 0 1 7.8 7.8L12 21Z",
-    );
-    pairIcon(
-      ".xra-auto-reply",
-      "M21.7 2.3a1 1 0 0 0-1-.24l-18 7a1 1 0 0 0 .08 1.89l7.35 2.45 2.45 7.35a1 1 0 0 0 1.89.08l7-18a1 1 0 0 0-.24-1.04ZM12 11.59 7.2 10 18 5.8 12 11.59Z",
-    );
+    pairIcon(".xra-auto-suggest", "sparkles");
+    pairIcon(".xra-auto-like", "heart");
+    pairIcon(".xra-auto-reply", "send");
     let replyCount = Math.min(10, Math.max(1, Number(saved.replyCount) || 2));
     const countButton = box.querySelector(".xra-count"),
       countMenu = box.querySelector(".xra-count-menu");
@@ -1402,16 +1396,14 @@
     const gear = document.createElement("button");
     gear.className = "xra-button xra-settings";
     gear.title = "Cài đặt tự động";
-    gear.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z" stroke="currentColor" stroke-width="1.5"/></svg>';
-    const tools = box.querySelector(".xra-tools");
+    gear.innerHTML = icon("setting");
     tools.append(gear);
     tools.insertBefore(box.querySelector(".xra-count-wrap"), gear);
     const autoPanel = document.createElement("div");
     autoPanel.className = "xra-auto-panel";
     autoPanel.hidden = true;
     autoPanel.innerHTML =
-      '<label><span><b>Tự động gợi ý</b><small>Tạo khi mở bài</small></span><input type="checkbox" data-key="autoSuggest"></label><label><span><b>Tự thả like</b><small>Like khi mở bài</small></span><input type="checkbox" data-key="autoLike"></label><label><span><b>Tự đăng trả lời</b><small>Đăng khi chọn gợi ý</small></span><input type="checkbox" data-key="autoReply"></label><label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
+      '<label><span><b>Tự động tạo gợi ý khi mở bài đăng</b></span><input type="checkbox" data-key="autoSuggest"></label><label><span><b>Tự thả like</b></span><input type="checkbox" data-key="autoLike"></label><label><span><b>Tự bấm trả lời sau khi chọn gợi ý</b></span><input type="checkbox" data-key="autoReply"></label><label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
     box.querySelector(".xra-results").before(autoPanel);
     for (const input of autoPanel.querySelectorAll("input")) {
       input.dataset.savedEnabled = String(!!saved[input.dataset.key]);
@@ -1439,6 +1431,90 @@
       autoPanel.hidden = !autoPanel.hidden;
       gear.classList.toggle("active", !autoPanel.hidden);
     };
+    const enterReply = document.createElement("label");
+    enterReply.className = "xra-enter-send";
+    enterReply.title = "Khi bật, nhấn Enter sẽ bấm nút Trả lời";
+    enterReply.innerHTML =
+      '<input type="checkbox" data-key="replyEnterToSend"><span>Nhấn Enter để trả lời</span>';
+    const enterInput = enterReply.querySelector("input");
+    enterInput.checked = !!saved.replyEnterToSend;
+    enterInput.onchange = () => {
+      chrome.storage.local.set({ replyEnterToSend: enterInput.checked }).catch(() => {});
+    };
+    const findSendButton = () => {
+      const buttons = [...document.querySelectorAll(replySendButtonSelector)].filter(isReplyControlVisible);
+      return buttons.find((button) => replyEditorFrom(button) === e) || buttons[0] || null;
+    };
+    const positionEnterReply = () => {
+      const sendButton = findSendButton();
+      if (!sendButton) return false;
+      const sendHost = sendButton.parentElement;
+      const actionRow = sendHost?.parentElement;
+      if (!actionRow) return false;
+      const progressHost = [...actionRow.children].find(
+        (child) =>
+          child.querySelector?.('[data-testid="dual-phase-countdown-circle"],[role="progressbar"]'),
+      );
+      const anchor = progressHost || sendHost;
+      if (enterReply.parentElement !== actionRow || enterReply.nextElementSibling !== anchor)
+        actionRow.insertBefore(enterReply, anchor);
+      return actionRow;
+    };
+    let enterReplyObserver = null;
+    const watchActionRow = (actionRow) => {
+      if (!actionRow) return;
+      const observer = new MutationObserver(() => {
+        if (!box.isConnected || !e.isConnected) {
+          observer.disconnect();
+          enterReplyObserver = null;
+          enterReply.remove();
+          return;
+        }
+        const nextRow = positionEnterReply();
+        if (nextRow && nextRow !== actionRow) {
+          observer.disconnect();
+          watchActionRow(nextRow);
+        }
+      });
+      enterReplyObserver = observer;
+      observer.observe(actionRow, { childList: true, subtree: true });
+    };
+    const initialActionRow = positionEnterReply();
+    if (initialActionRow) watchActionRow(initialActionRow);
+    else {
+      const retryObserver = new MutationObserver(() => {
+        const actionRow = positionEnterReply();
+        if (actionRow) {
+          retryObserver.disconnect();
+          watchActionRow(actionRow);
+        }
+      });
+      retryObserver.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => retryObserver.disconnect(), 5000);
+    }
+    e.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          event.key !== "Enter" ||
+          event.shiftKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.isComposing ||
+          !enterInput.checked
+        )
+          return;
+        const sendButton = findSendButton();
+        if (!sendButton || sendButton.disabled || sendButton.getAttribute("aria-disabled") === "true") return;
+        event.preventDefault();
+        event.stopPropagation();
+        setTimeout(() => {
+          const current = findSendButton();
+          if (current && !current.disabled && current.getAttribute("aria-disabled") !== "true") current.click();
+        }, 0);
+      },
+      true,
+    );
     syncAutoFlowSettingUi();
     run = async (force) => {
       // Auto-flow owns the single generation request for the current post.
@@ -1622,6 +1698,10 @@
       } else console.error("Assistant:", discreet(e.message));
     });
   };
+  // The automatic flow may open X's native reply editor after navigation.
+  // Mount immediately when that flow signals the editor is ready instead of
+  // waiting for another unrelated mutation batch.
+  window.addEventListener("assistant-auto-flow-mount", safeMount);
   const scheduleMount = () => {
     // Coalesce X's frequent feed mutations instead of restarting a full-page
     // scan for every small DOM update. A fixed window also avoids starvation

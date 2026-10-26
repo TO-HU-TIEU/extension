@@ -22,63 +22,13 @@ const discreet = (text) =>
     .replace(/bài X/gi, "bài viết")
     .replace(/trang X/gi, "trang hiện tại")
     .replace(/permalink X/gi, "liên kết chi tiết");
-const DROPDOWN_SVG =
-    '<svg class="dropdown-icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7071 14.7071C12.3166 15.0976 11.6834 15.0976 11.2929 14.7071L6.29289 9.70711C5.90237 9.31658 5.90237 8.68342 6.29289 8.29289C6.68342 7.90237 7.31658 7.90237 7.70711 8.29289L12 12.5858L16.2929 8.29289C16.6834 7.90237 17.3166 7.90237 17.7071 8.29289C18.0976 8.68342 18.0976 9.31658 17.7071 9.70711L12.7071 14.7071Z" fill="currentColor"/></svg>',
-  ICON = {
-    refresh: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v6h-6"/></svg>',
-    plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
-    copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="10" height="10" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>',
-    eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>',
-    setting:
-      '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z" stroke="currentColor" stroke-width="1.5"/></svg>',
-    close: '<svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></svg>',
-    edit: '<svg viewBox="0 0 24 24"><path d="m4 20 4-1 11-11-3-3L5 16l-1 4Z"/></svg>',
-    arrow: '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
-    trash:
-      '<svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M160 256H96a32 32 0 0 1 0-64h256V95.936a32 32 0 0 1 32-32h256a32 32 0 0 1 32 32V192h256a32 32 0 1 1 0 64h-64v672a32 32 0 0 1-32 32H192a32 32 0 0 1-32-32V256zm448-64v-64H416v64h192zM224 896h576V256H224v640zm192-128a32 32 0 0 1-32-32V416a32 32 0 0 1 64 0v320a32 32 0 0 1-32 32zm192 0a32 32 0 0 1-32-32V416a32 32 0 0 1 64 0v320a32 32 0 0 1-32 32z"/></svg>',
-  };
-Object.assign(
-  ICON,
-  Object.fromEntries(
-    [
-      "reply",
-      "post",
-      "quote",
-      "flash",
-      "assistant",
-      "plus",
-      "refresh",
-      "source",
-      "copy",
-      "remove",
-      "clear-list",
-      "follow",
-      "sort",
-      "help",
-      "more",
-      "setting",
-      "up",
-      "get",
-      "save",
-      "cancel",
-      "chatgpt",
-      "gemini",
-      "openai",
-      "deepseek",
-      "delete",
-      "trash",
-    ].map((name) => [name, globalThis.AssistantIcons?.svg(name) || ""]),
-  ),
+const DROPDOWN_SVG = globalThis.AssistantIcons?.svg("dropdown") || "";
+const ICON = new Proxy(
+  {},
+  {
+    get: (_target, name) => globalThis.AssistantIcons?.svg(name) || "",
+  },
 );
-Object.assign(ICON, {
-  close: ICON.close || ICON.remove,
-  edit: ICON.post,
-  arrow: ICON.source,
-  delete:
-    ICON.delete ||
-    '<svg viewBox="0 0 48 48" fill="none"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M14 11L4 24l10 13h30V11zm7 8l10 10m0-10L21 29"/></svg>',
-  trash: ICON.trash,
-});
 const CORE_PRESET_RULES =
   "Bám sát đúng bài đang trả lời và media đã quan sát được. Không bịa người, vật, hành động, quan hệ, cảm xúc hay trải nghiệm cá nhân. Phân biệt sự việc có thật với câu đùa, ví von, giả định, nỗi lo và kiểu nói “tưởng như”; không biến phép so sánh thành sự kiện đã xảy ra. Không bê lại hoặc diễn đạt lại gần nguyên nội dung chỉ để hùa theo; mỗi câu phải có phản ứng, nhận xét, câu hỏi hoặc góc nhìn cụ thể nhưng không suy diễn. Không cảm ơn thay người khác, không gọi sai đối tượng, không đoán giới tính hay vai vế. Nếu media là ảnh chụp profile/trang cá nhân/danh sách tài khoản, không nhận xét avatar, banner, độ ngầu/chất, ngoại hình hay chi tiết trang trí khi chúng không phải trọng tâm. Nếu bài có ảnh/video, ưu tiên chi tiết media đã xác minh; không chắc thì nói trung tính. Viết đúng ngôn ngữ gốc, tự nhiên như người thật, viết hoa đầu câu/tên riêng/thuật ngữ đúng chính tả khi cần, không ép toàn bộ câu thành chữ thường, không giọng bot, không hashtag, không sáo rỗng, không tư vấn nguy hiểm. Độ dài thay đổi tự nhiên, thường 10–25 từ, tối đa 180 ký tự. Emoji hoặc emoticon tối đa một và chỉ dùng khi thật sự hợp; mặc định không dùng, không trang trí câu bằng biểu tượng. Không lặp cùng một kiểu ký hiệu trong nhiều gợi ý của cùng bài.";
 const DEFAULT_STYLES = [
@@ -148,8 +98,10 @@ async function loadDefaultStyles() {
   }));
 }
 function status(text, error = false) {
-  $("status").textContent = discreet(text);
-  $("status").classList.toggle("error", error);
+  const node = $("status");
+  if (!node) return;
+  node.textContent = discreet(text);
+  node.classList.toggle("error", error);
 }
 async function safely(fn) {
   try {
@@ -407,25 +359,13 @@ async function resolvePanelTarget() {
   return panelTargetTabId;
 }
 async function syncPanelAutoModeControls(running = selectedAutoFlowRunning) {
-  const stored = await chrome.storage.local.get(["panelAutoSuggest", "autoReply"]),
-    controls = [
-      [$("panelAutoSuggest"), !!stored.panelAutoSuggest],
-      [$("panelAutoReply"), !!stored.autoReply],
-    ];
-  for (const [input, savedValue] of controls) {
-    if (!input) continue;
-    // Auto flow temporarily clears these options, but they remain editable.
-    // The panel restores the saved values when the run ends.
-    input.disabled = false;
-    input.checked = running ? false : savedValue;
-    input.title = running ? "Tạm tắt trong tab đang chạy tự động" : "";
-  }
-  const actions = document.querySelector(".post-card .actions");
-  if (actions) actions.hidden = running || !!stored.panelAutoSuggest;
+  // The old manual reply shell no longer exists. Keep this compatibility hook
+  // for messages from older tabs without touching the current module UI.
+  return running;
 }
 function ensurePanelTargetUi() {
   if (document.getElementById("panelTargetBar")) return;
-  const header = document.querySelector("body > header");
+  const header = document.querySelector("body > .panel-chrome > header, body > header");
   if (!header) return;
   const bar = document.createElement("div");
   bar.id = "panelTargetBar";
@@ -529,19 +469,19 @@ function showModule(module) {
   const content = module === "content",
     follow = module === "follow",
     feedback = module === "feedback";
-  replySettings.hidden = content || follow || feedback;
+  $("replySettings").hidden = content || follow || feedback;
   $("toneSettings")?.toggleAttribute("hidden", content || follow || feedback);
-  replyModule.classList.toggle("active", !content && !follow && !feedback);
-  contentModule.classList.toggle("active", content);
-  followModule.classList.toggle("active", follow);
+  $("styleLengthSettings")?.toggleAttribute("hidden", content || follow || feedback);
+  $("replyModule").classList.toggle("active", !content && !follow && !feedback);
+  $("contentModule").classList.toggle("active", content);
+  $("followModule").classList.toggle("active", follow);
   $("feedbackModule")?.classList.toggle("active", feedback);
-  contentWorkspace.hidden = !content;
-  quoteWorkspace.hidden = true;
-  followWorkspace.hidden = !follow;
+  $("contentWorkspace").hidden = !content;
+  $("quoteWorkspace").hidden = true;
+  $("followWorkspace").hidden = !follow;
   $("feedbackWorkspace")?.toggleAttribute("hidden", !feedback);
-  document.querySelector(".mode-tabs").hidden = true;
   if (content || follow || feedback) {
-    $("workspace").hidden = true;
+    $("workspace")?.toggleAttribute("hidden", true);
     $("xWorkspace").hidden = true;
   } else showMode("x");
   if (feedback) renderFeedbackState();
@@ -604,7 +544,8 @@ function feedbackSpeedValue() {
 }
 function feedbackDelayMs() {
   const speed = feedbackSpeedValue();
-  const base = 1035;
+  // Slow the neutral feedback cadence by 20% to leave more room between replies.
+  const base = 1242;
   const speedFactor = 1 - speed * 0.1;
   const jitter = 0.88 + Math.random() * 0.24;
   return Math.max(650, Math.round(base * speedFactor * jitter));
@@ -1150,12 +1091,12 @@ function feedbackWire() {
     const wrap = document.createElement("div");
     wrap.className = "feedback-setting-section feedback-extra-section";
     wrap.innerHTML =
-      '<h3>Ngữ cảnh bổ sung</h3><div class="feedback-extra-input panel-row"><textarea id="feedbackExtraContext" rows="2" maxlength="500" placeholder="Ví dụ: phản hồi ngắn khoảng 5–8 từ…"></textarea><button id="feedbackExtraClear" class="clear-url" type="button" title="Xoá ngữ cảnh bổ sung" aria-label="Xoá ngữ cảnh bổ sung" hidden>×</button></div>';
+      '<h3>Ngữ cảnh bổ sung</h3><div class="feedback-extra-input panel-row"><textarea id="feedbackExtraContext" rows="2" maxlength="500" placeholder="Ví dụ: phản hồi ngắn khoảng 5–8 từ…"></textarea><button id="feedbackExtraClear" class="clear-url" type="button" title="Xoá ngữ cảnh bổ sung" aria-label="Xoá ngữ cảnh bổ sung" hidden></button></div>';
     status.insertAdjacentElement("afterend", wrap);
   }
   const extra = $("feedbackExtraContext"),
     extraClear = $("feedbackExtraClear");
-  if (extraClear) extraClear.innerHTML = ICON.cancel || "×";
+  if (extraClear) extraClear.innerHTML = ICON.cancel || "";
   const syncExtra = () => {
     feedbackExtraContext = String(extra?.value || "")
       .trim()
@@ -1580,9 +1521,7 @@ let usageMode = "x";
 async function showMode(_mode = "x") {
   usageMode = "x";
   document.body.dataset.module = "reply";
-  document.querySelector(".mode-tabs").hidden = true;
-  $("xMode").classList.add("active");
-  $("workspace").hidden = true;
+  $("workspace")?.toggleAttribute("hidden", true);
   $("xWorkspace").hidden = false;
 }
 function showSettings(value) {
@@ -1598,13 +1537,13 @@ function showSettings(value) {
   if (open) {
     $("replySettings").hidden = true;
     $("toneSettings")?.setAttribute("hidden", "");
-    $("workspace").hidden = true;
+    $("styleLengthSettings")?.setAttribute("hidden", "");
+    $("workspace")?.toggleAttribute("hidden", true);
     $("xWorkspace").hidden = true;
     $("contentWorkspace").hidden = true;
     $("quoteWorkspace").hidden = true;
     $("followWorkspace").hidden = true;
     $("feedbackWorkspace").hidden = true;
-    document.querySelector(".mode-tabs").hidden = true;
   } else showModule(currentModule);
 }
 function connectionState(ok) {
@@ -1621,14 +1560,6 @@ function setProvider(value, persist = true) {
     $(`${n}Provider`).classList.toggle("active", value === n);
     $(`${n}Pane`).hidden = value !== n;
   }
-  $("providerTitle").textContent =
-    value === "gemini"
-      ? "Google Gemini API"
-      : value === "deepseek"
-        ? "DeepSeek API"
-        : value === "chatgpt"
-          ? "Tài khoản ChatGPT"
-          : "OpenAI API";
   connectionState(
     value === "gemini"
       ? !!$("geminiKey").value
@@ -1673,12 +1604,10 @@ function renderStyles(selected) {
     })
     .catch(() => {});
   const value = selected && styles.some((s) => s.id === selected) ? selected : styles[0].id;
-  for (const id of ["style", "panelQuickStyle"])
-    $(id).replaceChildren(
-      ...styles.map((s) => new Option(s.id === "natural" ? "Mặc định" : s.name, s.id)),
-    );
+  $("style").replaceChildren(
+    ...styles.map((s) => new Option(s.id === "natural" ? "Mặc định" : s.name, s.id)),
+  );
   $("style").value = value;
-  $("panelQuickStyle").value = value;
   selectStyle();
   updateStylePreview();
   renderStyleButtons();
@@ -1721,14 +1650,14 @@ function styleName(style) {
 function renderStyleButtons() {
   const selected = styles.find((x) => x.id === $("style")?.value) || styles[0],
     label = styleName(selected);
-  for (const id of ["panelStyleButton", "styleButton"])
+  for (const id of ["styleButton"])
     if ($(id))
       $(id).innerHTML =
-        `<span>${label}</span><b class="dropdown-icon" aria-hidden="true"><svg class="dropdown-icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7071 14.7071C12.3166 15.0976 11.6834 15.0976 11.2929 14.7071L6.29289 9.70711C5.90237 9.31658 5.90237 8.68342 6.29289 8.29289C6.68342 7.90237 7.31658 7.90237 7.70711 8.29289L12 12.5858L16.2929 8.29289C16.6834 7.90237 17.3166 7.90237 17.7071 8.29289C18.0976 8.68342 18.0976 9.31658 17.7071 9.70711L12.7071 14.7071Z" fill="currentColor"/></svg></b>`;
+        `<span>${label}</span><b class="dropdown-icon" aria-hidden="true">${DROPDOWN_SVG.replace('class="ui-icon', 'class="dropdown-icon-svg ui-icon')}</b>`;
 }
 function applyStyle(id, persist = true) {
   const chosen = styles.find((x) => x.id === id) || styles[0];
-  for (const other of ["style", "panelQuickStyle"]) $(other).value = chosen.id;
+  $("style").value = chosen.id;
   selectStyle();
   if (persist)
     chrome.storage.local.set({
@@ -1738,7 +1667,7 @@ function applyStyle(id, persist = true) {
   closeStyleModal();
 }
 function renderStyleModal() {
-  const current = $("style")?.value || $("panelQuickStyle")?.value,
+  const current = $("style")?.value,
     wrap = $("styleOptions");
   if (!wrap) return;
   wrap.replaceChildren(
@@ -1754,7 +1683,7 @@ function renderStyleModal() {
       item.classList.toggle("active", style.id === current);
       title.textContent = styleName(style);
       preview.textContent = items[0];
-      check.textContent = style.id === current ? "✓" : "";
+      check.innerHTML = style.id === current ? globalThis.AssistantIcons?.svg("check") || "" : "";
       text.append(title, preview);
       item.append(text, check);
       item.onclick = () => applyStyle(style.id);
@@ -1874,7 +1803,6 @@ function setupModelPickers() {
 hydratePanelIcons();
 setupModelPickers();
 for (const [id, name] of [
-  ["clearUrl", "remove"],
   ["clearNewsUrl", "remove"],
   ["clearQuotePost", "cancel"],
   ["cancelGeminiQueueKey", "cancel"],
@@ -1882,9 +1810,7 @@ for (const [id, name] of [
   ["cancelStyle", "cancel"],
   ["clearStyleName", "cancel"],
   ["extensionReleaseLink", "source"],
-  ["read", "refresh"],
   ["readNews", "refresh"],
-  ["regenerate", "refresh"],
   ["newStyle", "plus"],
   ["addGeminiQueueKey", "plus"],
   ["addChatGPT", "plus"],
@@ -1904,7 +1830,6 @@ for (const [id, name] of [
   ["copyQuoteDraft", "copy"],
 ])
   if ($(id)) $(id).innerHTML = ICON[name];
-if ($("regenerate")) $("regenerate").innerHTML = globalThis.AssistantIcons?.svg("refresh") || "";
 if ($("reloadQuoteDraft"))
   $("reloadQuoteDraft").innerHTML = globalThis.AssistantIcons?.svg("reload") || "";
 $("copyDraft").innerHTML = globalThis.AssistantIcons?.svg("copy") || ICON.copy;
@@ -1915,37 +1840,13 @@ $("geminiKeyQueue")?.addEventListener("click", (event) => event.stopPropagation(
 document.addEventListener("click", closeKeyMenus);
 $("settingsToggle").onclick = () => showSettings($("settingsArea").hidden);
 if ($("closeSettings")) $("closeSettings").onclick = () => showSettings(false);
-$("panelStyleButton").onclick = openStyleModal;
 $("styleButton").onclick = openStyleModal;
 $("closeStyleModal").onclick = closeStyleModal;
 document.querySelectorAll("[data-close-style]").forEach((node) => (node.onclick = closeStyleModal));
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !$("styleModal").hidden) closeStyleModal();
 });
-$("read").onclick = () => safely(readPost);
-$("clearUrl").onclick = () => {
-  $("postUrl").value = "";
-  $("postUrl").focus();
-};
-let linkTimer;
-$("postUrl").oninput = () => {
-  clearTimeout(linkTimer);
-  const value = $("postUrl").value.trim();
-  if (/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^/]+\/status\/\d+/.test(value))
-    linkTimer = setTimeout(() => safely(loadUrl), 350);
-};
-$("generate").onclick = () => safely(() => generate(false));
-$("regenerate").onclick = () => safely(() => generate(true));
-$("autoDetect").onchange = () => chrome.storage.local.set({ autoDetect: $("autoDetect").checked });
-$("panelAutoSuggest").onchange = () => {
-  const auto = $("panelAutoSuggest").checked;
-  chrome.storage.local.set({ panelAutoSuggest: auto });
-  document.querySelector(".post-card .actions").hidden = auto;
-};
-$("panelAutoReply").onchange = () =>
-  chrome.storage.local.set({ autoReply: $("panelAutoReply").checked });
 $("hideAds").onchange = () => chrome.storage.local.set({ hideAds: $("hideAds").checked });
-$("xMode").onclick = () => showMode("x");
 async function setDirectReplyEnabled(enabled) {
   $("directReplyToggle").checked = !!enabled;
   await chrome.storage.local.set({ usageMode: enabled ? "x" : "panel" });
@@ -2246,20 +2147,9 @@ $("disconnectApi").onclick = () =>
   });
 $("style").onchange = () => {
   const chosen = styles.find((x) => x.id === $("style").value) || styles[0];
-  $("panelQuickStyle").value = chosen.id;
   selectStyle();
   chrome.storage.local.set({ styleId: chosen.id, stylePrompt: chosen.prompt });
 };
-const quickStyle = (id) => {
-  const chosen = styles.find((x) => x.id === $(id).value) || styles[0];
-  for (const other of ["style", "panelQuickStyle"]) $(other).value = chosen.id;
-  selectStyle();
-  chrome.storage.local.set({ styleId: chosen.id, stylePrompt: chosen.prompt });
-};
-$("panelQuickStyle").onchange = () => quickStyle("panelQuickStyle");
-$("panelReplyCount").onchange = () =>
-  chrome.storage.local.set({ replyCount: Number($("panelReplyCount").value) });
-$("quickContext").oninput = updateStylePreview;
 $("stylePrompt").oninput = updateStylePreview;
 $("styleMinWords").onchange = syncStyleWordRange;
 $("styleMaxWords").onchange = syncStyleWordRange;
@@ -2555,7 +2445,7 @@ function renderAutoExcludedAuthors(handles = []) {
     name.textContent = `@${handle}`;
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = "×";
+    remove.innerHTML = ICON.cancel;
     remove.title = `Bỏ @${handle} khỏi danh sách`;
     remove.setAttribute("aria-label", remove.title);
     remove.addEventListener("click", () =>
@@ -2608,12 +2498,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
     renderAutoExcludedAuthors(changes.autoReplyExcludedAuthors.newValue || []);
   if (area === "local" && changes.autoExcludedAuthorsCollapsed)
     setAutoExcludedAuthorsCollapsed(changes.autoExcludedAuthorsCollapsed.newValue, false);
-  if (
-    area === "local" &&
-    (changes.panelAutoSuggest || changes.autoReply) &&
-    !selectedAutoFlowRunning
-  )
-    syncPanelAutoModeControls();
 });
 safely(async () => {
   const s = await chrome.storage.local.get([
@@ -2626,16 +2510,12 @@ safely(async () => {
     "geminiModel",
     "deepseekKey",
     "deepseekModel",
-    "autoDetect",
-    "panelAutoSuggest",
-    "autoReply",
     "usageMode",
     "styleId",
     "styleMinWords",
     "styleMaxWords",
     "replyTone",
     "customStyles",
-    "replyCount",
     "configSaved",
     "hideAds",
     "autoReplyExcludedAuthors",
@@ -2661,13 +2541,7 @@ safely(async () => {
   renderGeminiKeys(normalizedKeys);
   $("deepseekKey").value = s.deepseekKey || "";
   $("deepseekModel").value = s.deepseekModel || "deepseek-flash";
-  $("autoDetect").checked = !!s.autoDetect;
-  $("panelAutoSuggest").checked = !!s.panelAutoSuggest;
-  $("panelAutoReply").checked = !!s.autoReply;
   $("hideAds").checked = !!s.hideAds;
-  document.querySelector(".post-card .actions").hidden = !!s.panelAutoSuggest;
-  for (let i = 1; i <= 10; i++) $("panelReplyCount").append(new Option(i, i));
-  $("panelReplyCount").value = String(s.replyCount || 2);
   $("styleMinWords").value = String(Math.min(100, Math.max(1, Number(s.styleMinWords) || 6)));
   $("styleMaxWords").value = String(
     Math.min(
