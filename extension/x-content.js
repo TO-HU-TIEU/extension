@@ -1445,6 +1445,7 @@
       const buttons = [...document.querySelectorAll(replySendButtonSelector)].filter(isReplyControlVisible);
       return buttons.find((button) => replyEditorFrom(button) === e) || buttons[0] || null;
     };
+    let remountBox = null;
     const positionEnterReply = () => {
       const sendButton = findSendButton();
       if (!sendButton) return false;
@@ -1471,6 +1472,7 @@
           return;
         }
         const nextRow = positionEnterReply();
+        remountBox?.();
         if (nextRow && nextRow !== actionRow) {
           observer.disconnect();
           watchActionRow(nextRow);
@@ -1485,6 +1487,7 @@
       const retryObserver = new MutationObserver(() => {
         const actionRow = positionEnterReply();
         if (actionRow) {
+          remountBox?.();
           retryObserver.disconnect();
           watchActionRow(actionRow);
         }
@@ -1688,7 +1691,24 @@
       host.insertAdjacentElement("afterend", box);
       return false;
     };
-    mountBox();
+    remountBox = mountBox;
+    const mounted = mountBox();
+    if (!mounted) {
+      const retryMount = (attempt = 0) => {
+        if (!box.isConnected || !e.isConnected || mountBox() || attempt >= 20) return;
+        setTimeout(() => retryMount(attempt + 1), 250);
+      };
+      retryMount();
+      const mountObserver = new MutationObserver(() => {
+        if (!box.isConnected || !e.isConnected) {
+          mountObserver.disconnect();
+          return;
+        }
+        if (mountBox()) mountObserver.disconnect();
+      });
+      mountObserver.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => mountObserver.disconnect(), 5000);
+    }
     render(box);
     applyAiIconMask(box);
     if (saved.autoLike) likePost();
