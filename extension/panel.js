@@ -2500,6 +2500,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     setAutoExcludedAuthorsCollapsed(changes.autoExcludedAuthorsCollapsed.newValue, false);
 });
 safely(async () => {
+  await globalThis.AssistantSettingsBackup?.ready;
   const s = await chrome.storage.local.get([
     "provider",
     "apiKey",

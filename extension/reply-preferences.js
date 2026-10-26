@@ -1,4 +1,139 @@
 (() => {
+  // Keep user configuration available across an extension reinstall. Chrome
+  // clears storage.local when an extension is removed, while sync storage is
+  // retained for the same signed-in browser profile. Each setting gets its
+  // own sync item so larger key/style lists do not exceed the per-item quota.
+  const persistentLocalKeys = [
+      "provider",
+      "apiKey",
+      "apiModel",
+      "chatgptModel",
+      "geminiKey",
+      "geminiKeyLabel",
+      "geminiKeys",
+      "geminiModel",
+      "deepseekKey",
+      "deepseekModel",
+      "usageMode",
+      "styleId",
+      "stylePrompt",
+      "styleMinWords",
+      "styleMaxWords",
+      "replyTone",
+      "customStyles",
+      "replyStyleCatalog",
+      "configSaved",
+      "hideAds",
+      "autoLike",
+      "autoSuggest",
+      "autoReply",
+      "replyEnterToSend",
+      "replyCount",
+      "fastReplyMode",
+      "autoReplyExcludedAuthors",
+      "autoExcludedAuthorsCollapsed",
+      "feedbackStateV1",
+      "feedbackExtraContext",
+      "personalReplyStyles",
+      "contentConfig",
+    ],
+    persistentPageKeys = [
+      "assistantAutoMinGapValue",
+      "assistantAutoMinGapUnit",
+      "assistantAutoDailyReplyLimit",
+      "assistantAutoSpeed",
+      "assistantAutoRestEnabled",
+      "assistantAutoRestEveryMinutes",
+    ],
+    persistentSyncPrefix = "assistantPersistV1:",
+    persistentChrome = globalThis.chrome,
+    persistentStorage = persistentChrome?.storage,
+    persistentSync = persistentStorage?.sync,
+    persistentLocal = persistentStorage?.local;
+  let persistentWriteQueue = Promise.resolve();
+  const persistentOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+  const persistentSyncKey = (key) => `${persistentSyncPrefix}${key}`;
+  const persistentPageAvailable = () => typeof globalThis.localStorage !== "undefined";
+  const persistentCanSync = (value) => {
+    try {
+      // Leave headroom for Chrome's UTF-8 quota and avoid rejecting the whole
+      // update if a user-created style/catalog is unusually large.
+      return JSON.stringify(value).length <= 7_500;
+    } catch {
+      return false;
+    }
+  };
+  const persistentWrite = (patch = {}) => {
+    if (!persistentSync?.set || !Object.keys(patch).length) return Promise.resolve();
+    persistentWriteQueue = persistentWriteQueue
+      .catch(() => {})
+      .then(async () => {
+        const current = (await persistentSync.get(Object.keys(patch)).catch(() => ({}))) || {};
+        const next = {};
+        for (const [key, value] of Object.entries(patch)) {
+          if (value === null || value === undefined) next[key] = null;
+          else if (persistentCanSync(value)) next[key] = value;
+        }
+        if (Object.keys(next).length) await persistentSync.set({ ...current, ...next });
+      })
+      .catch(() => {});
+    return persistentWriteQueue;
+  };
+  const persistentMirrorLocal = (changes, area) => {
+    if (area !== "local") return;
+    const patch = {};
+    for (const key of persistentLocalKeys) {
+      if (!persistentOwn(changes, key)) continue;
+      patch[persistentSyncKey(key)] = changes[key]?.newValue ?? null;
+    }
+    persistentWrite(patch);
+  };
+  const persistentSetPage = (key, value) => {
+    if (!persistentPageKeys.includes(key)) return;
+    persistentWrite({ [persistentSyncKey(key)]: String(value ?? "") });
+  };
+  const persistentRestore = async () => {
+    if (!persistentSync?.get) return;
+    const syncKeys = [...persistentLocalKeys, ...persistentPageKeys].map(persistentSyncKey);
+    const synced = (await persistentSync.get(syncKeys).catch(() => ({}))) || {};
+    const local = persistentLocal
+      ? (await persistentLocal.get(persistentLocalKeys).catch(() => ({}))) || {}
+      : {};
+    const localPatch = {},
+      initialSyncPatch = {};
+    for (const key of persistentLocalKeys) {
+      const syncKey = persistentSyncKey(key),
+        value = synced[syncKey];
+      if (persistentOwn(local, key)) {
+        if (!persistentOwn(synced, syncKey)) initialSyncPatch[syncKey] = local[key] ?? null;
+      } else if (value !== null && value !== undefined) localPatch[key] = value;
+    }
+    if (persistentLocal && Object.keys(localPatch).length)
+      await persistentLocal.set(localPatch).catch(() => {});
+    if (persistentPageAvailable()) {
+      for (const key of persistentPageKeys) {
+        const syncKey = persistentSyncKey(key),
+          value = synced[syncKey];
+        const current = globalThis.localStorage.getItem(key);
+        if (current !== null) {
+          if (!persistentOwn(synced, syncKey)) initialSyncPatch[syncKey] = current;
+          continue;
+        }
+        if (value === null || value === undefined) continue;
+        try {
+          globalThis.localStorage.setItem(key, String(value));
+        } catch {}
+      }
+    }
+    await persistentWrite(initialSyncPatch);
+  };
+  const persistentReady = persistentRestore().catch(() => {});
+  persistentStorage?.onChanged?.addListener(persistentMirrorLocal);
+  globalThis.AssistantSettingsBackup = {
+    ready: persistentReady,
+    setPage: persistentSetPage,
+    keys: { local: [...persistentLocalKeys], page: [...persistentPageKeys] },
+  };
   const defaults = [
     ["natural", "Mặc định", "Tự nhiên, gọn, có duyên, tiếng lóng nhẹ khi phù hợp."],
     ["serious", "Trang trọng", "Điềm tĩnh, lịch sự, rõ ý, không đùa với nội dung nghiêm túc."],
@@ -168,7 +303,9 @@
         s.stylePrompt ||
         defaults[0].prompt;
     const learnedHint = corpusHint(post, s.replyStyleCorpus),
-      extraContext = String(post.feedbackExtraContext || "").trim().slice(0, 500),
+      extraContext = String(post.feedbackExtraContext || "")
+        .trim()
+        .slice(0, 500),
       feedbackHint = extraContext
         ? `\nNgữ cảnh bổ sung từ người dùng cho phản hồi (chỉ áp dụng khi phù hợp): ${extraContext}`
         : "";

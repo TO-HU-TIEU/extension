@@ -19,6 +19,13 @@
       return Promise.resolve(fallback);
     }
   };
+  const persistentSettingsReady = globalThis.AssistantSettingsBackup?.ready || Promise.resolve();
+  const persistPageSetting = (key, value) => {
+    try {
+      localStorage.setItem(key, String(value ?? ""));
+    } catch {}
+    globalThis.AssistantSettingsBackup?.setPage?.(key, value);
+  };
   const markXUsageMode = () => {
     try {
       return Promise.resolve(chrome.storage.local.set({ usageMode: "x" })).catch(() => {});
@@ -364,7 +371,7 @@
       const value = Math.max(1, Math.min(5000, Number(input.value) || 500));
       input.value = String(value);
       memory.autoDailyReplyLimit = value;
-      localStorage.setItem("assistantAutoDailyReplyLimit", String(value));
+      persistPageSetting("assistantAutoDailyReplyLimit", value);
     };
     input.value = String(readDailyReplyLimit());
     input.addEventListener("change", sync);
@@ -402,8 +409,8 @@
       const value = Math.max(0, Math.min(86_400, Number(input.value) || 0));
       input.value = String(value);
       const unit = select.value === "minutes" ? "minutes" : "seconds";
-      localStorage.setItem("assistantAutoMinGapValue", String(value));
-      localStorage.setItem("assistantAutoMinGapUnit", unit);
+      persistPageSetting("assistantAutoMinGapValue", value);
+      persistPageSetting("assistantAutoMinGapUnit", unit);
       memory.autoMinGapMs = value * (unit === "minutes" ? 60_000 : 1_000);
     };
     const saved = readMinimumGapSetting();
@@ -818,8 +825,8 @@
         interval.value = String(everyMinutes);
         memory.autoRestEnabled = enabled.checked;
         memory.autoRestEveryMinutes = everyMinutes;
-        localStorage.setItem("assistantAutoRestEnabled", String(enabled.checked));
-        localStorage.setItem("assistantAutoRestEveryMinutes", String(everyMinutes));
+      persistPageSetting("assistantAutoRestEnabled", enabled.checked);
+      persistPageSetting("assistantAutoRestEveryMinutes", everyMinutes);
         if (!enabled.checked && memory.isAutoResting) {
           memory.isAutoResting = false;
           memory.autoRestUntil = 0;
@@ -1011,7 +1018,7 @@
     const speedInput = box.querySelector("[data-auto-speed]");
     speedInput.oninput = (event) => {
       memory.speed = Number(event.target.value);
-      localStorage.setItem("assistantAutoSpeed", String(memory.speed));
+      persistPageSetting("assistantAutoSpeed", memory.speed);
       box.querySelector("[data-auto-speed-value]").value = memory.speed;
       box.querySelector("[data-auto-speed-value]").textContent = memory.speed;
     };
@@ -1570,7 +1577,8 @@
       if (m?.type !== "autoReplyFlow") return;
       stop("Đã reset phiên");
       if (m.enabled) {
-        const restoredPaused = m.restore === true && m.paused === true;
+        persistentSettingsReady.then(() => {
+          const restoredPaused = m.restore === true && m.paused === true;
         sessionStart = Date.now();
         memory.autoRestEnabled = localStorage.getItem("assistantAutoRestEnabled") === "true";
         memory.autoRestEveryMinutes = Math.max(
@@ -1608,7 +1616,7 @@
         );
         dashboardView();
         dashboard();
-        (async () => {
+          (async () => {
           // A restored paused session must not navigate or process anything
           // until the user explicitly presses Continue.
           if (restoredPaused && !(await waitIfPaused())) return;
@@ -1632,7 +1640,11 @@
             log("Lỗi:", e);
             stop("Đã dừng do lỗi");
           });
-        })();
+          })();
+        }).catch((error) => {
+          log("Lỗi khôi phục cài đặt tự động:", error);
+          stop("Đã dừng do lỗi khôi phục cài đặt");
+        });
       }
       send({ ok: true });
       return false;
