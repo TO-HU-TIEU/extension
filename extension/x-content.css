@@ -608,6 +608,10 @@
 .xra-box {
   border-radius: 16px;
   padding: 10px 12px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
 }
 .xra-tools {
   gap: 8px;

@@ -1656,7 +1656,39 @@
     });
     generate.onclick = () => run(false);
     sync.onclick = () => run(true);
-    host.insertAdjacentElement("afterend", box);
+    // X switches the composer to a two-column flex layout at narrow widths:
+    // the editor is one branch and the native action row (including Reply) is
+    // the other. Mounting inside the editor branch makes the assistant box
+    // collapse to half the composer width and leaves the checkbox/send button
+    // stranded beside it. Put the box in the nearest container shared by the
+    // editor and the native send button so it always spans the full composer.
+    const commonAncestor = (first, second) => {
+      if (!first || !second) return null;
+      const ancestors = new Set();
+      for (let node = first; node; node = node.parentElement) ancestors.add(node);
+      for (let node = second; node; node = node.parentElement)
+        if (ancestors.has(node)) return node;
+      return null;
+    };
+    const mountBox = () => {
+      const sendButtons = [...document.querySelectorAll(replySendButtonSelector)].filter(
+        isReplyControlVisible,
+      );
+      const sendButton =
+        sendButtons.find((button) => replyEditorFrom(button) === e) || sendButtons[0] || null;
+      const composer = commonAncestor(e, sendButton);
+      if (composer && composer !== e) {
+        const sendBranch = [...composer.children].find((child) => child.contains(sendButton));
+        const editorBranch = [...composer.children].find((child) => child.contains(e));
+        if (sendBranch && editorBranch && sendBranch !== editorBranch) {
+          composer.insertBefore(box, sendBranch);
+          return true;
+        }
+      }
+      host.insertAdjacentElement("afterend", box);
+      return false;
+    };
+    mountBox();
     render(box);
     applyAiIconMask(box);
     if (saved.autoLike) likePost();
