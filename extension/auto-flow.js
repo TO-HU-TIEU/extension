@@ -863,7 +863,20 @@
       setupCard.style.cssText =
         "padding:10px;border:1px solid var(--xra-border);border-radius:10px;background:transparent;margin-bottom:10px";
       setupTitle.parentNode.insertBefore(setupCard, setupTitle);
+      setupTitle.style.cssText +=
+        ";display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px";
+      const setupToggle = document.createElement("button");
+      setupToggle.type = "button";
+      setupToggle.dataset.autoSetupToggle = "";
+      setupToggle.setAttribute("aria-label", "Thu gọn thiết lập");
+      setupToggle.title = "Thu gọn thiết lập";
+      setupToggle.style.cssText =
+        "display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:0 0 28px;padding:0;border:1px solid var(--xra-border,#303842);border-radius:50%;background:transparent;color:inherit;cursor:pointer;line-height:0";
+      setupTitle.append(setupToggle);
+      const setupBody = document.createElement("div");
+      setupBody.dataset.autoSetupBody = "";
       setupCard.append(setupTitle);
+      setupCard.append(setupBody);
       // Keep every setup control (including the daily limit and Vietnamese
       // filter) in the same card. Stop before the session information row.
       while (setupCard.nextElementSibling) {
@@ -872,8 +885,35 @@
           (node) => node.textContent.trim() === "Thông tin phiên",
         );
         if (isSessionRow) break;
-        setupCard.append(next);
+        setupBody.append(next);
       }
+      const setupCollapsedKey = "assistantAutoSetupCollapsed";
+      const setSetupCollapsed = (collapsed) => {
+        setupBody.hidden = collapsed;
+        setupCard.dataset.collapsed = String(collapsed);
+        setupToggle.setAttribute("aria-expanded", String(!collapsed));
+        setupToggle.setAttribute("aria-label", collapsed ? "Mở thiết lập" : "Thu gọn thiết lập");
+        setupToggle.title = collapsed ? "Mở thiết lập" : "Thu gọn thiết lập";
+        setupToggle.innerHTML = iconMarkup(collapsed ? "down" : "up");
+        const icon = setupToggle.querySelector("svg");
+        if (icon) {
+          icon.style.width = "16px";
+          icon.style.height = "16px";
+        }
+        try {
+          localStorage.setItem(setupCollapsedKey, String(collapsed));
+        } catch {}
+      };
+      setupToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setSetupCollapsed(!setupBody.hidden);
+      });
+      let setupCollapsed = false;
+      try {
+        setupCollapsed = localStorage.getItem(setupCollapsedKey) === "true";
+      } catch {}
+      setSetupCollapsed(setupCollapsed);
     }
     const sessionRow = [...box.querySelectorAll("h3")].find(
       (node) => node.textContent.trim() === "Thông tin phiên",
