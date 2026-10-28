@@ -1486,6 +1486,8 @@
       composerActionRow?.style.removeProperty("flex");
       composerActionRow?.style.removeProperty("width");
       composerActionRow?.style.removeProperty("max-width");
+      composerActionRow?.style.removeProperty("position");
+      composerActionRow?.style.removeProperty("inset");
     };
     const restoreComposerStack = () => {
       clearComposerStackStyles();
@@ -1528,6 +1530,12 @@
       actionBranch.style.setProperty("flex", "0 0 100%", "important");
       actionBranch.style.setProperty("width", "100%", "important");
       actionBranch.style.setProperty("max-width", "100%", "important");
+      // X marks this branch sticky so it can stay at the bottom of a normal
+      // composer. Once the assistant card is inserted, that makes the native
+      // toolbar jump above the card. Keep the branch in normal flow while
+      // preserving all native controls inside it.
+      actionBranch.style.setProperty("position", "static", "important");
+      actionBranch.style.setProperty("inset", "auto", "important");
       return parent;
     };
     const restoreComposerActionRow = () => {
@@ -1551,9 +1559,9 @@
       if (normalizedActionRow && normalizedActionRow !== stickyRow) restoreComposerActionRow();
       normalizedActionRow = stickyRow;
       if (!stickyRow) return null;
-      // Keep X's native toolbar sticky and untouched. The assistant card is
-      // laid out in the wrapping composer stack above; changing this wrapper
-      // to `position: static` removes or obscures GIF/image/emoji controls.
+      // The direct action branch is normalized above. Do not modify an outer
+      // sticky ancestor, which could hide controls belonging to another X
+      // composer.
       return stickyRow;
     };
     let enterReplyObserver = null,
