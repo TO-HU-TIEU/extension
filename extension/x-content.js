@@ -1,5 +1,17 @@
 (() => {
+  // Remove only our previous mount and any legacy layout markers. Never leave
+  // inline flex/position overrides on X's native composer after a reload.
   document.querySelectorAll(".xra-box").forEach((e) => e.remove());
+  document.querySelectorAll(".xra-composer-stack").forEach((e) => {
+    e.classList.remove("xra-composer-stack");
+    for (const prop of ["flex-wrap", "align-items", "justify-content", "min-height"])
+      e.style.removeProperty(prop);
+  });
+  document.querySelectorAll(".xra-composer-action-row").forEach((e) => {
+    e.classList.remove("xra-composer-action-row");
+    for (const prop of ["flex", "width", "max-width", "position", "inset"])
+      e.style.removeProperty(prop);
+  });
   let state = {
       postId: null,
       replies: [],
@@ -1298,7 +1310,11 @@
       // X can replace the native toolbar immediately after a successful
       // reply while keeping the assistant card mounted. Re-bind the checkbox
       // and normalize the new action row instead of waiting for a full remount.
-      existing.__xraRefreshComposer?.();
+      // X replaces the editor subtree after a submit. Re-bind the existing
+      // Assistant card to the new editor before positioning the checkbox;
+      // otherwise the old closure falls back to the first send button on the
+      // page and can place the controls in a different composer.
+      existing.__xraRefreshComposer?.(editor());
       mounting = false;
       return;
     }
@@ -1330,9 +1346,10 @@
         liked: false,
       };
     activate();
-    const host =
-        e.closest('[data-testid="tweetTextarea_0_label"]')?.parentElement?.parentElement ||
-        e.parentElement,
+    const composerHost = () =>
+        e?.closest('[data-testid="tweetTextarea_0_label"]')?.parentElement?.parentElement ||
+        e?.parentElement ||
+        null,
       box = document.createElement("div");
     box.className = "xra-box";
     box.dataset.postId = post?.postId || "";
@@ -1460,6 +1477,10 @@
       refreshComposer = null,
       composerStructureObserver = null,
       composerObserverTimer = 0;
+    const rebindEditor = (nextEditor) => {
+      if (nextEditor?.isConnected) e = nextEditor;
+      return e;
+    };
     const positionEnterReply = () => {
       const sendButton = findSendButton();
       if (!sendButton) return false;
@@ -1474,78 +1495,21 @@
         actionRow.insertBefore(enterReply, anchor);
       return actionRow;
     };
-    let normalizedActionRow = null,
-      composerStack = null,
-      composerActionRow = null;
+    let normalizedActionRow = null;
     const clearComposerStackStyles = () => {
-      composerStack?.style.removeProperty("flex-wrap");
-      composerStack?.style.removeProperty("align-items");
-      composerStack?.style.removeProperty("justify-content");
-      composerStack?.style.removeProperty("min-height");
       box.style.removeProperty("flex");
-      box.style.removeProperty("width");
-      box.style.removeProperty("max-width");
-      composerActionRow?.style.removeProperty("flex");
-      composerActionRow?.style.removeProperty("width");
-      composerActionRow?.style.removeProperty("max-width");
-      composerActionRow?.style.removeProperty("position");
-      composerActionRow?.style.removeProperty("inset");
-    };
-    const restoreComposerStack = () => {
-      clearComposerStackStyles();
-      composerStack?.classList.remove("xra-composer-stack");
-      composerActionRow?.classList.remove("xra-composer-action-row");
-      composerStack = null;
-      composerActionRow = null;
-    };
-    const normalizeComposerStack = (actionRow) => {
-      let parent = box.parentElement;
-      for (let node = parent; node && node !== document.body; node = node.parentElement) {
-        const display = getComputedStyle(node).display;
-        if (node.contains(actionRow) && (display === "flex" || display === "inline-flex")) {
-          parent = node;
-          break;
-        }
-      }
-      if (!parent || !actionRow) return null;
-      // The native X toolbar is nested several levels below the composer
-      // stack. Style only the direct flex item that contains our reply row;
-      // styling the native row itself can hide GIF/image/emoji controls.
-      let actionBranch = actionRow;
-      while (actionBranch.parentElement && actionBranch.parentElement !== parent)
-        actionBranch = actionBranch.parentElement;
-      if (actionBranch.parentElement !== parent) return null;
-      if (composerStack && composerStack !== parent) restoreComposerStack();
-      if (composerActionRow && composerActionRow !== actionBranch)
-        composerActionRow.classList.remove("xra-composer-action-row");
-      composerStack = parent;
-      composerActionRow = actionBranch;
-      parent.classList.add("xra-composer-stack");
-      actionBranch.classList.add("xra-composer-action-row");
-      // X may apply its flex rules after our stylesheet. Inline priority keeps
-      // both rows stable while the suggestion state is changing.
-      const flexDirection = getComputedStyle(parent).flexDirection || "row";
-      parent.style.setProperty(
-        "flex-wrap",
-        flexDirection.includes("column") ? "nowrap" : "wrap",
-        "important",
-      );
-      parent.style.setProperty("align-items", "stretch", "important");
-      parent.style.setProperty("justify-content", "flex-start", "important");
-      parent.style.setProperty("min-height", "max-content", "important");
-      box.style.setProperty("flex", "0 0 100%", "important");
+      // Width is the only layout guarantee we need for the Assistant card.
+      // X owns the surrounding flex layout and its native action row.
+      box.style.setProperty("display", "block", "important");
       box.style.setProperty("width", "100%", "important");
       box.style.setProperty("max-width", "100%", "important");
-      actionBranch.style.setProperty("flex", "0 0 100%", "important");
-      actionBranch.style.setProperty("width", "100%", "important");
-      actionBranch.style.setProperty("max-width", "100%", "important");
-      // X marks this branch sticky so it can stay at the bottom of a normal
-      // composer. Once the assistant card is inserted, that makes the native
-      // toolbar jump above the card. Keep the branch in normal flow while
-      // preserving all native controls inside it.
-      actionBranch.style.setProperty("position", "static", "important");
-      actionBranch.style.setProperty("inset", "auto", "important");
-      return parent;
+    };
+    const normalizeComposerStack = () => {
+      // Deliberately do not style the parent or action branch. They contain
+      // X's image/GIF/emoji/location controls and may be sticky/flex-managed
+      // by X while the composer transitions between states.
+      clearComposerStackStyles();
+      return box.parentElement || null;
     };
     const restoreComposerActionRow = () => {
       if (!normalizedActionRow) return;
@@ -1593,7 +1557,7 @@
             composerStructureObserver?.disconnect();
             composerStructureObserver = null;
             observedStickyRow = null;
-            restoreComposerStack();
+            clearComposerStackStyles();
             restoreComposerActionRow();
             enterReply.remove();
             return;
@@ -1639,7 +1603,7 @@
             observedActionRow = null;
             enterReplyObserver?.disconnect();
             enterReplyObserver = null;
-            restoreComposerStack();
+            clearComposerStackStyles();
             restoreComposerActionRow();
             enterReply.remove();
             return;
@@ -1656,7 +1620,8 @@
     };
     const initialActionRow = positionEnterReply();
     const initialStickyRow = normalizeComposerActionRow();
-    refreshComposer = () => {
+    refreshComposer = (nextEditor) => {
+      rebindEditor(nextEditor || editor());
       const nextRow = positionEnterReply();
       normalizeComposerStack(nextRow);
       const nextStickyRow = normalizeComposerActionRow();
@@ -1850,6 +1815,9 @@
     generate.onclick = () => run(false);
     sync.onclick = () => run(true);
     const mountBox = () => {
+      rebindEditor(editor());
+      const host = composerHost();
+      if (!host?.parentElement) return false;
       if (box.parentElement === host.parentElement && box.previousElementSibling === host)
         return true;
       host.insertAdjacentElement("afterend", box);

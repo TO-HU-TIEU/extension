@@ -439,27 +439,13 @@
   accent-color: #1d9bf0;
   cursor: pointer;
 }
-/* X's composer content is a flex row. Without an explicit wrapped stack, the
-   assistant card and native action row compete for the same line while a
-   suggestion is loading. Keep the card full-width and the reply controls on
-   the following row, preserving X's own controls inside that row. The
-   action-row class is applied to the direct branch, never to X's internal
-   native toolbar wrapper. */
-.xra-composer-stack {
-  flex-wrap: wrap !important;
-  align-items: stretch !important;
-}
-.xra-composer-stack > .xra-box {
-  flex: 0 0 100% !important;
+/* Keep the Assistant card full-width without taking ownership of X's
+   composer flex/sticky rows. X's native image/GIF/emoji/location controls
+   must remain in the layout that X manages itself. */
+.xra-box {
+  display: block !important;
   width: 100% !important;
   max-width: 100% !important;
-}
-.xra-composer-stack > .xra-composer-action-row {
-  flex: 0 0 100% !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  position: static !important;
-  inset: auto !important;
 }
 .xra-settings {
   margin-left: auto;
