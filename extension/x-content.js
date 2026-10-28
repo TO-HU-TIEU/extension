@@ -1274,6 +1274,7 @@
       "autoReply",
       "autoSuggest",
       "autoLike",
+      "replyEnterToSend",
       "usageMode",
       "replyCount",
       "fastReplyMode",
@@ -1428,7 +1429,7 @@
     autoPanel.className = "xra-auto-panel";
     autoPanel.hidden = true;
     autoPanel.innerHTML =
-      '<label><span><b>Tự động tạo gợi ý khi mở bài đăng</b></span><input type="checkbox" data-key="autoSuggest"></label><label><span><b>Tự thả like</b></span><input type="checkbox" data-key="autoLike"></label><label><span><b>Tự bấm trả lời sau khi chọn gợi ý</b></span><input type="checkbox" data-key="autoReply"></label><label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
+      '<label><span><b>Tự động tạo gợi ý khi mở bài đăng</b></span><input type="checkbox" data-key="autoSuggest"></label><label><span><b>Tự thả like</b></span><input type="checkbox" data-key="autoLike"></label><label><span><b>Tự bấm trả lời sau khi chọn gợi ý</b></span><input type="checkbox" data-key="autoReply"></label><label><span><b>Nhấn Enter để trả lời</b></span><input type="checkbox" data-key="replyEnterToSend"></label><label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
     box.querySelector(".xra-results").before(autoPanel);
     for (const input of autoPanel.querySelectorAll("input")) {
       input.dataset.savedEnabled = String(!!saved[input.dataset.key]);
@@ -1457,10 +1458,54 @@
       gear.classList.toggle("active", !autoPanel.hidden);
     };
     let remountBox = null;
+    const enterReplyInput = autoPanel.querySelector('input[data-key="replyEnterToSend"]');
+    let boundEditor = null;
+    const sendButtonForEditor = (targetEditor) =>
+      [...document.querySelectorAll(replySendButtonSelector)]
+        .filter(isReplyControlVisible)
+        .find((button) => replyEditorFrom(button) === targetEditor) || null;
+    const onEditorKeydown = (event) => {
+      if (
+        !box.isConnected ||
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.isComposing ||
+        !enterReplyInput.checked
+      )
+        return;
+      const targetEditor = event.target?.closest?.(replyTextareaSelector);
+      if (!targetEditor || targetEditor !== boundEditor) return;
+      const sendButton = sendButtonForEditor(targetEditor);
+      if (
+        !sendButton ||
+        sendButton.disabled ||
+        sendButton.getAttribute("aria-disabled") === "true"
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      setTimeout(() => {
+        const current = sendButtonForEditor(boundEditor);
+        if (current && !current.disabled && current.getAttribute("aria-disabled") !== "true")
+          current.click();
+      }, 0);
+    };
+    const bindEditor = (nextEditor) => {
+      if (boundEditor === nextEditor) return;
+      boundEditor?.removeEventListener("keydown", onEditorKeydown, true);
+      boundEditor = nextEditor?.isConnected ? nextEditor : null;
+      boundEditor?.addEventListener("keydown", onEditorKeydown, true);
+    };
     const rebindEditor = (nextEditor) => {
-      if (nextEditor?.isConnected) e = nextEditor;
+      if (nextEditor?.isConnected) {
+        e = nextEditor;
+        bindEditor(nextEditor);
+      }
       return e;
     };
+    bindEditor(e);
     syncAutoFlowSettingUi();
     run = async (force) => {
       // Auto-flow owns the single generation request for the current post.
