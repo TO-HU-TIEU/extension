@@ -1278,7 +1278,6 @@
       "replyCount",
       "fastReplyMode",
       "replyMediaSuggestions",
-      "replyEnterToSend",
     ]);
     if (!saved) {
       mounting = false;
@@ -1307,9 +1306,9 @@
       currentId = location.pathname.match(/\/status\/(\d+)/)?.[1];
     if (existing && existing.dataset.postId !== currentId) existing.remove();
     else if (existing) {
-      // X can replace the native toolbar immediately after a successful
-      // reply while keeping the assistant card mounted. Re-bind the checkbox
-      // and normalize the new action row instead of waiting for a full remount.
+      // X can replace the native editor immediately after a successful reply
+      // while keeping the Assistant card mounted. Re-bind only the card host;
+      // leave the native toolbar entirely under X's control.
       // X replaces the editor subtree after a submit. Re-bind the existing
       // Assistant card to the new editor before positioning the checkbox;
       // otherwise the old closure falls back to the first send button on the
@@ -1457,225 +1456,11 @@
       autoPanel.hidden = !autoPanel.hidden;
       gear.classList.toggle("active", !autoPanel.hidden);
     };
-    const enterReply = document.createElement("label");
-    enterReply.className = "xra-enter-send";
-    enterReply.title = "Khi bật, nhấn Enter sẽ bấm nút Trả lời";
-    enterReply.innerHTML =
-      '<input type="checkbox" data-key="replyEnterToSend"><span>Nhấn Enter để trả lời</span>';
-    const enterInput = enterReply.querySelector("input");
-    enterInput.checked = !!saved.replyEnterToSend;
-    enterInput.onchange = () => {
-      chrome.storage.local.set({ replyEnterToSend: enterInput.checked }).catch(() => {});
-    };
-    const findSendButton = () => {
-      const buttons = [...document.querySelectorAll(replySendButtonSelector)].filter(
-        isReplyControlVisible,
-      );
-      return buttons.find((button) => replyEditorFrom(button) === e) || buttons[0] || null;
-    };
-    let remountBox = null,
-      refreshComposer = null,
-      composerStructureObserver = null,
-      composerObserverTimer = 0;
+    let remountBox = null;
     const rebindEditor = (nextEditor) => {
       if (nextEditor?.isConnected) e = nextEditor;
       return e;
     };
-    const positionEnterReply = () => {
-      const sendButton = findSendButton();
-      if (!sendButton) return false;
-      const sendHost = sendButton.parentElement;
-      const actionRow = sendHost?.parentElement;
-      if (!actionRow) return false;
-      const progressHost = [...actionRow.children].find((child) =>
-        child.querySelector?.('[data-testid="dual-phase-countdown-circle"],[role="progressbar"]'),
-      );
-      const anchor = progressHost || sendHost;
-      if (enterReply.parentElement !== actionRow || enterReply.nextElementSibling !== anchor)
-        actionRow.insertBefore(enterReply, anchor);
-      return actionRow;
-    };
-    let normalizedActionRow = null;
-    const clearComposerStackStyles = () => {
-      box.style.removeProperty("flex");
-      // Width is the only layout guarantee we need for the Assistant card.
-      // X owns the surrounding flex layout and its native action row.
-      box.style.setProperty("display", "block", "important");
-      box.style.setProperty("width", "100%", "important");
-      box.style.setProperty("max-width", "100%", "important");
-    };
-    const normalizeComposerStack = () => {
-      // Deliberately do not style the parent or action branch. They contain
-      // X's image/GIF/emoji/location controls and may be sticky/flex-managed
-      // by X while the composer transitions between states.
-      clearComposerStackStyles();
-      return box.parentElement || null;
-    };
-    const restoreComposerActionRow = () => {
-      if (!normalizedActionRow) return;
-      normalizedActionRow.classList.remove("xra-native-action-row");
-      normalizedActionRow.style.removeProperty("position");
-      normalizedActionRow.style.removeProperty("inset");
-      normalizedActionRow = null;
-    };
-    const normalizeComposerActionRow = () => {
-      let stickyRow = null;
-      for (let node = enterReply.parentElement; node && node !== document.body; node = node.parentElement) {
-        if (
-          getComputedStyle(node).position === "sticky" &&
-          node.querySelector?.(replySendButtonSelector)
-        ) {
-          stickyRow = node;
-          break;
-        }
-      }
-      if (normalizedActionRow && normalizedActionRow !== stickyRow) restoreComposerActionRow();
-      normalizedActionRow = stickyRow;
-      if (!stickyRow) return null;
-      // The direct action branch is normalized above. Do not modify an outer
-      // sticky ancestor, which could hide controls belonging to another X
-      // composer.
-      return stickyRow;
-    };
-    let enterReplyObserver = null,
-      observedActionRow = null,
-      observedStickyRow = null;
-    const watchActionRow = (actionRow) => {
-      if (!actionRow) return;
-      if (observedActionRow === actionRow && enterReplyObserver) return;
-      enterReplyObserver?.disconnect();
-      observedActionRow = actionRow;
-      let observerTimer = 0;
-      const observer = new MutationObserver(() => {
-        if (observerTimer) return;
-        observerTimer = setTimeout(() => {
-          observerTimer = 0;
-          if (!box.isConnected || !e.isConnected) {
-            observer.disconnect();
-            enterReplyObserver = null;
-            observedActionRow = null;
-            composerStructureObserver?.disconnect();
-            composerStructureObserver = null;
-            observedStickyRow = null;
-            clearComposerStackStyles();
-            restoreComposerActionRow();
-            enterReply.remove();
-            return;
-          }
-          const nextRow = positionEnterReply();
-          normalizeComposerStack(nextRow);
-          normalizeComposerActionRow();
-          if (nextRow && nextRow !== actionRow) {
-            observer.disconnect();
-            observedActionRow = null;
-            watchActionRow(nextRow);
-            return;
-          }
-          // mountBox is now idempotent; only run it once per coalesced batch
-          // instead of recursively reacting to our own DOM move.
-          if (nextRow) remountBox?.();
-        }, 120);
-      });
-      enterReplyObserver = observer;
-      observer.observe(actionRow, { childList: true, subtree: true });
-    };
-    const watchComposerStructure = (stickyRow) => {
-      const root = stickyRow?.parentElement;
-      if (!root) return;
-      if (observedStickyRow === stickyRow && composerStructureObserver) return;
-      composerStructureObserver?.disconnect();
-      observedStickyRow = stickyRow;
-      composerStructureObserver = new MutationObserver((records) => {
-        if (
-          records.length &&
-          records.every((record) =>
-            record.target?.closest?.(".xra-box,.xra-enter-send"),
-          )
-        )
-          return;
-        if (composerObserverTimer) return;
-        composerObserverTimer = setTimeout(() => {
-          composerObserverTimer = 0;
-          if (!box.isConnected || !e.isConnected) {
-            composerStructureObserver?.disconnect();
-            composerStructureObserver = null;
-            observedStickyRow = null;
-            observedActionRow = null;
-            enterReplyObserver?.disconnect();
-            enterReplyObserver = null;
-            clearComposerStackStyles();
-            restoreComposerActionRow();
-            enterReply.remove();
-            return;
-          }
-          const nextRow = positionEnterReply();
-          normalizeComposerStack(nextRow);
-          const nextStickyRow = normalizeComposerActionRow();
-          if (nextRow) watchActionRow(nextRow);
-          if (nextStickyRow) watchComposerStructure(nextStickyRow);
-          remountBox?.();
-        }, 0);
-      });
-      composerStructureObserver.observe(root, { childList: true, subtree: true });
-    };
-    const initialActionRow = positionEnterReply();
-    const initialStickyRow = normalizeComposerActionRow();
-    refreshComposer = (nextEditor) => {
-      rebindEditor(nextEditor || editor());
-      const nextRow = positionEnterReply();
-      normalizeComposerStack(nextRow);
-      const nextStickyRow = normalizeComposerActionRow();
-      if (nextRow) watchActionRow(nextRow);
-      if (nextStickyRow) watchComposerStructure(nextStickyRow);
-      remountBox?.();
-    };
-    box.__xraRefreshComposer = refreshComposer;
-    if (initialStickyRow) watchComposerStructure(initialStickyRow);
-    if (initialActionRow) watchActionRow(initialActionRow);
-    else {
-      const retryObserver = new MutationObserver(() => {
-        const actionRow = positionEnterReply();
-        if (actionRow) {
-          normalizeComposerStack(actionRow);
-          const stickyRow = normalizeComposerActionRow();
-          if (stickyRow) watchComposerStructure(stickyRow);
-          remountBox?.();
-          retryObserver.disconnect();
-          watchActionRow(actionRow);
-        }
-      });
-      retryObserver.observe(document.body, { childList: true, subtree: true });
-      setTimeout(() => retryObserver.disconnect(), 5000);
-    }
-    e.addEventListener(
-      "keydown",
-      (event) => {
-        if (
-          event.key !== "Enter" ||
-          event.shiftKey ||
-          event.ctrlKey ||
-          event.metaKey ||
-          event.isComposing ||
-          !enterInput.checked
-        )
-          return;
-        const sendButton = findSendButton();
-        if (
-          !sendButton ||
-          sendButton.disabled ||
-          sendButton.getAttribute("aria-disabled") === "true"
-        )
-          return;
-        event.preventDefault();
-        event.stopPropagation();
-        setTimeout(() => {
-          const current = findSendButton();
-          if (current && !current.disabled && current.getAttribute("aria-disabled") !== "true")
-            current.click();
-        }, 0);
-      },
-      true,
-    );
     syncAutoFlowSettingUi();
     run = async (force) => {
       // Auto-flow owns the single generation request for the current post.
@@ -1824,8 +1609,13 @@
       return true;
     };
     remountBox = mountBox;
+    // X may replace the editor subtree after a reply. Keep the card attached
+    // to the current editor host without touching X's native toolbar row.
+    box.__xraRefreshComposer = (nextEditor) => {
+      rebindEditor(nextEditor || editor());
+      return remountBox?.() || false;
+    };
     const mounted = mountBox();
-    if (mounted) normalizeComposerStack(positionEnterReply());
     if (!mounted) {
       const retryMount = (attempt = 0) => {
         if (!box.isConnected || !e.isConnected || mountBox() || attempt >= 20) return;
