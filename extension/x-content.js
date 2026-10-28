@@ -1504,13 +1504,20 @@
         }
       }
       if (!parent || !actionRow) return null;
+      // The native X toolbar is nested several levels below the composer
+      // stack. Style only the direct flex item that contains our reply row;
+      // styling the native row itself can hide GIF/image/emoji controls.
+      let actionBranch = actionRow;
+      while (actionBranch.parentElement && actionBranch.parentElement !== parent)
+        actionBranch = actionBranch.parentElement;
+      if (actionBranch.parentElement !== parent) return null;
       if (composerStack && composerStack !== parent) restoreComposerStack();
-      if (composerActionRow && composerActionRow !== actionRow)
+      if (composerActionRow && composerActionRow !== actionBranch)
         composerActionRow.classList.remove("xra-composer-action-row");
       composerStack = parent;
-      composerActionRow = actionRow;
+      composerActionRow = actionBranch;
       parent.classList.add("xra-composer-stack");
-      actionRow.classList.add("xra-composer-action-row");
+      actionBranch.classList.add("xra-composer-action-row");
       // X may apply its flex rules after our stylesheet. Inline priority keeps
       // both rows stable while the suggestion state is changing.
       parent.style.setProperty("flex-wrap", "wrap", "important");
@@ -1518,9 +1525,9 @@
       box.style.setProperty("flex", "0 0 100%", "important");
       box.style.setProperty("width", "100%", "important");
       box.style.setProperty("max-width", "100%", "important");
-      actionRow.style.setProperty("flex", "0 0 100%", "important");
-      actionRow.style.setProperty("width", "100%", "important");
-      actionRow.style.setProperty("max-width", "100%", "important");
+      actionBranch.style.setProperty("flex", "0 0 100%", "important");
+      actionBranch.style.setProperty("width", "100%", "important");
+      actionBranch.style.setProperty("max-width", "100%", "important");
       return parent;
     };
     const restoreComposerActionRow = () => {
@@ -1544,13 +1551,9 @@
       if (normalizedActionRow && normalizedActionRow !== stickyRow) restoreComposerActionRow();
       normalizedActionRow = stickyRow;
       if (!stickyRow) return null;
-      // X may recreate its toolbar CSS after a composer mutation. Keep the
-      // action row in normal flow so it always follows the assistant card;
-      // the class covers stylesheet-based updates and inline priority keeps
-      // the layout stable until X replaces the node.
-      stickyRow.classList.add("xra-native-action-row");
-      stickyRow.style.setProperty("position", "static", "important");
-      stickyRow.style.setProperty("inset", "auto", "important");
+      // Keep X's native toolbar sticky and untouched. The assistant card is
+      // laid out in the wrapping composer stack above; changing this wrapper
+      // to `position: static` removes or obscures GIF/image/emoji controls.
       return stickyRow;
     };
     let enterReplyObserver = null,
