@@ -1522,7 +1522,12 @@
       actionBranch.classList.add("xra-composer-action-row");
       // X may apply its flex rules after our stylesheet. Inline priority keeps
       // both rows stable while the suggestion state is changing.
-      parent.style.setProperty("flex-wrap", "wrap", "important");
+      const flexDirection = getComputedStyle(parent).flexDirection || "row";
+      parent.style.setProperty(
+        "flex-wrap",
+        flexDirection.includes("column") ? "nowrap" : "wrap",
+        "important",
+      );
       parent.style.setProperty("align-items", "stretch", "important");
       box.style.setProperty("flex", "0 0 100%", "important");
       box.style.setProperty("width", "100%", "important");
