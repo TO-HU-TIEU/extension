@@ -1480,6 +1480,8 @@
     const clearComposerStackStyles = () => {
       composerStack?.style.removeProperty("flex-wrap");
       composerStack?.style.removeProperty("align-items");
+      composerStack?.style.removeProperty("justify-content");
+      composerStack?.style.removeProperty("min-height");
       box.style.removeProperty("flex");
       box.style.removeProperty("width");
       box.style.removeProperty("max-width");
@@ -1529,6 +1531,8 @@
         "important",
       );
       parent.style.setProperty("align-items", "stretch", "important");
+      parent.style.setProperty("justify-content", "flex-start", "important");
+      parent.style.setProperty("min-height", "max-content", "important");
       box.style.setProperty("flex", "0 0 100%", "important");
       box.style.setProperty("width", "100%", "important");
       box.style.setProperty("max-width", "100%", "important");
