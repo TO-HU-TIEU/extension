@@ -439,6 +439,31 @@
   accent-color: #1d9bf0;
   cursor: pointer;
 }
+/* X keeps its native action row sticky at the bottom of the composer. When
+   the Assistant box grows, that row would overlap the last settings/result
+   line. Keep it in normal flow only for composers that contain our checkbox. */
+.xra-native-action-row {
+  position: static !important;
+  inset: auto !important;
+}
+/* X's composer content is a flex row. Without an explicit wrapped stack, the
+   assistant card and native action row compete for the same line while a
+   suggestion is loading. Keep the card full-width and the reply controls on
+   the following row, preserving X's own controls inside that row. */
+.xra-composer-stack {
+  flex-wrap: wrap !important;
+  align-items: stretch !important;
+}
+.xra-composer-stack > .xra-box {
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.xra-composer-stack .xra-composer-action-row {
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
 .xra-settings {
   margin-left: auto;
 }

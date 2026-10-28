@@ -3,8 +3,12 @@
   "name": "Assistant",
   "description": "Trợ lý nội dung theo ngữ cảnh, hỗ trợ phản hồi và tạo bài từ nhiều nguồn.",
   "version": "1.5.23",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk1+YvzpVdbB38fl2aVsTS1XScj8dSv9RBzuwuLRToEMWgUgMwZ8m7v9kTq0zSz7htVn3qYDRqd413CrQQjgqHH6HDqMy3WjsSHosSzzc6uqljvo77g0e3sHMEs1/l2oEPMBYSeDS5/58P5FyeodzESUupioaD8Tst9EiY6hkNt3OmFMElwvmK61SRgyPfBWPKMAAm6rA6OySIdaVRLwrajhcBpNnVeV+FAkhfmqMqA3+pyr9IeqytoDM3QakHc14QKfMmY9Sy1+m+XC1+2IGr/g8gfyoCjtFODBkHRIwqmgQVMFZ/mN9dNDCJcU8oyQpyMTgGlwNhG/7DWWmyEur/QIDAQAB",
   "minimum_chrome_version": "116",
   "permissions": ["sidePanel", "scripting", "storage", "clipboardWrite", "activeTab", "alarms"],
+  "externally_connectable": {
+    "ids": ["ahkompeehcpiibdbbggdgfjfhedchjip", "fcoppgljmmnhkpicbohdhnpppimlppce"]
+  },
   "optional_host_permissions": ["https://*/*"],
   "host_permissions": [
     "https://x.com/*",

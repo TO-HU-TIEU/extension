@@ -103,6 +103,109 @@ function status(text, error = false) {
   node.textContent = discreet(text);
   node.classList.toggle("error", error);
 }
+const SETTINGS_BACKUP_SCHEMA = "x-reply-assistant-settings";
+const SETTINGS_BACKUP_VERSION = 1;
+const SETTINGS_BACKUP_LOCAL_KEYS = [
+  "quoteExtraPrompt",
+  "quoteAnalysisState",
+  "themeMode",
+  "autoFollowRunV1",
+];
+const SETTINGS_BACKUP_PAGE_KEYS = [
+  "assistantAutoDashboardPositionV1",
+  "assistantAutoSetupCollapsed",
+];
+const getSettingsBackupKeys = () => {
+  const configured = globalThis.AssistantSettingsBackup?.keys || {};
+  return {
+    local: [...new Set([...(configured.local || []), ...SETTINGS_BACKUP_LOCAL_KEYS])],
+    page: [...new Set([...(configured.page || []), ...SETTINGS_BACKUP_PAGE_KEYS])],
+  };
+};
+const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+async function exportSettingsBackup() {
+  await globalThis.AssistantSettingsBackup?.ready;
+  const keys = getSettingsBackupKeys();
+  const local = (await chrome.storage.local.get(keys.local)) || {};
+  const mirroredPage = chrome.storage.sync?.get
+    ? (await chrome.storage.sync
+        .get(keys.page.map((key) => `assistantPersistV1:${key}`))
+        .catch(() => ({}))) || {}
+    : {};
+  const page = {};
+  for (const key of keys.page) {
+    const value = globalThis.localStorage?.getItem(key);
+    const mirrored = mirroredPage[`assistantPersistV1:${key}`];
+    if (value !== null && value !== undefined) page[key] = value;
+    else if (mirrored !== null && mirrored !== undefined) page[key] = String(mirrored);
+  }
+  const payload = {
+    schema: SETTINGS_BACKUP_SCHEMA,
+    version: SETTINGS_BACKUP_VERSION,
+    createdAt: new Date().toISOString(),
+    local,
+    page,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `assistant-settings-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  status("Đã xuất cấu hình. Hãy nhập tệp này ở bản build.");
+}
+async function importSettingsBackup(file) {
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) throw new Error("Tệp cấu hình quá lớn.");
+  let payload;
+  try {
+    payload = JSON.parse(await file.text());
+  } catch {
+    throw new Error("Không đọc được tệp cấu hình JSON.");
+  }
+  // Allow a raw object copied from chrome.storage.local.get(null) in the
+  // legacy release. The allowlist below still prevents runtime/activation
+  // data from being written into the new extension.
+  if (payload && typeof payload === "object" && !payload.schema && !own(payload, "local") && !own(payload, "page"))
+    payload = { schema: SETTINGS_BACKUP_SCHEMA, version: SETTINGS_BACKUP_VERSION, local: payload };
+  if (
+    !payload ||
+    payload.schema !== SETTINGS_BACKUP_SCHEMA ||
+    Number(payload.version) !== SETTINGS_BACKUP_VERSION ||
+    (payload.local !== undefined &&
+      (payload.local === null || typeof payload.local !== "object")) ||
+    (payload.page !== undefined && (payload.page === null || typeof payload.page !== "object")) ||
+    (payload.local === undefined && payload.page === undefined)
+  )
+    throw new Error("Tệp không phải cấu hình Assistant hợp lệ.");
+  const keys = getSettingsBackupKeys();
+  const localPatch = {};
+  for (const key of keys.local)
+    if (own(payload.local, key)) localPatch[key] = payload.local[key];
+  if (Object.keys(localPatch).length) await chrome.storage.local.set(localPatch);
+  for (const key of keys.page) {
+    if (!own(payload.page, key)) continue;
+    const value = payload.page[key];
+    if (value === null || value === undefined) globalThis.localStorage?.removeItem(key);
+    else
+      globalThis.localStorage?.setItem(
+        key,
+        typeof value === "string" ? value : JSON.stringify(value),
+      );
+  }
+  status("Đã nhập cấu hình. Đang tải lại giao diện…");
+  setTimeout(() => location.reload(), 500);
+}
+$("exportSettings")?.addEventListener("click", () => safely(exportSettingsBackup));
+$("importSettings")?.addEventListener("click", () => $("importSettingsFile")?.click());
+$("importSettingsFile")?.addEventListener("change", (event) => {
+  const [file] = event.target.files || [];
+  safely(() => importSettingsBackup(file));
+  event.target.value = "";
+});
 async function safely(fn) {
   try {
     await fn();

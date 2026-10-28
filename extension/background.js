@@ -11,6 +11,102 @@ globalThis.X_REPLY_CONFIG ||= Object.freeze({ serverUrl: "http://127.0.0.1:8791"
 globalThis.RemoteConfig?.start();
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 const LOCAL = globalThis.X_REPLY_CONFIG;
+// Release and development builds can have different extension IDs when they
+// were installed from different packages. Chrome scopes storage.local by both
+// profile and extension ID, so keep a small, allowlisted bridge between the
+// known Assistant IDs. This lets a freshly installed build import settings
+// from the sibling release automatically without exposing them to web pages.
+const ASSISTANT_SETTINGS_PEERS = new Set([
+  "ahkompeehcpiibdbbggdgfjfhedchjip", // legacy release
+  "fcoppgljmmnhkpicbohdhnpppimlppce", // current fixed-key build/release
+]);
+const ASSISTANT_SETTINGS_BRIDGE = "assistantSettingsBridgeV1";
+const ASSISTANT_SETTINGS_KEYS = [
+  ...new Set([
+    ...(globalThis.AssistantSettingsBackup?.keys?.local || []),
+    "quoteExtraPrompt",
+    "themeMode",
+    "autoFollowRunV1",
+  ]),
+];
+const assistantBridgePeers = () =>
+  [...ASSISTANT_SETTINGS_PEERS].filter((id) => id && id !== chrome.runtime.id);
+const assistantBridgeJson = (value) => {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+};
+const assistantBridgeMuted = new Map();
+let assistantBridgeReady = false;
+const assistantBridgePatch = async (patch = {}) => {
+  const safe = Object.fromEntries(
+    Object.entries(patch).filter(([key]) => ASSISTANT_SETTINGS_KEYS.includes(key)),
+  );
+  if (!Object.keys(safe).length) return;
+  for (const [key, value] of Object.entries(safe))
+    assistantBridgeMuted.set(key, assistantBridgeJson(value));
+  await chrome.storage.local.set(safe).catch(() => {});
+};
+const assistantBridgeSend = (message) => {
+  for (const peerId of assistantBridgePeers())
+    chrome.runtime
+      .sendMessage(peerId, { ...message, channel: ASSISTANT_SETTINGS_BRIDGE })
+      .catch(() => {});
+};
+const assistantBridgeRequest = () => {
+  for (const peerId of assistantBridgePeers())
+    chrome.runtime
+      .sendMessage(peerId, { channel: ASSISTANT_SETTINGS_BRIDGE, type: "request" })
+      .then((response) => {
+        if (response?.ok && response.settings) assistantBridgePatch(response.settings);
+      })
+      .catch(() => {});
+};
+chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
+  if (message?.channel !== ASSISTANT_SETTINGS_BRIDGE) return;
+  const senderId = sender?.id || "";
+  if (!ASSISTANT_SETTINGS_PEERS.has(senderId) || senderId === chrome.runtime.id) return;
+  if (message.type === "request") {
+    chrome.storage.local
+      .get(ASSISTANT_SETTINGS_KEYS)
+      .then((settings) => sendResponse({ ok: true, settings }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (message.type === "patch" && message.settings) {
+    assistantBridgePatch(message.settings).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  return false;
+});
+chrome.storage?.onChanged?.addListener((changes, area) => {
+  if (area !== "local" || !assistantBridgeReady) return;
+  const patch = {};
+  for (const key of ASSISTANT_SETTINGS_KEYS) {
+    const change = changes[key];
+    if (!change) continue;
+    const nextValue = change.newValue;
+    const muted = assistantBridgeMuted.get(key);
+    if (muted !== undefined && muted === assistantBridgeJson(nextValue)) {
+      assistantBridgeMuted.delete(key);
+      continue;
+    }
+    assistantBridgeMuted.delete(key);
+    patch[key] = nextValue;
+  }
+  if (Object.keys(patch).length) assistantBridgeSend({ type: "patch", settings: patch });
+});
+Promise.resolve()
+  .then(() => globalThis.AssistantSettingsBackup?.ready)
+  .then(() => {
+    assistantBridgeReady = true;
+    assistantBridgeRequest();
+  })
+  .catch(() => {
+    assistantBridgeReady = true;
+  });
 const providerTimeoutSignal = (milliseconds) => {
   try {
     return globalThis.AbortSignal?.timeout?.(milliseconds);

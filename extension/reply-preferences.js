@@ -44,6 +44,8 @@
       "assistantAutoSpeed",
       "assistantAutoRestEnabled",
       "assistantAutoRestEveryMinutes",
+      "assistantAutoDashboardPositionV1",
+      "assistantAutoSetupCollapsed",
     ],
     persistentSyncPrefix = "assistantPersistV1:",
     persistentChrome = globalThis.chrome,

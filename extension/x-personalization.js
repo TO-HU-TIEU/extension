@@ -382,7 +382,7 @@
     timer = setTimeout(() => {
       timer = null;
       update();
-    }, 120);
+    }, 400);
   };
   document.addEventListener("xra-theme-change", schedule);
   new MutationObserver(schedule).observe(document.documentElement, {

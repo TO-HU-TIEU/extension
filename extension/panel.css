@@ -1238,6 +1238,29 @@ input#models {
   padding: 0 13px 13px;
   border-top: 1px solid var(--line);
 }
+.settings-transfer {
+  gap: 6px;
+  padding: 10px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+.settings-transfer .label-line {
+  align-items: baseline;
+}
+.settings-transfer .hint {
+  margin: 0;
+  font-size: 10px;
+}
+.settings-transfer-actions {
+  gap: 7px;
+}
+.settings-transfer-actions button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.settings-transfer-warning {
+  margin: 0 0 4px;
+  color: var(--muted);
+}
 .collapse-icon {
   display: block;
   width: 8px;

@@ -574,6 +574,19 @@
           ></span>
         </summary>
         <div class="config-body panel-stack">
+          <div class="settings-transfer panel-stack">
+            <div class="label-line panel-row">
+              <label>Cài đặt</label>
+            </div>
+            <div class="connection-row settings-transfer-actions">
+              <button id="exportSettings" class="secondary" type="button">Xuất cấu hình</button>
+              <button id="importSettings" class="secondary" type="button">Nhập cấu hình</button>
+              <input id="importSettingsFile" type="file" accept="application/json,.json" hidden />
+            </div>
+            <p class="hint settings-transfer-warning">
+              Tệp xuất có thể chứa API key. Xoá tệp sau khi nhập xong.
+            </p>
+          </div>
           <div class="provider">
             <button id="geminiProvider" class="active">
               <strong class="provider-name">Gemini</strong

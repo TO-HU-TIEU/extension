@@ -11,7 +11,8 @@
     invalid = false,
     mounting = false,
     observer,
-    hideAdsEnabled = false;
+    hideAdsEnabled = false,
+    lastQuoteTarget = null;
   const removedHomeAds = new Map();
   const discreet = (text) =>
     String(text || "")
@@ -138,11 +139,7 @@
   }
   function promotedArticle(article) {
     if (!article) return false;
-    if (
-      article.querySelector(
-        '[data-testid*="promoted" i],[data-testid*="sponsor" i]',
-      )
-    )
+    if (article.querySelector('[data-testid*="promoted" i],[data-testid*="sponsor" i]'))
       return true;
     const exact =
         /^(?:promoted|sponsored|ad|advertisement|quảng cáo|được quảng cáo|được tài trợ|tài trợ)$/iu,
@@ -205,6 +202,9 @@
         removedHomeAds.delete(article);
       }
       removedHomeAds.clear();
+      for (const article of document.querySelectorAll('article[data-testid="tweet"]'))
+        article.classList.remove("xra-hidden-ad");
+      return;
     }
     for (const article of [...document.querySelectorAll('article[data-testid="tweet"]')]) {
       const shouldHide = hideAdsEnabled && promotedArticle(article);
@@ -621,17 +621,24 @@
   function injectQuoteButtons() {
     const id = location.pathname.match(/^\/[^/]+\/status\/(\d+)/)?.[1];
     if (!id) {
-      clearQuoteButtons();
+      if (lastQuoteTarget !== null) clearQuoteButtons();
+      lastQuoteTarget = null;
       return;
     }
     const target = articleFor(id);
     if (!target) {
-      clearQuoteButtons();
+      if (lastQuoteTarget !== id) clearQuoteButtons();
       return;
     }
     // The current target already has its control. Most X mutations are feed
     // updates; avoid rescanning every article for the same target each time.
-    if (target.dataset.xraQuoteButton) return;
+    if (
+      target.dataset.xraQuoteButton &&
+      lastQuoteTarget === id &&
+      target.querySelector(".xra-quote-top-wrap,.xra-quote-floating")
+    )
+      return;
+    lastQuoteTarget = id;
     for (const article of document.querySelectorAll('article[data-testid="tweet"]')) {
       if (article !== target) {
         article
@@ -1288,6 +1295,10 @@
       currentId = location.pathname.match(/\/status\/(\d+)/)?.[1];
     if (existing && existing.dataset.postId !== currentId) existing.remove();
     else if (existing) {
+      // X can replace the native toolbar immediately after a successful
+      // reply while keeping the assistant card mounted. Re-bind the checkbox
+      // and normalize the new action row instead of waiting for a full remount.
+      existing.__xraRefreshComposer?.();
       mounting = false;
       return;
     }
@@ -1326,8 +1337,7 @@
     box.className = "xra-box";
     box.dataset.postId = post?.postId || "";
     const icon = (name) => globalThis.AssistantIcons?.svg(name) || "";
-    box.innerHTML =
-      `<div class="xra-tools"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại">${icon("refresh")}</button><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><span class="xra-spacer"></span><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài">${icon("sparkles")}</button><button class="xra-button xra-auto-like" title="Tự like khi mở bài">${icon("heart")}</button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý">${icon("send")}</button></div><div class="xra-results"></div>`;
+    box.innerHTML = `<div class="xra-tools"><span class="xra-spacer"></span><div class="xra-tools-group xra-tools-left"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại">${icon("refresh")}</button></div><div class="xra-tools-group xra-tools-right"><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><button class="xra-button xra-settings" title="Cài đặt tự động">${icon("setting")}</button></div><div class="xra-tools-group xra-tools-hidden"><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài">${icon("sparkles")}</button><button class="xra-button xra-auto-like" title="Tự like khi mở bài">${icon("heart")}</button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý">${icon("send")}</button></div></div><div class="xra-results"></div>`;
     const tools = box.querySelector(".xra-tools");
     const generate = box.querySelector(".xra-generate"),
       sync = box.querySelector(".xra-sync");
@@ -1393,12 +1403,11 @@
     toggle(box.querySelector(".xra-auto-reply"), "autoReply", !!saved.autoReply);
     toggle(box.querySelector(".xra-auto-suggest"), "autoSuggest", !!saved.autoSuggest);
     toggle(box.querySelector(".xra-auto-like"), "autoLike", !!saved.autoLike);
-    const gear = document.createElement("button");
+    const gear = box.querySelector(".xra-settings") || document.createElement("button");
     gear.className = "xra-button xra-settings";
     gear.title = "Cài đặt tự động";
     gear.innerHTML = icon("setting");
-    tools.append(gear);
-    tools.insertBefore(box.querySelector(".xra-count-wrap"), gear);
+    if (!gear.parentElement) tools.querySelector(".xra-tools-right")?.append(gear);
     const autoPanel = document.createElement("div");
     autoPanel.className = "xra-auto-panel";
     autoPanel.hidden = true;
@@ -1442,51 +1451,209 @@
       chrome.storage.local.set({ replyEnterToSend: enterInput.checked }).catch(() => {});
     };
     const findSendButton = () => {
-      const buttons = [...document.querySelectorAll(replySendButtonSelector)].filter(isReplyControlVisible);
+      const buttons = [...document.querySelectorAll(replySendButtonSelector)].filter(
+        isReplyControlVisible,
+      );
       return buttons.find((button) => replyEditorFrom(button) === e) || buttons[0] || null;
     };
-    let remountBox = null;
+    let remountBox = null,
+      refreshComposer = null,
+      composerStructureObserver = null,
+      composerObserverTimer = 0;
     const positionEnterReply = () => {
       const sendButton = findSendButton();
       if (!sendButton) return false;
       const sendHost = sendButton.parentElement;
       const actionRow = sendHost?.parentElement;
       if (!actionRow) return false;
-      const progressHost = [...actionRow.children].find(
-        (child) =>
-          child.querySelector?.('[data-testid="dual-phase-countdown-circle"],[role="progressbar"]'),
+      const progressHost = [...actionRow.children].find((child) =>
+        child.querySelector?.('[data-testid="dual-phase-countdown-circle"],[role="progressbar"]'),
       );
       const anchor = progressHost || sendHost;
       if (enterReply.parentElement !== actionRow || enterReply.nextElementSibling !== anchor)
         actionRow.insertBefore(enterReply, anchor);
       return actionRow;
     };
-    let enterReplyObserver = null;
+    let normalizedActionRow = null,
+      composerStack = null,
+      composerActionRow = null;
+    const clearComposerStackStyles = () => {
+      composerStack?.style.removeProperty("flex-wrap");
+      composerStack?.style.removeProperty("align-items");
+      box.style.removeProperty("flex");
+      box.style.removeProperty("width");
+      box.style.removeProperty("max-width");
+      composerActionRow?.style.removeProperty("flex");
+      composerActionRow?.style.removeProperty("width");
+      composerActionRow?.style.removeProperty("max-width");
+    };
+    const restoreComposerStack = () => {
+      clearComposerStackStyles();
+      composerStack?.classList.remove("xra-composer-stack");
+      composerActionRow?.classList.remove("xra-composer-action-row");
+      composerStack = null;
+      composerActionRow = null;
+    };
+    const normalizeComposerStack = (actionRow) => {
+      let parent = box.parentElement;
+      for (let node = parent; node && node !== document.body; node = node.parentElement) {
+        const display = getComputedStyle(node).display;
+        if (node.contains(actionRow) && (display === "flex" || display === "inline-flex")) {
+          parent = node;
+          break;
+        }
+      }
+      if (!parent || !actionRow) return null;
+      if (composerStack && composerStack !== parent) restoreComposerStack();
+      if (composerActionRow && composerActionRow !== actionRow)
+        composerActionRow.classList.remove("xra-composer-action-row");
+      composerStack = parent;
+      composerActionRow = actionRow;
+      parent.classList.add("xra-composer-stack");
+      actionRow.classList.add("xra-composer-action-row");
+      // X may apply its flex rules after our stylesheet. Inline priority keeps
+      // both rows stable while the suggestion state is changing.
+      parent.style.setProperty("flex-wrap", "wrap", "important");
+      parent.style.setProperty("align-items", "stretch", "important");
+      box.style.setProperty("flex", "0 0 100%", "important");
+      box.style.setProperty("width", "100%", "important");
+      box.style.setProperty("max-width", "100%", "important");
+      actionRow.style.setProperty("flex", "0 0 100%", "important");
+      actionRow.style.setProperty("width", "100%", "important");
+      actionRow.style.setProperty("max-width", "100%", "important");
+      return parent;
+    };
+    const restoreComposerActionRow = () => {
+      if (!normalizedActionRow) return;
+      normalizedActionRow.classList.remove("xra-native-action-row");
+      normalizedActionRow.style.removeProperty("position");
+      normalizedActionRow.style.removeProperty("inset");
+      normalizedActionRow = null;
+    };
+    const normalizeComposerActionRow = () => {
+      let stickyRow = null;
+      for (let node = enterReply.parentElement; node && node !== document.body; node = node.parentElement) {
+        if (
+          getComputedStyle(node).position === "sticky" &&
+          node.querySelector?.(replySendButtonSelector)
+        ) {
+          stickyRow = node;
+          break;
+        }
+      }
+      if (normalizedActionRow && normalizedActionRow !== stickyRow) restoreComposerActionRow();
+      normalizedActionRow = stickyRow;
+      if (!stickyRow) return null;
+      // X may recreate its toolbar CSS after a composer mutation. Keep the
+      // action row in normal flow so it always follows the assistant card;
+      // the class covers stylesheet-based updates and inline priority keeps
+      // the layout stable until X replaces the node.
+      stickyRow.classList.add("xra-native-action-row");
+      stickyRow.style.setProperty("position", "static", "important");
+      stickyRow.style.setProperty("inset", "auto", "important");
+      return stickyRow;
+    };
+    let enterReplyObserver = null,
+      observedActionRow = null,
+      observedStickyRow = null;
     const watchActionRow = (actionRow) => {
       if (!actionRow) return;
+      if (observedActionRow === actionRow && enterReplyObserver) return;
+      enterReplyObserver?.disconnect();
+      observedActionRow = actionRow;
+      let observerTimer = 0;
       const observer = new MutationObserver(() => {
-        if (!box.isConnected || !e.isConnected) {
-          observer.disconnect();
-          enterReplyObserver = null;
-          enterReply.remove();
-          return;
-        }
-        const nextRow = positionEnterReply();
-        remountBox?.();
-        if (nextRow && nextRow !== actionRow) {
-          observer.disconnect();
-          watchActionRow(nextRow);
-        }
+        if (observerTimer) return;
+        observerTimer = setTimeout(() => {
+          observerTimer = 0;
+          if (!box.isConnected || !e.isConnected) {
+            observer.disconnect();
+            enterReplyObserver = null;
+            observedActionRow = null;
+            composerStructureObserver?.disconnect();
+            composerStructureObserver = null;
+            observedStickyRow = null;
+            restoreComposerStack();
+            restoreComposerActionRow();
+            enterReply.remove();
+            return;
+          }
+          const nextRow = positionEnterReply();
+          normalizeComposerStack(nextRow);
+          normalizeComposerActionRow();
+          if (nextRow && nextRow !== actionRow) {
+            observer.disconnect();
+            observedActionRow = null;
+            watchActionRow(nextRow);
+            return;
+          }
+          // mountBox is now idempotent; only run it once per coalesced batch
+          // instead of recursively reacting to our own DOM move.
+          if (nextRow) remountBox?.();
+        }, 120);
       });
       enterReplyObserver = observer;
       observer.observe(actionRow, { childList: true, subtree: true });
     };
+    const watchComposerStructure = (stickyRow) => {
+      const root = stickyRow?.parentElement;
+      if (!root) return;
+      if (observedStickyRow === stickyRow && composerStructureObserver) return;
+      composerStructureObserver?.disconnect();
+      observedStickyRow = stickyRow;
+      composerStructureObserver = new MutationObserver((records) => {
+        if (
+          records.length &&
+          records.every((record) =>
+            record.target?.closest?.(".xra-box,.xra-enter-send"),
+          )
+        )
+          return;
+        if (composerObserverTimer) return;
+        composerObserverTimer = setTimeout(() => {
+          composerObserverTimer = 0;
+          if (!box.isConnected || !e.isConnected) {
+            composerStructureObserver?.disconnect();
+            composerStructureObserver = null;
+            observedStickyRow = null;
+            observedActionRow = null;
+            enterReplyObserver?.disconnect();
+            enterReplyObserver = null;
+            restoreComposerStack();
+            restoreComposerActionRow();
+            enterReply.remove();
+            return;
+          }
+          const nextRow = positionEnterReply();
+          normalizeComposerStack(nextRow);
+          const nextStickyRow = normalizeComposerActionRow();
+          if (nextRow) watchActionRow(nextRow);
+          if (nextStickyRow) watchComposerStructure(nextStickyRow);
+          remountBox?.();
+        }, 0);
+      });
+      composerStructureObserver.observe(root, { childList: true, subtree: true });
+    };
     const initialActionRow = positionEnterReply();
+    const initialStickyRow = normalizeComposerActionRow();
+    refreshComposer = () => {
+      const nextRow = positionEnterReply();
+      normalizeComposerStack(nextRow);
+      const nextStickyRow = normalizeComposerActionRow();
+      if (nextRow) watchActionRow(nextRow);
+      if (nextStickyRow) watchComposerStructure(nextStickyRow);
+      remountBox?.();
+    };
+    box.__xraRefreshComposer = refreshComposer;
+    if (initialStickyRow) watchComposerStructure(initialStickyRow);
     if (initialActionRow) watchActionRow(initialActionRow);
     else {
       const retryObserver = new MutationObserver(() => {
         const actionRow = positionEnterReply();
         if (actionRow) {
+          normalizeComposerStack(actionRow);
+          const stickyRow = normalizeComposerActionRow();
+          if (stickyRow) watchComposerStructure(stickyRow);
           remountBox?.();
           retryObserver.disconnect();
           watchActionRow(actionRow);
@@ -1508,12 +1675,18 @@
         )
           return;
         const sendButton = findSendButton();
-        if (!sendButton || sendButton.disabled || sendButton.getAttribute("aria-disabled") === "true") return;
+        if (
+          !sendButton ||
+          sendButton.disabled ||
+          sendButton.getAttribute("aria-disabled") === "true"
+        )
+          return;
         event.preventDefault();
         event.stopPropagation();
         setTimeout(() => {
           const current = findSendButton();
-          if (current && !current.disabled && current.getAttribute("aria-disabled") !== "true") current.click();
+          if (current && !current.disabled && current.getAttribute("aria-disabled") !== "true")
+            current.click();
         }, 0);
       },
       true,
@@ -1595,10 +1768,7 @@
         const styleMinWords = Math.min(100, Math.max(1, Number(s.styleMinWords) || 6));
         const styleWordRange = {
           min: styleMinWords,
-          max: Math.min(
-            100,
-            Math.max(styleMinWords, Number(s.styleMaxWords) || 10),
-          ),
+          max: Math.min(100, Math.max(styleMinWords, Number(s.styleMaxWords) || 10)),
         };
         const data = await request({
           provider,
@@ -1659,40 +1829,15 @@
     });
     generate.onclick = () => run(false);
     sync.onclick = () => run(true);
-    // X switches the composer to a two-column flex layout at narrow widths:
-    // the editor is one branch and the native action row (including Reply) is
-    // the other. Mounting inside the editor branch makes the assistant box
-    // collapse to half the composer width and leaves the checkbox/send button
-    // stranded beside it. Put the box in the nearest container shared by the
-    // editor and the native send button so it always spans the full composer.
-    const commonAncestor = (first, second) => {
-      if (!first || !second) return null;
-      const ancestors = new Set();
-      for (let node = first; node; node = node.parentElement) ancestors.add(node);
-      for (let node = second; node; node = node.parentElement)
-        if (ancestors.has(node)) return node;
-      return null;
-    };
     const mountBox = () => {
-      const sendButtons = [...document.querySelectorAll(replySendButtonSelector)].filter(
-        isReplyControlVisible,
-      );
-      const sendButton =
-        sendButtons.find((button) => replyEditorFrom(button) === e) || sendButtons[0] || null;
-      const composer = commonAncestor(e, sendButton);
-      if (composer && composer !== e) {
-        const sendBranch = [...composer.children].find((child) => child.contains(sendButton));
-        const editorBranch = [...composer.children].find((child) => child.contains(e));
-        if (sendBranch && editorBranch && sendBranch !== editorBranch) {
-          composer.insertBefore(box, sendBranch);
-          return true;
-        }
-      }
+      if (box.parentElement === host.parentElement && box.previousElementSibling === host)
+        return true;
       host.insertAdjacentElement("afterend", box);
-      return false;
+      return true;
     };
     remountBox = mountBox;
     const mounted = mountBox();
+    if (mounted) normalizeComposerStack(positionEnterReply());
     if (!mounted) {
       const retryMount = (attempt = 0) => {
         if (!box.isConnected || !e.isConnected || mountBox() || attempt >= 20) return;
@@ -1700,11 +1845,15 @@
       };
       retryMount();
       const mountObserver = new MutationObserver(() => {
-        if (!box.isConnected || !e.isConnected) {
-          mountObserver.disconnect();
-          return;
-        }
-        if (mountBox()) mountObserver.disconnect();
+        if (mountObserver._timer) return;
+        mountObserver._timer = setTimeout(() => {
+          mountObserver._timer = 0;
+          if (!box.isConnected || !e.isConnected) {
+            mountObserver.disconnect();
+            return;
+          }
+          if (mountBox()) mountObserver.disconnect();
+        }, 120);
       });
       mountObserver.observe(document.body, { childList: true, subtree: true });
       setTimeout(() => mountObserver.disconnect(), 5000);
@@ -1731,9 +1880,26 @@
     },
     true,
   );
-  let mountTimer = 0;
+  let mountTimer = 0,
+    adHideTimer = 0,
+    lastAdHidePath = location.pathname;
+  const scheduleAdHiding = () => {
+    const path = location.pathname,
+      routeChanged = path !== lastAdHidePath;
+    lastAdHidePath = path;
+    // Ad hiding only needs to run on Home, and only when it is enabled. A
+    // route change still gets one pass so removed Home ads can be restored.
+    if (!routeChanged && (!hideAdsEnabled || !/^\/home(?:\/|$)/i.test(path))) return;
+    if (adHideTimer) return;
+    adHideTimer = setTimeout(
+      () => {
+        adHideTimer = 0;
+        applyAdHiding();
+      },
+      routeChanged ? 0 : 750,
+    );
+  };
   const safeMount = () => {
-    applyAdHiding();
     injectQuoteButtons();
     mountAssistantButton();
     applyAiIconMask();
@@ -1764,9 +1930,9 @@
       // Ads are injected lazily as the feed streams in. Re-run the ad pass
       // on every DOM batch instead of checking only during initial load or a
       // settings change.
-      applyAdHiding();
+      scheduleAdHiding();
       safeMount();
-    }, 250);
+    }, 500);
   };
   const assistantOwnedMutation = (node) => {
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
@@ -1780,7 +1946,10 @@
       const changed = [...record.addedNodes, ...record.removedNodes];
       return !changed.length || changed.some((node) => !assistantOwnedMutation(node));
     });
-    if (relevant) scheduleMount();
+    if (relevant) {
+      scheduleMount();
+      scheduleAdHiding();
+    }
   });
   observer.observe(document.documentElement, {
     childList: true,

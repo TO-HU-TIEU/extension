@@ -52,11 +52,11 @@
         '[role="alert"], [aria-live], [data-testid*="toast" i], [data-testid*="error" i]',
       ),
     ];
-    const bodyText = document.body?.innerText || "";
-    for (const value of [
-      ...candidates.map((node) => node.innerText || node.textContent || ""),
-      bodyText,
-    ]) {
+    // X exposes the anti-automation notice as a toast/alert. Reading
+    // document.body.innerText here forced a full layout/text walk every few
+    // hundred milliseconds while waiting for a suggestion and could freeze
+    // a large timeline.
+    for (const value of candidates.map((node) => node.innerText || node.textContent || "")) {
       const text = String(value).replace(/\s+/gu, " ").trim();
       if (text && patterns.some((pattern) => pattern.test(text))) return text.slice(0, 320);
     }
@@ -182,7 +182,10 @@
     const now = new Date();
     const stamp = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
     const message = a.map(String).join(" ");
-    memory.logs = [...(memory.logs || []), `${stamp} ${message}`];
+    // Keep the visible log bounded. An unlimited array was reparsed and
+    // joined on every event, making long-running sessions progressively
+    // slower even after the automation itself had stopped.
+    memory.logs = [...(memory.logs || []), `${stamp} ${message}`].slice(-300);
     console.log("[Assistant Auto]", ...a);
     const list = document.querySelector("[data-auto-log-list]");
     if (list) {
@@ -555,13 +558,14 @@
       d = new Date(sessionStart),
       stamp = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`,
       title = `[DANH SÁCH] Hoàn thành: ${p.length} | Bỏ qua: ${s.length} | Bắt đầu: ${stamp} | Trung bình: ${(p.length / mins).toFixed(2)} trả lời/phút`;
-    console.clear();
-    console.groupCollapsed(`${title} (Click để xem chi tiết)`);
-    console.log("Danh sách hoàn thành:");
-    console.table(p);
-    console.log("Danh sách bỏ qua:");
-    console.table(s);
-    console.groupEnd();
+    if (globalThis.__assistantAutoDebug === true) {
+      console.groupCollapsed(`${title} (Click để xem chi tiết)`);
+      console.log("Danh sách hoàn thành:");
+      console.table(p);
+      console.log("Danh sách bỏ qua:");
+      console.table(s);
+      console.groupEnd();
+    }
     const box = document.getElementById("assistant-auto-dashboard");
     if (!box) return;
     const miniBadge = box.querySelector("[data-auto-mini-badge]");
@@ -625,13 +629,18 @@
       processedList.style.maxHeight = "280px";
       processedList.style.overflowY = "auto";
       processedList.style.overflowX = "hidden";
-      processedList.__autoItems = [
+      const nextItems = [
         ...p.map((item) => ({ ...item, __autoStatus: "done" })),
         ...s.map((item) => ({ ...item, __autoStatus: "skipped" })),
       ].sort(
         (a, b) =>
           Number(b.completedAt || b.skippedAt || 0) - Number(a.completedAt || a.skippedAt || 0),
       );
+      const listSignature = nextItems
+        .map((item) => `${item.__autoStatus}:${item.id}:${item.completedAt || item.skippedAt || 0}`)
+        .join("|");
+      const listChanged = processedList.dataset.signature !== listSignature;
+      processedList.__autoItems = nextItems;
       processedList.__autoRender = () => {
         const items = processedList.__autoItems || [],
           shown = Math.min(Number(processedList.dataset.rendered || 10), items.length);
@@ -672,7 +681,10 @@
           }
         });
       }
-      processedList.__autoRender();
+      if (listChanged) {
+        processedList.dataset.signature = listSignature;
+        processedList.__autoRender();
+      }
       box.__autoResizeProcessedCard?.();
     }
     const processedCount = box.querySelector("[data-auto-processed-count]");
@@ -683,12 +695,6 @@
       currentLog.textContent = (memory.logs || []).join("\n") || "Đang chờ bài tiếp theo";
       currentLog.scrollTop = currentLog.scrollHeight;
     }
-    box.querySelectorAll("[data-auto-url]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          location.href = b.dataset.autoUrl;
-        }),
-    );
     syncPauseButton();
   }
   function configureSpeedControl(box) {
@@ -712,6 +718,7 @@
     if (output) output.textContent = String(memory.speed);
   }
   const AUTO_DASHBOARD_POSITION_KEY = "assistantAutoDashboardPositionV1";
+  const AUTO_DASHBOARD_MIN_HEIGHT = 660;
   function readDashboardPosition() {
     try {
       const value = JSON.parse(localStorage.getItem(AUTO_DASHBOARD_POSITION_KEY) || "null");
@@ -721,6 +728,7 @@
       return {
         left: Math.max(0, Math.min(Math.max(0, innerWidth - 80), left)),
         top: Math.max(0, Math.min(Math.max(0, innerHeight - 80), top)),
+        mode: value?.mode === "free" ? "free" : "default",
       };
     } catch {
       return null;
@@ -732,10 +740,8 @@
       top = Number.parseFloat(box.style.top);
     if (!Number.isFinite(left) || !Number.isFinite(top)) return;
     try {
-      localStorage.setItem(
-        AUTO_DASHBOARD_POSITION_KEY,
-        JSON.stringify({ left: Math.round(left), top: Math.round(top) }),
-      );
+      const position = JSON.stringify({ left: Math.round(left), top: Math.round(top), mode: "free" });
+      persistPageSetting(AUTO_DASHBOARD_POSITION_KEY, position);
     } catch {}
   }
   function dashboardView() {
@@ -745,17 +751,33 @@
       configureMinimumGapControl(box);
       configureDailyReplyLimitControl(box);
       reorderAutoSetupControls(box);
+      box.__autoSyncViewport?.();
       syncPauseButton();
       return box;
     }
     box = document.createElement("aside");
+    const syncViewport = () => {
+      if (!box.isConnected || box.dataset.minimized === "true") return;
+      const available = Math.max(180, innerHeight - 24);
+      // The dashboard follows the browser viewport. When the viewport is
+      // shorter than the intended 660px design height, let the dashboard
+      // shrink and scroll internally instead of extending past the window.
+      box.style.height = `${available}px`;
+      box.style.maxHeight = `${available}px`;
+      box.style.minHeight = `${Math.min(AUTO_DASHBOARD_MIN_HEIGHT, available)}px`;
+      box.style.overflowY = "auto";
+      box.style.overflowX = "hidden";
+    };
+    box.__autoSyncViewport = syncViewport;
+    box.__autoDisposeViewport = () => removeEventListener("resize", syncViewport);
     box.id = "assistant-auto-dashboard";
     box.style.cssText =
-      "--xra-font:Roboto,Segoe UI,Arial,sans-serif;--xra-text:var(--xra-color,#e7e9ea);--xra-border:color-mix(in srgb,var(--xra-color,#e7e9ea) 22%,var(--xra-bg,#000));--xra-muted:color-mix(in srgb,var(--xra-color,#e7e9ea) 60%,var(--xra-bg,#000));position:fixed;right:14px;top:72px;width:min(440px,calc(100vw - 24px));min-width:min(300px,calc(100vw - 24px));min-height:min(260px,calc(100vh - 24px));max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);resize:both;overflow:auto;z-index:2147483647;background:var(--xra-bg,#000);color:var(--xra-color,#e7e9ea);border:1px solid var(--xra-border);border-radius:12px;box-shadow:0 8px 24px #0004;font:12px/1.4 var(--xra-font);padding:12px";
+      "--xra-font:Roboto,Segoe UI,Arial,sans-serif;--xra-text:var(--xra-color,#e7e9ea);--xra-border:color-mix(in srgb,var(--xra-color,#e7e9ea) 22%,var(--xra-bg,#000));--xra-muted:color-mix(in srgb,var(--xra-color,#e7e9ea) 60%,var(--xra-bg,#000));position:fixed;right:14px;top:auto;bottom:12px;width:min(440px,calc(100vw - 24px));min-width:min(300px,calc(100vw - 24px));min-height:min(260px,calc(100vh - 24px));max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);resize:both;overflow:auto;z-index:2147483647;background:var(--xra-bg,#000);color:var(--xra-color,#e7e9ea);border:1px solid var(--xra-border);border-radius:12px;box-shadow:0 8px 24px #0004;font:12px/1.4 var(--xra-font);padding:12px";
     const savedPosition = readDashboardPosition();
-    if (savedPosition) {
+    if (savedPosition?.mode === "free") {
       box.style.left = `${savedPosition.left}px`;
       box.style.top = `${savedPosition.top}px`;
+      box.style.bottom = "auto";
       box.style.right = "auto";
     }
     const iconMarkup = (name) => globalThis.AssistantIcons?.svg(name) || "";
@@ -825,8 +847,8 @@
         interval.value = String(everyMinutes);
         memory.autoRestEnabled = enabled.checked;
         memory.autoRestEveryMinutes = everyMinutes;
-      persistPageSetting("assistantAutoRestEnabled", enabled.checked);
-      persistPageSetting("assistantAutoRestEveryMinutes", everyMinutes);
+        persistPageSetting("assistantAutoRestEnabled", enabled.checked);
+        persistPageSetting("assistantAutoRestEveryMinutes", everyMinutes);
         if (!enabled.checked && memory.isAutoResting) {
           memory.isAutoResting = false;
           memory.autoRestUntil = 0;
@@ -901,7 +923,7 @@
           icon.style.height = "16px";
         }
         try {
-          localStorage.setItem(setupCollapsedKey, String(collapsed));
+          persistPageSetting(setupCollapsedKey, collapsed);
         } catch {}
       };
       setupToggle.addEventListener("click", (event) => {
@@ -960,8 +982,7 @@
       if (summary) summary.style.padding = "0 0 8px";
       const resizeProcessedCard = () => {
         if (!processedCard.open) {
-          box.style.height = "660px";
-          box.style.minHeight = "660px";
+          syncViewport();
           processedCard.style.height = "";
           const list = processedCard.querySelector("[data-auto-list]");
           if (list) {
@@ -970,8 +991,7 @@
           }
           return;
         }
-        box.style.height = "900px";
-        box.style.minHeight = "900px";
+        syncViewport();
         requestAnimationFrame(() => {
           const boxRect = box.getBoundingClientRect();
           const cardRect = processedCard.getBoundingClientRect();
@@ -994,11 +1014,14 @@
     box.style.height = "660px";
     box.style.minWidth = "min(380px, calc(100vw - 24px))";
     box.style.minHeight = "660px";
-    box.style.maxHeight = "none";
+    box.style.maxHeight = "calc(100vh - 24px)";
     box.style.resize = "both";
     box.style.overflow = "auto";
+    box.style.overflowX = "hidden";
     box.style.scrollbarWidth = "none";
     box.style.msOverflowStyle = "none";
+    addEventListener("resize", syncViewport, { passive: true });
+    syncViewport();
     const dropdownSvg = globalThis.AssistantIcons?.svg?.("dropdown");
     if (dropdownSvg)
       box.querySelectorAll("[data-auto-dropdown]").forEach((span) => {
@@ -1041,6 +1064,7 @@
           maxTop = Math.max(inset, innerHeight - box.offsetHeight - inset);
         box.style.left = `${Math.min(maxLeft, Math.max(inset, event.clientX - dragState.x))}px`;
         box.style.top = `${Math.min(maxTop, Math.max(inset, event.clientY - dragState.y))}px`;
+        box.style.bottom = "auto";
         box.style.right = "auto";
       });
       dragHandle?.addEventListener("pointerup", () => {
@@ -1076,6 +1100,7 @@
     };
     box.querySelector("[data-auto-close]").onclick = () => {
       stop("Đã dừng theo yêu cầu");
+      box.__autoDisposeViewport?.();
       box.remove();
       notifyPanel(false);
     };
@@ -1096,6 +1121,7 @@
       box.dataset.minimized = "true";
       box.style.left = `${safeLeft}px`;
       box.style.top = `${safeTop}px`;
+      box.style.bottom = "auto";
       box.style.right = "auto";
       box.style.width = "42px";
       box.style.height = "42px";
@@ -1124,10 +1150,12 @@
         }
         const left = box.style.left,
           top = box.style.top;
+        box.__autoDisposeViewport?.();
         box.remove();
         const restored = dashboardView();
         restored.style.left = left;
         restored.style.top = top;
+        restored.style.bottom = "auto";
         restored.style.right = "auto";
         dashboard();
       };
