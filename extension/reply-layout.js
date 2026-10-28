@@ -14,7 +14,7 @@
     left: ["generate", "regenerate"],
     right: ["style", "count", "fast", "settings"],
     hidden: [],
-    menu: ["autoSuggest", "autoLike", "autoReply"],
+    menu: ["autoSuggest", "autoLike", "autoReply", "replyEnterToSend"],
     density: "comfortable",
     showLabels: false,
     border: true,
