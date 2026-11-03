@@ -1456,7 +1456,13 @@ async function generate(force) {
   ]);
   const provider = s.provider || "gemini";
   if (provider === "chatgpt" && !s.chatgptModel) throw new Error("Kết nối ChatGPT và chọn model.");
-  if (provider === "gemini" && !s.geminiKey) throw new Error("Kết nối Gemini trong Cài đặt.");
+  const hasGeminiKey =
+    !!String(s.geminiKey || "").trim() ||
+    (Array.isArray(s.geminiKeys) &&
+      s.geminiKeys.some((item) =>
+        String(typeof item === "string" ? item : item?.key || "").trim(),
+      ));
+  if (provider === "gemini" && !hasGeminiKey) throw new Error("Kết nối Gemini trong Cài đặt.");
   if (provider === "deepseek" && !s.deepseekKey)
     throw new Error("Kết nối DeepSeek API trong Cài đặt.");
   if (provider === "api" && !/^sk-/.test(s.apiKey || ""))

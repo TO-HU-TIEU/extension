@@ -22,6 +22,7 @@ Match the author's register: casual Vietnamese may use everyday wording, but lau
 Most replies should use no symbols. Use at most one emoji or emoticon per reply, never add one mechanically,
 and do not repeat the same symbol style across suggestions for one post.
 Do not wrap replies in Markdown, quotes, bullets, or code fences.
+When target_text is a short congratulation, greeting, or good-wish comment inside a thread, answer that comment without merely repeating its wish. Do not introduce Vietnamese kinship pronouns such as em, anh, chị, cô, chú, bác or cháu unless the target comment establishes that relationship. Do not invent a venue, brand, product or specific place from an ancestor image when the target comment does not mention it; a broad reaction to the root scene is acceptable only when it does not pretend the commenter visited that place.
 Answer an explicit question naturally. Avoid generic praise, spam, hashtags, unnecessary emoji,
 fake personal experiences, invented facts, financial advice, excessive agreement, or forced jokes.
 Avoid generic gratitude such as “Cảm ơn thông tin hữu ích/Cảm ơn bạn nhé” and generic reminders such as “Mọi người nhớ…” or “Anh em nên/cần/hãy…”. Do not mechanically end advice-like reminders with “nhé” or “đấy”.
@@ -468,7 +469,7 @@ const genericBotReply = (text, temporal = {}) => {
         "",
     );
   return (
-    /(?:^|[.!?…]\s*)(?:cảm\s*ơn|thanks|thank\s+you)(?:\s+bạn)?(?:\s+(?:vì|về|đã|thông tin(?:\s+hữu ích)?|chia sẻ|sharing))?(?:\s|[.!?…]|$)/iu.test(value) ||
+    /(?:^|[.!?…]\s*)(?:cảm\s*ơn|thanks|thank\s+you)(?:\s+(?:bạn|lời\s+chúc|chúc|anh|chị|em))?(?:\s+(?:vì|về|đã|thông tin(?:\s+hữu ích)?|chia sẻ|sharing))?(?:\s|[.!?…]|$)/iu.test(value) ||
     /^(?:mọi người|anh em)\s+(?:nhớ|nên|hãy|cần)(?:\s|$)/iu.test(value) ||
     /^(?:nhớ|nên|hãy|cần|cẩn thận)(?:\s|$).+(?:nhé|đấy)[.!…]*$/iu.test(value) ||
     (/(?:mưa|bão|ngập|áp\s*thấp|thời\s*tiết|nghỉ\s*học|cho\s+học\s+sinh\s+nghỉ)/iu.test(source) &&
@@ -476,6 +477,63 @@ const genericBotReply = (text, temporal = {}) => {
         value,
       ))
   );
+};
+const threadQualityContext = (temporal = {}) => {
+  const target = String(temporal.target_text || temporal.caption || "").trim();
+  if (!target || Array.from(target).length > 180) return null;
+  const raw = String(temporal.visible_ancestor_context || temporal.visible_context || "");
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.turns) || !parsed.turns.length) return null;
+    return { target, turns: parsed.turns };
+  } catch {
+    return null;
+  }
+};
+const markThreadReplyLowQuality = (item, temporal = {}) => {
+  if (!item) return item;
+  const context = threadQualityContext(temporal);
+  if (!context) return item;
+  const value = String(item.reply || "").trim();
+  if (!value) return item;
+  const target = context.target;
+  const isWish = /(?:\bchúc\b|ngày\s+mới|niềm\s+vui|tuyệt\s+vời|may\s+mắn|hạnh\s+phúc|năng\s+lượng)/iu.test(
+    target,
+  );
+  if (!isWish) return item;
+  const issues = [];
+  let cap = 100;
+  const targetHasKinship = /(?:^|[^\p{L}])(?:anh|chị|em|cô|chú|bác|cháu)(?=$|[^\p{L}])/iu.test(
+    target,
+  );
+  if (
+    !targetHasKinship &&
+    /(?:^|[^\p{L}])(?:em|anh|chị|cô|chú|bác|cháu)(?=$|[^\p{L}])/iu.test(value)
+  ) {
+    issues.push("Xưng hô không có căn cứ");
+    cap = Math.min(cap, 45);
+  }
+  if (/\bchúc\b/iu.test(target) && /\bchúc\b/iu.test(value)) {
+    issues.push("Lặp lại lời chúc của bình luận");
+    cap = Math.min(cap, 60);
+  }
+  if (
+    /(?:starbucks|cà\s*phê|cafe|quán|ly\s+nước|trải\s+nghiệm.{0,30}\btại\b|\btại\s+[A-ZÀ-Ỹ][\p{L}\d.-]*)/iu.test(
+      value,
+    ) &&
+    !/(?:starbucks|cà\s*phê|cafe|quán|ly\s+nước|trải\s+nghiệm|\btại\b)/iu.test(target)
+  ) {
+    issues.push("Đưa chi tiết địa điểm/đồ vật từ bài gốc vào trả lời bình luận");
+    cap = Math.min(cap, 35);
+  }
+  if (!issues.length) return item;
+  item.quality_issues = [
+    ...new Set([...(Array.isArray(item.quality_issues) ? item.quality_issues : []), ...issues]),
+  ];
+  const score = Number(item.relevance_score);
+  item.relevance_score = Number.isFinite(score) ? Math.min(Math.max(0, score), cap) : cap;
+  return item;
 };
 const markGenericReplyLowQuality = (item, temporal = {}) => {
   if (!item || !genericBotReply(item.reply, temporal)) return item;
@@ -633,6 +691,7 @@ export function parseReplies(
       throw new Error("AI thiếu bản dịch tiếng Việt. Thử tạo lại.");
     }
     markGenericReplyLowQuality(item, temporal);
+    markThreadReplyLowQuality(item, temporal);
   }
   return value;
 }

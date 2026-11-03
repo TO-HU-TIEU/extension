@@ -118,6 +118,7 @@
   };
   let running = false,
     timer = 0,
+    dailyReplyResetTimer = 0,
     sessionStart = 0,
     activeRunElapsedMs = 0,
     activeRunSegmentStartedAt = 0;
@@ -330,6 +331,20 @@
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   };
+  const scheduleDailyReplyReset = () => {
+    clearTimeout(dailyReplyResetTimer);
+    const now = new Date(),
+      nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    dailyReplyResetTimer = setTimeout(() => {
+      const day = dailyReplyDayKey();
+      try {
+        localStorage.setItem("assistantAutoDailyReplyCount", JSON.stringify({ day, count: 0 }));
+      } catch {}
+      dashboard();
+      scheduleDailyReplyReset();
+    }, Math.max(1000, nextMidnight.getTime() - now.getTime() + 50));
+  };
   const readDailyReplyLimit = () => {
     const value = Math.max(
       1,
@@ -341,7 +356,10 @@
   const readDailyReplyCount = () => {
     try {
       const saved = JSON.parse(localStorage.getItem("assistantAutoDailyReplyCount") || "null");
-      return saved?.day === dailyReplyDayKey() ? Math.max(0, Number(saved.count) || 0) : 0;
+      const day = dailyReplyDayKey();
+      if (saved?.day === day) return Math.max(0, Number(saved.count) || 0);
+      localStorage.setItem("assistantAutoDailyReplyCount", JSON.stringify({ day, count: 0 }));
+      return 0;
     } catch {
       return 0;
     }
@@ -380,6 +398,43 @@
     input.addEventListener("change", sync);
     setting.append(document.createTextNode("Giới hạn trả lời/ngày:"), input);
     vietnameseFilter.after(setting);
+  };
+  const readConsecutiveFailureLimit = () => {
+    const value = Math.max(
+      1,
+      Math.min(100, Number(localStorage.getItem("assistantAutoConsecutiveFailureLimit")) || 5),
+    );
+    memory.autoConsecutiveFailureLimit = value;
+    return value;
+  };
+  const configureConsecutiveFailureLimitControl = (box) => {
+    if (box.querySelector("[data-auto-failure-limit-control]")) return;
+    const restRow = box.querySelector("[data-auto-rest-row]"),
+      vietnameseFilter = box.querySelector("[data-auto-vietnamese]")?.closest("label");
+    if (!restRow || !vietnameseFilter) return;
+    const setting = document.createElement("label");
+    setting.dataset.autoFailureLimitControl = "";
+    setting.style.cssText =
+      "display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:6px 0;color:var(--xra-text,#edf1f5);font-size:13px";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = "100";
+    input.step = "1";
+    input.dataset.autoFailureLimit = "";
+    input.setAttribute("aria-label", "Số lỗi liên tiếp trước khi dừng");
+    input.style.cssText =
+      "width:60px;min-width:60px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const sync = () => {
+      const value = Math.max(1, Math.min(100, Number(input.value) || 5));
+      input.value = String(value);
+      memory.autoConsecutiveFailureLimit = value;
+      persistPageSetting("assistantAutoConsecutiveFailureLimit", value);
+    };
+    input.value = String(readConsecutiveFailureLimit());
+    input.addEventListener("change", sync);
+    setting.append(document.createTextNode("Dừng chạy khi lỗi"), input, document.createTextNode("lần liên tiếp"));
+    restRow.after(setting);
   };
   const configureMinimumGapControl = (box) => {
     if (box.querySelector("[data-auto-min-gap-control]")) return;
@@ -429,6 +484,7 @@
       box.querySelector("[data-auto-min-gap-control]"),
       box.querySelector("[data-auto-daily-limit-control]"),
       box.querySelector("[data-auto-rest-row]"),
+      box.querySelector("[data-auto-failure-limit-control]"),
       box.querySelector("[data-auto-vietnamese]")?.closest("label"),
     ];
     const parent = controls.find(Boolean)?.parentElement;
@@ -750,6 +806,7 @@
       configureSpeedControl(box);
       configureMinimumGapControl(box);
       configureDailyReplyLimitControl(box);
+      configureConsecutiveFailureLimitControl(box);
       reorderAutoSetupControls(box);
       box.__autoSyncViewport?.();
       syncPauseButton();
@@ -868,6 +925,7 @@
     configureSpeedControl(box);
     configureMinimumGapControl(box);
     configureDailyReplyLimitControl(box);
+    configureConsecutiveFailureLimitControl(box);
     reorderAutoSetupControls(box);
     const tabBadge = document.createElement("span");
     memory.tabBadge ||= Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -1478,13 +1536,14 @@
           s.push({ ...item, reason: providerError, skippedAt: Date.now() });
           save(skippedKey, s);
           log(
-            `Lỗi gợi ý (${memory.sessionFailures}/5 phiên, ${memory.consecutiveFailures}/3 liên tiếp):`,
+            `Lỗi gợi ý (${memory.sessionFailures}/5 phiên, ${memory.consecutiveFailures}/${readConsecutiveFailureLimit()} liên tiếp):`,
             providerError,
           );
           await returnHome();
           clearCurrentProcessing();
-          if (memory.sessionFailures > 5 || memory.consecutiveFailures >= 3) {
-            stop("Đã dừng: 3 bài liên tiếp không trả lời được");
+          const failureLimit = readConsecutiveFailureLimit();
+          if (memory.sessionFailures > 5 || memory.consecutiveFailures >= failureLimit) {
+            stop(`Đã dừng: ${failureLimit} bài liên tiếp không trả lời được`);
             return;
           }
           dashboard();
@@ -1653,6 +1712,8 @@
           1,
           Math.min(1440, Number(localStorage.getItem("assistantAutoRestEveryMinutes")) || 30),
         );
+        readConsecutiveFailureLimit();
+        scheduleDailyReplyReset();
         memory.runId = createRunId();
         memory.runStartedAt = sessionStart;
         memory.runState = restoredPaused ? "paused" : "running";

@@ -44,6 +44,7 @@
       "assistantAutoSpeed",
       "assistantAutoRestEnabled",
       "assistantAutoRestEveryMinutes",
+      "assistantAutoConsecutiveFailureLimit",
       "assistantAutoDashboardPositionV1",
       "assistantAutoSetupCollapsed",
     ],

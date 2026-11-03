@@ -1559,7 +1559,13 @@
           throw new Error("Mở side panel và nhập API key.");
         if (provider === "chatgpt" && !s.chatgptModel)
           throw new Error("Kết nối ChatGPT và chọn model.");
-        if (provider === "gemini" && !s.geminiKey)
+        const hasGeminiKey =
+          !!String(s.geminiKey || "").trim() ||
+          (Array.isArray(s.geminiKeys) &&
+            s.geminiKeys.some((item) =>
+              String(typeof item === "string" ? item : item?.key || "").trim(),
+            ));
+        if (provider === "gemini" && !hasGeminiKey)
           throw new Error("Nhập Gemini API key trong cài đặt.");
         if (provider === "deepseek" && !s.deepseekKey)
           throw new Error("Nhập DeepSeek API key trong cài đặt.");

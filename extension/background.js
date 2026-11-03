@@ -883,13 +883,70 @@ function offContextThreadReply(text, post) {
     return true;
   return false;
 }
+function threadQualityContext(post = {}) {
+  const target = String(post?.target_text || post?.caption || "").trim();
+  if (!target || Array.from(target).length > 180) return null;
+  const raw = String(post?.visible_context || post?.visible_ancestor_context || "");
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.turns) || !parsed.turns.length) return null;
+    return { target, turns: parsed.turns };
+  } catch {
+    return null;
+  }
+}
+function markThreadReplyLowQuality(item, post = {}) {
+  if (!item) return item;
+  const context = threadQualityContext(post);
+  if (!context) return item;
+  const value = String(item.reply || "").trim();
+  if (!value) return item;
+  const target = context.target;
+  const isWish = /(?:\bchúc\b|ngày\s+mới|niềm\s+vui|tuyệt\s+vời|may\s+mắn|hạnh\s+phúc|năng\s+lượng)/iu.test(
+    target,
+  );
+  if (!isWish) return item;
+  const issues = [];
+  let cap = 100;
+  const targetHasKinship = /(?:^|[^\p{L}])(?:anh|chị|em|cô|chú|bác|cháu)(?=$|[^\p{L}])/iu.test(
+    target,
+  );
+  if (
+    !targetHasKinship &&
+    /(?:^|[^\p{L}])(?:em|anh|chị|cô|chú|bác|cháu)(?=$|[^\p{L}])/iu.test(value)
+  ) {
+    issues.push("Xưng hô không có căn cứ");
+    cap = Math.min(cap, 45);
+  }
+  if (/\bchúc\b/iu.test(target) && /\bchúc\b/iu.test(value)) {
+    issues.push("Lặp lại lời chúc của bình luận");
+    cap = Math.min(cap, 60);
+  }
+  if (
+    /(?:starbucks|cà\s*phê|cafe|quán|ly\s+nước|trải\s+nghiệm.{0,30}\btại\b|\btại\s+[A-ZÀ-Ỹ][\p{L}\d.-]*)/iu.test(
+      value,
+    ) &&
+    !/(?:starbucks|cà\s*phê|cafe|quán|ly\s+nước|trải\s+nghiệm|\btại\b)/iu.test(target)
+  ) {
+    issues.push("Đưa chi tiết địa điểm/đồ vật từ bài gốc vào trả lời bình luận");
+    cap = Math.min(cap, 35);
+  }
+  if (!issues.length) return item;
+  item.quality_issues = [
+    ...new Set([...(Array.isArray(item.quality_issues) ? item.quality_issues : []), ...issues]),
+  ];
+  const score = Number(item.relevance_score);
+  item.relevance_score = Number.isFinite(score) ? Math.min(Math.max(0, score), cap) : cap;
+  return item;
+}
 function genericBotReply(text, post) {
   const value = String(text || "").trim(),
     source = String(
       post?.target_text || post?.caption || post?.visible_context || post?.media_description || "",
     );
   return (
-    /(?:^|[.!?…]\s*)(?:cảm\s*ơn|thanks|thank\s+you)(?:\s+bạn)?(?:\s+(?:vì|về|đã|thông tin(?:\s+hữu ích)?|chia sẻ|sharing))?(?:\s|[.!?…]|$)/iu.test(
+    /(?:^|[.!?…]\s*)(?:cảm\s*ơn|thanks|thank\s+you)(?:\s+(?:bạn|lời\s+chúc|chúc|anh|chị|em))?(?:\s+(?:vì|về|đã|thông tin(?:\s+hữu ích)?|chia sẻ|sharing))?(?:\s|[.!?…]|$)/iu.test(
       value,
     ) ||
     /^(?:mọi người|anh em)\s+(?:nhớ|nên|hãy|cần)(?:\s|$)/iu.test(value) ||
@@ -1032,7 +1089,10 @@ function staleTimeWish(text, post) {
   return false;
 }
 function validateTranslations(result, post, allowMissing = false) {
-  for (const item of result?.replies || []) markGenericReplyLowQuality(item, post);
+  for (const item of result?.replies || []) {
+    markGenericReplyLowQuality(item, post);
+    markThreadReplyLowQuality(item, post);
+  }
   normalizeReplies(result, post);
   const expected = primaryLanguage(
       globalThis.X_REPLY_LANGUAGE(post.target_text, post.language_hint),
@@ -1097,7 +1157,10 @@ function validateTranslations(result, post, allowMissing = false) {
       "Mô hình trả về câu chưa hoàn chỉnh, sai thời điểm hoặc cảm ơn, nhắc nhở chung chung, nhắc lại điều hiển nhiên, văn mẫu sáo, bám số liệu view dễ lỗi thời, phân tích giá\/chart quá chắc, bắt lỗi media lệch không cần thiết, nhập vai ép quan hệ/quà tiền, lạc ngữ cảnh bài gốc, hype mơ hồ, lặp tin chung chung hoặc viết số bằng chữ. Hãy tạo lại gợi ý.",
     );
   if (actual === "vi") for (const item of result.replies || []) item.translation_vi = null;
-  for (const item of result.replies || []) markGenericReplyLowQuality(item, post);
+  for (const item of result.replies || []) {
+    markGenericReplyLowQuality(item, post);
+    markThreadReplyLowQuality(item, post);
+  }
   if (result.replies?.some((item) => tooSimilarReply(item.reply, post.exclude_replies)))
     throw new Error("Gợi ý tạo lại quá giống gợi ý trước đó. Hãy tạo lại gợi ý khác hơn.");
   if (
@@ -2199,9 +2262,12 @@ function replyInstructions(message) {
   const selectedStyleRule = postStyleLengthRule(message.post);
   const questionRule =
     " HARD QUESTION-FIRST RULE: If target_text is a question or rhetorical confirmation request, especially Vietnamese endings “nhỉ”, “đúng không”, “phải không”, “sao”, or “?”, make reply 1 a direct answer, agreement, disagreement, or concise clarification of the exact claim. Do not lead reply 1 with newly invented statistics, percentages, prices, liquidation counts, trading advice, or unrelated market analysis. For a sentence like “Thanh lý hơn nửa triệu đô và phe Long sập hầm thế này thị trường khốc liệt quá bác nhỉ”, a natural agreement is the right first angle. Do not turn every suggestion into a question.";
+  const threadRule =
+    " THREAD COMMENT RULE: When target_text is a short congratulation, greeting, or good-wish comment, answer that comment without merely repeating its wish. Do not use Vietnamese kinship pronouns such as em, anh, chị, cô, chú, bác, or cháu unless target_text establishes that relationship. Do not introduce a venue, brand, product, or specific place from ancestor media when target_text does not mention it; a broad reaction to the root scene is acceptable only when it does not pretend the commenter visited that place.";
   return (
     base +
     questionRule +
+    threadRule +
     " " +
     temporal +
     selectedStyleRule +
