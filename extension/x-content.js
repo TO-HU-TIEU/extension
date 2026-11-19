@@ -429,6 +429,14 @@
             : "none",
     };
   }
+  function isQuickEnglishGreeting(text) {
+    const normalized = String(text || "")
+      .normalize("NFC")
+      .replace(/https?:\/\/\S+/gu, "")
+      .replace(/[\p{P}\p{S}\s]/gu, "")
+      .toLocaleLowerCase();
+    return ["goodmorning", "gm", "morning"].includes(normalized);
+  }
   async function readOriginalPost() {
     const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
       article = currentArticle(id),
@@ -442,15 +450,19 @@
     }
     let post = targetPost();
     if (post) {
-      const preferences = await safeGet(["fastReplyMode"]),
-        fast = true;
+      // A bare English greeting is served by the local reply pool on the
+      // first request. Do not wait for X media capture before returning it.
+      const localGreeting = state.replyHistory.length === 0 && isQuickEnglishGreeting(post.text);
       let captured = {};
-      for (let attempt = 0; attempt < 3; attempt++) {
-        captured = await globalThis.XReplyMedia.capture(article, fast);
-        const refreshed = targetPost();
-        if (refreshed) post = { ...post, ...refreshed };
-        if (!post.mediaCount || captured.mediaInline?.length || post.mediaUrls?.length) break;
-        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      if (!localGreeting) {
+        const fast = true;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          captured = await globalThis.XReplyMedia.capture(article, fast);
+          const refreshed = targetPost();
+          if (refreshed) post = { ...post, ...refreshed };
+          if (!post.mediaCount || captured.mediaInline?.length || post.mediaUrls?.length) break;
+          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+        }
       }
       Object.assign(post, captured);
       post.publishedAt = article.querySelector("time")?.dateTime || "";
@@ -658,7 +670,7 @@
       .forEach((node) => node.remove());
     document
       .querySelectorAll('article[data-testid="tweet"]')
-      .forEach((article) => delete article.dataset.xraQuoteButton);
+      .forEach((article) => delete article.dataset.quoteButton);
   }
   function injectQuoteButtons() {
     const id = location.pathname.match(/^\/[^/]+\/status\/(\d+)/)?.[1];
@@ -675,7 +687,7 @@
     // The current target already has its control. Most X mutations are feed
     // updates; avoid rescanning every article for the same target each time.
     if (
-      target.dataset.xraQuoteButton &&
+      target.dataset.quoteButton &&
       lastQuoteTarget === id &&
       target.querySelector(".xra-quote-top-wrap,.xra-quote-floating")
     )
@@ -686,10 +698,10 @@
         article
           .querySelectorAll(".xra-quote-top-wrap,.xra-quote-floating")
           .forEach((node) => node.remove());
-        delete article.dataset.xraQuoteButton;
+        delete article.dataset.quoteButton;
         continue;
       }
-      if (article.dataset.xraQuoteButton) continue;
+      if (article.dataset.quoteButton) continue;
       const link = ownPermalink(article);
       if (!link) continue;
       const own = (el) => el.closest("article") === article && !insideQuote(el, article),
@@ -717,7 +729,7 @@
           row ||
           (subscribe ? subscribe.parentElement?.parentElement : anchor?.parentElement) ||
           article;
-      article.dataset.xraQuoteButton = "1";
+      article.dataset.quoteButton = "1";
       const button = document.createElement("button");
       button.type = "button";
       button.className = "xra-quote-action xra-quote-top-action";
@@ -781,7 +793,7 @@
     };
     document
       .querySelectorAll(".xra-box .xra-auto-reply,.xra-box .xra-auto-suggest")
-      .forEach((button) => update(button, button.dataset.xraSettingKey));
+      .forEach((button) => update(button, button.dataset.settingKey));
     document
       .querySelectorAll(
         '.xra-auto-panel input[data-key="autoReply"],.xra-auto-panel input[data-key="autoSuggest"]',
@@ -1179,19 +1191,43 @@
     document.body.append(button);
   }
 
-  let lastScrollY = scrollY;
+  function postHeader() {
+    const back = document.querySelector('[data-testid="app-bar-back"]');
+    if (back) {
+      for (let row = back.parentElement; row && row !== document.body; row = row.parentElement) {
+        if (row.children.length >= 3 && row.querySelector("h2")) return row;
+      }
+    }
+    const topNav = document.querySelector('[data-testid="TopNavBar"]');
+    if (topNav) return topNav;
+    const title = [...document.querySelectorAll("header span,header div,[role=\"banner\"] span")].find(
+      (node) => /^(?:Bài đăng|Bai dang|Post|Posts)$/i.test((node.textContent || "").trim()),
+    );
+    return title?.closest('header,[role="banner"]') || document.querySelector('header,[role="banner"]');
+  }
+  function placeStickyUser(card, header) {
+    const rect = header?.getBoundingClientRect?.();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+    card.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
+    // X's right-side slot can collapse to a zero-width flex item. Anchor the
+    // chip to the viewport edge instead of that unstable child rectangle.
+    card.style.right = `${Math.max(12, Math.round(innerWidth * 0.055))}px`;
+    card.style.left = "auto";
+  }
   function updateStickyUser() {
     let card = document.querySelector(".xra-sticky-user");
     const id = location.pathname.match(/\/status\/(\d+)/)?.[1],
       article = articleFor(id),
       identity = article?.querySelector('[data-testid="User-Name"]'),
-      goingDown = scrollY >= lastScrollY;
-    lastScrollY = scrollY;
+      header = postHeader(),
+      identityRect = identity?.getBoundingClientRect?.(),
+      headerRect = header?.getBoundingClientRect?.();
     if (
-      !document.querySelector(".xra-box") ||
       !identity ||
-      identity.getBoundingClientRect().bottom >= 8 ||
-      !goingDown
+      !header ||
+      !identityRect ||
+      !headerRect ||
+      identityRect.bottom > headerRect.bottom
     ) {
       if (card) card.hidden = true;
       return;
@@ -1199,8 +1235,8 @@
     if (!card) {
       card = document.createElement("div");
       card.className = "xra-sticky-user";
-      document.body.append(card);
     }
+    if (card.parentElement !== header) header.append(card);
     const avatar = article.querySelector(
         '[data-testid="Tweet-User-Avatar"] img,div[data-testid="Tweet-User-Avatar"] img',
       ),
@@ -1221,10 +1257,16 @@
     handle.textContent = lines.find((x) => x.startsWith("@")) || "";
     text.append(name, handle);
     card.append(text);
+    placeStickyUser(card, header);
     card.hidden = false;
   }
   addEventListener("scroll", () => requestAnimationFrame(updateStickyUser), {
     passive: true,
+  });
+  addEventListener("resize", () => {
+    const card = document.querySelector(".xra-sticky-user"),
+      header = postHeader();
+    if (card && header && !card.hidden) placeStickyUser(card, header);
   });
   function likePost() {
     if (state.liked) return;
@@ -1385,7 +1427,7 @@
       // Assistant card to the new editor before positioning the checkbox;
       // otherwise the old closure falls back to the first send button on the
       // page and can place the controls in a different composer.
-      existing.__xraRefreshComposer?.(editor());
+      existing.__assistantRefreshComposer?.(editor());
       mounting = false;
       return;
     }
@@ -1398,8 +1440,8 @@
       // Opening the native Reply button is only part of an explicitly
       // enabled automatic run. Normal navigation must not activate the
       // Reply tab/editor by itself.
-      if (globalThis.__assistantAutoFlowRunning === true && reply && !reply.dataset.xraOpened) {
-        reply.dataset.xraOpened = "1";
+      if (globalThis.__assistantAutoFlowRunning === true && reply && !reply.dataset.opened) {
+        reply.dataset.opened = "1";
         reply.click();
         setTimeout(safeMount, 250);
       }
@@ -1465,7 +1507,7 @@
       countMenu.hidden = !countMenu.hidden;
     };
     const toggle = (button, key, value) => {
-      button.dataset.xraSettingKey = key;
+      button.dataset.settingKey = key;
       button.dataset.savedEnabled = String(!!value);
       button.classList.toggle("active", !!value && !autoFlowMutedSetting(key));
       button.setAttribute("aria-pressed", String(!!value && !autoFlowMutedSetting(key)));
@@ -1698,6 +1740,7 @@
             replyCount,
             fastMode: !!s.fastReplyMode,
             excludeReplies: force ? state.replyHistory : [],
+            quickGreetingUsed: state.replyHistory.length > 0,
             replyMediaSuggestions: !!s.replyMediaSuggestions,
           },
         });
@@ -1729,7 +1772,7 @@
         }
       }
     };
-    document.addEventListener("xra-style-changed", () => {
+    document.addEventListener("assistant-style-changed", () => {
       if (box.isConnected && (running || state.replies.length)) run(true);
     });
     generate.onclick = () => run(false);
@@ -1746,7 +1789,7 @@
     remountBox = mountBox;
     // X may replace the editor subtree after a reply. Keep the card attached
     // to the current editor host without touching X's native toolbar row.
-    box.__xraRefreshComposer = (nextEditor) => {
+    box.__assistantRefreshComposer = (nextEditor) => {
       rebindEditor(nextEditor || editor());
       return remountBox?.() || false;
     };
@@ -1884,18 +1927,18 @@
   safeMount();
   // Cho phép nút Phân tích chuyển thành nút dừng trong lúc chờ mô hình, không khoá nút.
   async function composeQuoteFromArticle(article, button) {
-    if (button.dataset.xraQuoteRunning === "1") {
-      button.dataset.xraQuoteCancel = "1";
+    if (button.dataset.quoteRunning === "1") {
+      button.dataset.quoteCancel = "1";
       button.title = "Đang dừng phân tích…";
       button.setAttribute("aria-label", "Đang dừng phân tích…");
       return;
     }
-    button.dataset.xraQuoteRunning = "1";
-    button.dataset.xraQuoteCancel = "0";
+    button.dataset.quoteRunning = "1";
+    button.dataset.quoteCancel = "0";
     button.classList.add("xra-quote-loading");
     button.title = "Dừng phân tích";
     button.setAttribute("aria-label", "Dừng phân tích");
-    const cancelled = () => button.dataset.xraQuoteCancel === "1";
+    const cancelled = () => button.dataset.quoteCancel === "1";
     try {
       safeMessage({ type: "openPanel" }).catch(() => {});
       const post = await readQuotePost(article);
@@ -1974,8 +2017,8 @@
       });
     } finally {
       const wasCancelled = cancelled();
-      button.dataset.xraQuoteRunning = "0";
-      button.dataset.xraQuoteCancel = "0";
+      button.dataset.quoteRunning = "0";
+      button.dataset.quoteCancel = "0";
       button.classList.remove("xra-quote-loading");
       button.disabled = false;
       button.title = "Viết bài trích dẫn phân tích góc nhìn";
@@ -1993,4 +2036,4 @@
 })();
 
 // Scope reply-editor detection to the active status article; never mount into X's global post composer.
-globalThis.__xraScopedEditorFix = true;
+globalThis.__assistantScopedEditorFix = true;

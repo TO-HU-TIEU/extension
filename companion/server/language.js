@@ -5,6 +5,7 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
     .replace(/https?:\/\/\S+|[#＃@][\p{L}\p{M}\p{N}_]+/gu, " ");
   // “GM/Gm” is a greeting abbreviation, not meaningful English evidence
   // when Vietnamese words follow it (for example, “Gm em nha”).
+  const standaloneGm = prose.replace(/[\p{P}\p{S}\s]/gu, "").toLocaleLowerCase() === "gm";
   const scoredProse = prose.replace(/\b(?:gm)\b/giu, " ");
   const count = (pattern) => (scoredProse.match(pattern) || []).length;
   const latin = count(/\p{Script=Latin}/gu);
@@ -102,6 +103,9 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   }
   scripts.sort((a, b) => b[1] - a[1]);
   if (scripts[0][1] > latin) return scripts[0][0];
+  // A standalone “gm!” is itself an English greeting. Do this after script
+  // detection so mixed-language comments such as “Gm em nha” remain Vietnamese.
+  if (standaloneGm) return "en";
   if (
     latin &&
     (/[ăđơưảạằẳẵắặầẩẫấậẻẽẹềểễếệỉĩịỏọồổỗốộờởỡớợủụừửữứựỷỹỵ]/i.test(prose) ||

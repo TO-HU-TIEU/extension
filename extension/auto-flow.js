@@ -590,7 +590,22 @@
     );
   const isProviderQuotaError = (value) =>
     /chạm hạn mức|quota|rate.?limit|resource_exhausted|http\s*429/iu.test(String(value || ""));
-  async function submitSelectedReply(expectedText, handle) {
+  const assistantBoxForTarget = (targetId) =>
+    [...document.querySelectorAll(".xra-box[data-post-id]")].find(
+      (box) => String(box.dataset.postId || "") === String(targetId || ""),
+    ) || null;
+  const editorFromAssistantBox = (box) => {
+    if (!box?.isConnected) return null;
+    // x-content inserts the Assistant card immediately after the native
+    // composer host. Resolve the editor from that exact host so an unrelated
+    // global post composer can never be selected by the auto flow.
+    const host = box.previousElementSibling;
+    return (
+      host?.querySelector?.('[data-testid^="tweetTextarea_"][contenteditable="true"]') ||
+      null
+    );
+  };
+  async function submitSelectedReply(expectedText, handle, targetId) {
     const normalize = (value) =>
       String(value || "")
         .replace(/\s+/gu, " ")
@@ -603,30 +618,20 @@
       const style = getComputedStyle(node);
       return style.display !== "none" && style.visibility !== "hidden";
     };
-    const findEditor = () => {
-      const editors = [
-        ...document.querySelectorAll('[data-testid^="tweetTextarea_"][contenteditable="true"]'),
-      ];
-      return editors.find((candidate) => visible(candidate)) || editors[0] || null;
-    };
+    const targetBox = assistantBoxForTarget(targetId);
+    const targetEditor = editorFromAssistantBox(targetBox);
+    const findEditor = () => (visible(targetEditor) ? targetEditor : null);
+    const onTargetStatus = () =>
+      location.pathname.match(/\/status\/(\d+)(?:\/|$)/)?.[1] === String(targetId || "");
     const findSendButton = (candidate) => {
-      const scope = candidate?.closest('[role="dialog"]') || candidate?.closest("article");
-      const inScope = scope
-        ? [
-            ...scope.querySelectorAll(
-              '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
-            ),
-          ]
-        : [];
-      const all = [
-        ...document.querySelectorAll(
-          '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
-        ),
-      ];
+      if (!candidate || !targetBox?.isConnected) return null;
+      const host = targetBox.previousElementSibling;
+      const scope = host || candidate.parentElement;
       return (
-        [...inScope, ...all].find(
-          (button, index, list) =>
-            list.indexOf(button) === index &&
+        [...(scope?.querySelectorAll?.(
+          '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
+        ) || [])].find(
+          (button) =>
             visible(button) &&
             !button.disabled &&
             button.getAttribute("aria-disabled") !== "true",
@@ -636,6 +641,7 @@
     let editor = null;
     let send = null;
     for (let attempt = 0; attempt < 30 && running; attempt++) {
+      if (!onTargetStatus()) return false;
       const blockNotice = readAutomationBlockNotice();
       if (blockNotice) {
         memory.autoBlockNotice = blockNotice;
@@ -650,7 +656,8 @@
       }
       await pauseSleep(250);
     }
-    if (!running || !editor || !send || send.disabled) return false;
+    if (!running || !onTargetStatus() || !targetBox || !editor || !send || send.disabled)
+      return false;
     const beforeSendBlock = readAutomationBlockNotice();
     if (beforeSendBlock) {
       memory.autoBlockNotice = beforeSendBlock;
@@ -1457,8 +1464,8 @@
             ),
         );
         const nativeReply = targetArticle?.querySelector('[data-testid="reply"]');
-        if (nativeReply && !nativeReply.dataset.xraOpened) {
-          nativeReply.dataset.xraOpened = "1";
+        if (nativeReply && !nativeReply.dataset.opened) {
+          nativeReply.dataset.opened = "1";
           nativeReply.click();
           log("Đã mở ô Trả lời của bài viết");
           window.dispatchEvent(new Event("assistant-auto-flow-mount"));
@@ -1473,9 +1480,11 @@
       }
       window.dispatchEvent(new Event("assistant-auto-flow-mount"));
       replyComposer?.scrollIntoView({ behavior: "auto", block: "center" });
+      let targetBox = null;
       let replyButton = null;
       for (let toolbarWait = 0; toolbarWait < 20; toolbarWait++) {
-        replyButton = document.querySelector(".xra-button.xra-generate,.xra-button.xra-sync");
+        targetBox = assistantBoxForTarget(id);
+        replyButton = targetBox?.querySelector(".xra-button.xra-generate,.xra-button.xra-sync") || null;
         if (replyButton) {
           if (!(await waitIfPaused())) return;
           replyButton.scrollIntoView({ behavior: "auto", block: "center" });
@@ -1554,7 +1563,9 @@
           await coordinate("release", item);
           return;
         }
-        let suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
+        let suggestion = targetBox?.querySelector(
+          ".xra-results .xra-suggestion-wrap .xra-chip-main",
+        );
         let providerError = "";
         if (suggestion) {
           log("Đã có gợi ý sẵn · dùng lại, không gọi gợi ý lần hai");
@@ -1574,7 +1585,10 @@
               await stopForAutomationBlock(item, blockNotice);
               return;
             }
-            suggestion = document.querySelector(".xra-results .xra-suggestion-wrap .xra-chip-main");
+            targetBox = assistantBoxForTarget(id);
+            suggestion = targetBox?.querySelector(
+              ".xra-results .xra-suggestion-wrap .xra-chip-main",
+            );
             const errorNode = document.querySelector(".xra-error,[role=alert],.xra-status-error");
             providerError = errorNode?.textContent?.trim() || "";
             if (providerError) break;
@@ -1616,7 +1630,8 @@
                 document
                   .querySelector(".xra-error,[role=alert],.xra-status-error")
                   ?.textContent?.trim() || "";
-              const retrySuggestion = document.querySelector(
+              targetBox = assistantBoxForTarget(id);
+              const retrySuggestion = targetBox?.querySelector(
                 ".xra-results .xra-suggestion-wrap .xra-chip-main",
               );
               if (retrySuggestion) {
@@ -1672,7 +1687,7 @@
         }
         if (suggestion) {
           const suggestions = Array.from(
-              document.querySelectorAll(".xra-results .xra-suggestion-wrap"),
+            targetBox?.querySelectorAll(".xra-results .xra-suggestion-wrap") || [],
             ),
             preferredSuggestions =
               globalThis.AutoReplySelection?.preferAboveScore(suggestions, 30) || suggestions;
@@ -1716,7 +1731,7 @@
             suggestion.textContent?.trim() ||
             "";
           suggestion.click();
-          const submitted = await submitSelectedReply(selectedReply, myHandle);
+          const submitted = await submitSelectedReply(selectedReply, myHandle, id);
           if (!submitted) {
             const blockNotice = memory.autoBlockNotice || readAutomationBlockNotice();
             if (blockNotice) {

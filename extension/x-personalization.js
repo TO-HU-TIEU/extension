@@ -7,8 +7,8 @@
     timer;
   const P = globalThis.ReplyPreferences;
   const PERSONAL_TONE_PROMPTS = {
-    male: "Xưng hô: Gọi 'em', xưng 'anh' hoặc 'a' ở những ngữ cảnh phù hợp (nếu cần)",
-    female: "Xưng hô: Gọi 'anh', xưng 'em' hoặc 'e' ở những ngữ cảnh phù hợp (nếu cần)",
+    male: "Xưng hô: Gọi 'anh/a', xưng 'em/e' ở những ngữ cảnh phù hợp (nếu cần)",
+    female: "Xưng hô: Gọi 'chị/c', xưng 'em/e' ở những ngữ cảnh phù hợp (nếu cần)",
   };
   const personalStylesMap = (value) =>
     value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -16,7 +16,7 @@
     await chrome.storage.local.set(patch);
     settings = { ...settings, ...patch };
     update();
-    document.dispatchEvent(new CustomEvent("xra-preferences-changed"));
+    document.dispatchEvent(new CustomEvent("assistant-preferences-changed"));
   };
   const normalizeExcludedAuthor = (value) =>
     String(value || "")
@@ -88,34 +88,30 @@
     extra.rows = 4;
     extra.value = person?.extraPrompt || "";
     extra.placeholder = "Ví dụ: Trao đổi thẳng thắn, tránh tiếng lóng.";
-    const preset = document.createElement("button");
-    preset.type = "button";
-    preset.className = "xra-person-preset";
-    const toneName = (tone) => (tone === "male" ? "Nam" : tone === "female" ? "Nữ" : "");
-    const selectedTone = () => {
-      const tone = settings.replyTone;
-      return PERSONAL_TONE_PROMPTS[tone] ? tone : "";
-    };
-    const refreshPreset = () => {
-      const tone = selectedTone();
-      preset.textContent = tone
-        ? `Chèn xưng hô theo tone ${toneName(tone)}`
-        : "Chèn xưng hô theo tone";
-      preset.disabled = !tone;
-      preset.title = tone
-        ? "Chèn câu xưng hô phù hợp với tone hiện tại"
-        : "Hãy chọn tone Nam hoặc Nữ trong phần thiết lập trước";
-    };
-    refreshPreset();
-    preset.onclick = () => {
-      const tone = selectedTone();
-      const text = tone && PERSONAL_TONE_PROMPTS[tone];
-      if (!text) return;
+    const presetWrap = document.createElement("div");
+    presetWrap.className = "xra-person-presets";
+    const quickPresets = [
+      { tone: "male", label: "Gọi 'anh' xưng 'em'" },
+      { tone: "female", label: "Gọi 'chị' xưng 'em'" },
+    ];
+    // Female tone starts with the neutral-to-male address (“anh”); male tone
+    // starts with the complementary “chị” option. No tone keeps “anh” first.
+    if (settings.replyTone === "male") quickPresets.reverse();
+    const insertPreset = (text) => {
       const current = extra.value.trim();
       if (!current.includes(text)) extra.value = current ? `${current}\n${text}` : text;
       extra.focus();
       extra.selectionStart = extra.selectionEnd = extra.value.length;
     };
+    for (const { tone, label } of quickPresets) {
+      const preset = document.createElement("button");
+      preset.type = "button";
+      preset.className = "xra-person-preset";
+      preset.textContent = label;
+      preset.title = `Chèn: ${PERSONAL_TONE_PROMPTS[tone]}`;
+      preset.onclick = () => insertPreset(PERSONAL_TONE_PROMPTS[tone]);
+      presetWrap.append(preset);
+    }
     const row = document.createElement("div");
     row.className = "xra-dialog-actions";
     const error = document.createElement("small");
@@ -160,7 +156,7 @@
         await save({ personalReplyStyles: people });
       });
     button("Huỷ", async () => {});
-    dialog.append(title, select, label, extra, preset, error, row);
+    dialog.append(title, select, label, extra, presetWrap, error, row);
     document.body.append(dialog);
     dialog.showModal();
     setTimeout(() => {
@@ -225,26 +221,41 @@
     for (const group of document.querySelectorAll(
       '[data-testid="User-Name"],[data-testid="UserName"]',
     )) {
-      const link = [...group.querySelectorAll("a[href]")].find((a) => {
+      const links = [...group.querySelectorAll("a[href]")].filter((a) => {
         try {
           return P.handle(a.href) && /^\/[A-Za-z0-9_]{1,15}\/?$/.test(new URL(a.href).pathname);
         } catch {
           return false;
         }
       });
+      // X renders the display name and @handle as separate links with the
+      // same href. The handle link is the one that owns the row we need.
+      const link =
+        links.find((a) => /^@/.test((a.textContent || "").trim())) || links[0];
       const handle = link && P.handle(link.href),
         person = P.person(settings, handle);
       let tag = group.querySelector(".xra-person-tag");
       if (!person) {
+        tag?.parentElement?.classList.remove("xra-person-handle-row");
         tag?.remove();
         continue;
       }
       if (!tag) {
         tag = document.createElement("button");
         tag.className = "xra-person-tag";
-        group.append(tag);
       }
-      if (tag.textContent !== P.label(person)) tag.textContent = P.label(person);
+      // X keeps the display name and handle in separate rows inside
+      // `User-Name`.  Put the personal-style chip beside the handle anchor
+      // itself instead of appending it to the outer group (which makes it
+      // fall onto a third line below the handle).
+      const handleRow = link?.parentElement;
+      const tagHost = handleRow && handleRow !== group ? handleRow : group;
+      if (tag.parentElement && tag.parentElement !== tagHost)
+        tag.parentElement.classList.remove("xra-person-handle-row");
+      if (tagHost !== group) tagHost.classList.add("xra-person-handle-row");
+      if (tag.parentElement !== tagHost) tagHost.append(tag);
+      const label = `· ${P.label(person)}`;
+      if (tag.textContent !== label) tag.textContent = label;
       tag.title = `Phong cách riêng @${handle} — bấm để sửa hoặc xoá`;
       tag.onclick = (event) => {
         event.preventDefault();
@@ -424,7 +435,7 @@
       update();
     }, 400);
   };
-  document.addEventListener("xra-theme-change", schedule);
+  document.addEventListener("assistant-theme-change", schedule);
   new MutationObserver(schedule).observe(document.documentElement, {
     childList: true,
     subtree: true,
@@ -450,7 +461,7 @@
     for (const key of keys) if (changes[key]) settings[key] = changes[key].newValue;
     schedule();
     if (["styleId", "stylePrompt", "personalReplyStyles"].some((key) => changes[key]))
-      document.dispatchEvent(new CustomEvent("xra-style-changed"));
+      document.dispatchEvent(new CustomEvent("assistant-style-changed"));
   });
   chrome.storage.local
     .get([

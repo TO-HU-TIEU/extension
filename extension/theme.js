@@ -33,7 +33,6 @@
     mode = normalize(next);
     const colors = palette[mode];
     if (extensionPage) root.dataset.theme = mode;
-    root.dataset.xraTheme = mode;
     for (const [name, value] of Object.entries({
       "--ui-bg": colors.bg,
       "--ui-surface": colors.surface,
@@ -60,7 +59,7 @@
       toggle.setAttribute("aria-label", toggle.title);
       toggle.dataset.themeMode = mode;
     }
-    document.dispatchEvent(new CustomEvent("xra-theme-change", { detail: { mode } }));
+    document.dispatchEvent(new CustomEvent("assistant-theme-change", { detail: { mode } }));
   }
   async function set(next) {
     const value = normalize(next);
