@@ -338,6 +338,20 @@
       text = postText(article, node),
       author = location.pathname.match(/^\/([^/]+)\/status/)?.[1];
     if (!id || !article) return null;
+    const normalizeHandle = (value) =>
+      String(value || "")
+        .trim()
+        .replace(/^@/u, "")
+        .replace(/^\/+|\/+$/gu, "")
+        .split(/[/?#]/u)[0]
+        .toLowerCase();
+    const profileNav =
+      document.querySelector('[data-testid="AppTabBar_Profile_Link"]') ||
+      [...document.querySelectorAll('a[href^="/"]')].find((link) => {
+        const label = String(link.innerText || link.textContent || "").trim();
+        return label === "Hồ sơ" || link.getAttribute("aria-label") === "Hồ sơ";
+      });
+    const viewerHandle = normalizeHandle(profileNav?.getAttribute("href"));
     const ownMedia = mediaFor(article),
       embedded = embeddedContext(article).embedded,
       articles = [...document.querySelectorAll('main article[data-testid="tweet"]')],
@@ -364,6 +378,17 @@
         };
       })
       .filter((t) => t.text);
+    const targetAuthor = normalizeHandle(author),
+      rootAuthor = normalizeHandle(turns[0]?.author || author),
+      rootIsViewer = !!viewerHandle && rootAuthor === viewerHandle,
+      targetKind = turns.length ? "comment" : "post",
+      replyContext = turns.length
+        ? rootIsViewer
+          ? "reply_to_comment_on_own_post"
+          : "reply_to_comment_on_other_post"
+        : rootIsViewer
+          ? "reply_to_own_post"
+          : "reply_to_other_user_post";
     if (
       !text &&
       !ownMedia.mediaCount &&
@@ -379,8 +404,13 @@
       text,
       context: JSON.stringify({
         order: "oldest_to_newest",
-        target_author: author,
-        target_turn: { author, text },
+        target_author: targetAuthor,
+        viewer_handle: viewerHandle,
+        root_author: rootAuthor,
+        root_is_viewer: rootIsViewer,
+        target_kind: targetKind,
+        reply_context: replyContext,
+        target_turn: { author: targetAuthor, text },
         instruction: text
           ? "Reply directly to target_text, which is the exact latest comment/post being answered. If it is a comment, answer its claim or tone first; use the nearest ancestor/root post only as background to resolve references. Do not reply to the root post instead of the target comment, and do not repeat the root caption."
           : "The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview or visible ancestor/root posts as the context being reacted to.",
@@ -559,7 +589,7 @@
       const provider = s.provider || "gemini",
         model =
           provider === "gemini"
-            ? s.geminiModel || "gemini-3.1-flash-lite"
+            ? s.geminiModel || "gemini-3.5-flash-lite"
             : provider === "deepseek"
               ? s.deepseekModel || "deepseek-flash"
               : s.apiModel || "gpt-4.1-mini",
@@ -885,6 +915,26 @@
     },
     true,
   );
+  // X opens a post as a history-backed status route. Keep Escape scoped to
+  // that route so it always returns to the page the user came from, even when
+  // focus is still inside X's reply composer or another input on the post.
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (
+        !event.isTrusted ||
+        event.repeat ||
+        event.key !== "Escape" ||
+        event.isComposing ||
+        !/\/status\/\d+(?:\/|$)/i.test(location.pathname)
+      )
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      window.history.back();
+    },
+    true,
+  );
   document.addEventListener(
     "click",
     (event) => {
@@ -991,7 +1041,7 @@
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message?.type === "panelState") {
         const b = document.querySelector(".xra-assistant-fab");
-        if (b) b.hidden = !!message.open;
+        if (b) b.hidden = !!message.open || b.dataset.edgeHidden === "true";
         sendResponse({ ok: true });
         return false;
       }
@@ -1049,6 +1099,22 @@
       startY = 0,
       startLeft = 0,
       startTop = 0;
+    const EDGE_HIDE_RATIO = 0.08;
+    const shouldHideAtEdge = () => {
+      const r = button.getBoundingClientRect(),
+        width = Math.max(1, r.width),
+        height = Math.max(1, r.height),
+        clippedLeft = Math.max(0, -r.left),
+        clippedRight = Math.max(0, r.right - window.innerWidth),
+        clippedTop = Math.max(0, -r.top),
+        clippedBottom = Math.max(0, r.bottom - window.innerHeight);
+      return [
+        clippedLeft / width,
+        clippedRight / width,
+        clippedTop / height,
+        clippedBottom / height,
+      ].some((ratio) => ratio >= EDGE_HIDE_RATIO);
+    };
     const clamp = () => {
       const r = button.getBoundingClientRect();
       button.style.left = Math.max(4, Math.min(window.innerWidth - r.width - 4, r.left)) + "px";
@@ -1083,7 +1149,12 @@
       dragging = false;
       button.releasePointerCapture?.(event.pointerId);
       if (moved) {
-        clamp();
+        if (shouldHideAtEdge()) {
+          button.dataset.edgeHidden = "true";
+          button.hidden = true;
+        } else {
+          clamp();
+        }
         event.preventDefault();
       }
     });
@@ -1533,6 +1604,13 @@
       try {
         const post = await readOriginalPost();
         if (!post) throw new Error("Chưa đọc được bài viết gốc.");
+        const draftText =
+          manuallyEditedEditors.has(e) && !modelFilledEditors.has(e)
+            ? String(e.innerText || e.textContent || "")
+                .replace(/\s+/gu, " ")
+                .trim()
+                .slice(0, 500)
+            : "";
         const s = await safeGet([
           "provider",
           "apiKey",
@@ -1559,7 +1637,13 @@
           throw new Error("Mở side panel và nhập API key.");
         if (provider === "chatgpt" && !s.chatgptModel)
           throw new Error("Kết nối ChatGPT và chọn model.");
-        if (provider === "gemini" && !s.geminiKey)
+        const hasGeminiKey =
+          !!String(s.geminiKey || "").trim() ||
+          (Array.isArray(s.geminiKeys) &&
+            s.geminiKeys.some((item) =>
+              String(typeof item === "string" ? item : item?.key || "").trim(),
+            ));
+        if (provider === "gemini" && !hasGeminiKey)
           throw new Error("Nhập Gemini API key trong cài đặt.");
         if (provider === "deepseek" && !s.deepseekKey)
           throw new Error("Nhập DeepSeek API key trong cài đặt.");
@@ -1567,7 +1651,7 @@
           provider === "chatgpt"
             ? s.chatgptModel
             : provider === "gemini"
-              ? s.geminiModel || "gemini-3.1-flash-lite"
+              ? s.geminiModel || "gemini-3.5-flash-lite"
               : provider === "deepseek"
                 ? s.deepseekModel || "deepseek-flash"
                 : s.apiModel || "gpt-4.1-mini";
@@ -1592,9 +1676,15 @@
           geminiKeys: s.geminiKeys,
           deepseekKey: s.deepseekKey,
           model,
+          // Automatic mode must use the exact same provider path as a manual
+          // click.  The loop owns navigation/waiting only; it must not opt the
+          // request into the auto-only model/key fallback branch, which can
+          // multiply requests and turn one transient 429/503 into a storm.
+          autoFlow: false,
           force,
           post: {
             ...post,
+            draft_text: draftText,
             feedbackExtraContext: String(s.feedbackExtraContext || "").slice(0, 500),
             style:
               selectedStylePrompt +
@@ -1840,7 +1930,7 @@
       const provider = s.provider || "gemini",
         model =
           provider === "gemini"
-            ? s.geminiModel || "gemini-3.1-flash-lite"
+            ? s.geminiModel || "gemini-3.5-flash-lite"
             : provider === "deepseek"
               ? s.deepseekModel || "deepseek-flash"
               : s.apiModel || "gpt-4.1-mini",

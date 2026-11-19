@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import { createExtensionUpdater } from "./extension-updater.mjs";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createAuth } from "./auth.mjs";
+import { createTelegramControl } from "./telegram-control.mjs";
+import { createPowerShellRunner } from "./powershell-runner.mjs";
 import {
   validatePost,
   buildRequest,
@@ -29,6 +31,9 @@ if (
 }
 const auth = await createAuth(config.port);
 const extensionUpdater = createExtensionUpdater(config);
+const powerShellRunner = createPowerShellRunner({
+  scriptPath: config.telegramPowerShellScriptPath,
+});
 const cache = new Map();
 let busy = false;
 const hash = (value) => createHash("sha256").update(value).digest();
@@ -39,6 +44,92 @@ const json = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 const identityFile = new URL("./.data/device-identity.json", import.meta.url);
+const telegramAllowlistFile = new URL("./.data/telegram-allowlist.json", import.meta.url);
+const controlClients = new Map();
+const controlCommands = new Map();
+// A browser profile that stops polling must not remain visible as a live
+// profile in Telegram.  The extension polls every 15 seconds, so this leaves
+// enough room for a suspended background worker without keeping stale clients.
+const CONTROL_CLIENT_TTL_MS = 60_000;
+let telegramAllowedChatIds = new Set(
+  (Array.isArray(config.telegramAllowedChatIds) ? config.telegramAllowedChatIds : [])
+    .map((value) => String(value).trim())
+    .filter(Boolean),
+);
+try {
+  const stored = JSON.parse(await readFile(telegramAllowlistFile, "utf8"));
+  for (const value of Array.isArray(stored) ? stored : [])
+    telegramAllowedChatIds.add(String(value));
+} catch {
+  /* First run. */
+}
+async function persistTelegramAllowlist() {
+  await mkdir(new URL("./.data/", import.meta.url), { recursive: true });
+  await writeFile(telegramAllowlistFile, JSON.stringify([...telegramAllowedChatIds]), {
+    mode: 0o600,
+  });
+}
+const controlStatus = () => {
+  const now = Date.now();
+  return [...controlClients.values()]
+    .filter((item) => now - Number(item.lastSeen || 0) <= CONTROL_CLIENT_TTL_MS)
+    .filter((item) => item.connected !== false)
+    .map((item) => ({
+      clientId: item.clientId,
+      label: item.label || item.clientId,
+      accountName: item.accountName || "",
+      accountHandle: item.accountHandle || "",
+      enabled: !!item.enabled,
+      running: !!item.running,
+      paused: !!item.paused,
+      statusReason: item.statusReason || "",
+      configured: !!item.configured,
+      completed: Number(item.completed) || 0,
+      skipped: Number(item.skipped) || 0,
+      rate: Number(item.rate) || 0,
+      elapsedMinutes: Number(item.elapsedMinutes) || 0,
+      dailyCount: Number(item.dailyCount) || 0,
+      dailyLimit: Number(item.dailyLimit) || 0,
+      lastSeen: item.lastSeen,
+    }));
+};
+const enqueueControlCommand = ({
+  enabled,
+  action = enabled ? "on" : "off",
+  target = "all",
+  chatId,
+}) => {
+  const commandId = randomUUID();
+  const liveClientIds = new Set(controlStatus().map((item) => item.clientId));
+  const pending = new Set(
+    target === "all" ? [...liveClientIds] : liveClientIds.has(target) ? [target] : [],
+  );
+  if (!pending.size) return null;
+  controlCommands.set(commandId, {
+    commandId,
+    enabled: !!enabled,
+    action: String(action || (enabled ? "on" : "off")),
+    target,
+    chatId: String(chatId || ""),
+    pending,
+    createdAt: Date.now(),
+  });
+  return commandId;
+};
+const telegram = createTelegramControl({
+  token: config.telegramBotToken,
+  allowedChatIds: [...telegramAllowedChatIds],
+  pairingCode: config.telegramPairingCode,
+  pollMs: config.telegramPollMs,
+  getStatus: async () => controlStatus(),
+  enqueueCommand: async (command) => enqueueControlCommand(command),
+  runPowerShellScript: async (action) =>
+    action === "stop" ? powerShellRunner.stop() : powerShellRunner.start(),
+  registerChat: async (chatId) => {
+    telegramAllowedChatIds.add(String(chatId));
+    await persistTelegramAllowlist();
+  },
+});
 async function getDeviceIdentity() {
   try {
     return JSON.parse(await readFile(identityFile, "utf8"));
@@ -145,6 +236,93 @@ const server = http.createServer(async (req, res) => {
   if (!matchesToken(req.headers["x-local-token"]))
     return json(res, 401, {
       error: "Local token không khớp. Chạy setup hoặc kiểm tra hai file config.local.",
+    });
+  if (req.method === "POST" && url.pathname === "/control/poll") {
+    const data = await readJson(req);
+    const clientId = String(data.clientId || "").trim();
+    if (!clientId || clientId.length > 160)
+      return json(res, 400, { error: "clientId không hợp lệ." });
+    controlClients.set(clientId, {
+      clientId,
+      connected: data.connected !== false,
+      label: String(data.label || clientId).slice(0, 120),
+      accountName: String(data.accountName || "").slice(0, 100),
+      accountHandle: String(data.accountHandle || "").slice(0, 40),
+      enabled: !!data.enabled,
+      running: !!data.running,
+      paused: !!data.paused,
+      statusReason: String(data.statusReason || "").slice(0, 240),
+      configured: !!data.configured,
+      completed: Number(data.completed) || 0,
+      skipped: Number(data.skipped) || 0,
+      rate: Number(data.rate) || 0,
+      elapsedMinutes: Number(data.elapsedMinutes) || 0,
+      dailyCount: Number(data.dailyCount) || 0,
+      dailyLimit: Number(data.dailyLimit) || 0,
+      lastSeen: Date.now(),
+    });
+    const commands = [];
+    for (const [commandId, command] of controlCommands) {
+      if (!command.pending.has(clientId)) continue;
+      command.pending.delete(clientId);
+      commands.push({
+        commandId,
+        enabled: command.enabled,
+        action: command.action,
+        target: command.target,
+      });
+      // Keep the command metadata until the extension acknowledges it so the
+      // originating Telegram chat receives a confirmation.
+    }
+    return json(res, 200, { commands, clients: controlStatus() });
+  }
+  if (req.method === "POST" && url.pathname === "/control/ack") {
+    const data = await readJson(req);
+    const command = controlCommands.get(String(data.commandId || ""));
+    const client = controlClients.get(String(data.clientId || ""));
+    if (client) {
+      if (data.action === "reloadApi") {
+        // Reloading API keys must not change the profile's automation state.
+      } else if (data.action === "pause" || data.action === "resume") {
+        client.enabled = true;
+        client.paused = !!data.paused;
+      } else client.enabled = !!data.enabled;
+      if ("configured" in data) client.configured = !!data.configured;
+      if ("running" in data) client.running = !!data.running;
+      if ("statusReason" in data)
+        client.statusReason = String(data.statusReason || "").slice(0, 240);
+      if ("completed" in data) client.completed = Number(data.completed) || 0;
+      if ("skipped" in data) client.skipped = Number(data.skipped) || 0;
+      if ("rate" in data) client.rate = Number(data.rate) || 0;
+      if ("elapsedMinutes" in data) client.elapsedMinutes = Number(data.elapsedMinutes) || 0;
+      if ("dailyCount" in data) client.dailyCount = Number(data.dailyCount) || 0;
+      if ("dailyLimit" in data) client.dailyLimit = Number(data.dailyLimit) || 0;
+      client.lastSeen = Date.now();
+    }
+    if (command && !command.pending.size && telegram.enabled && command.chatId) {
+      const stoppedAfterEnable =
+        (data.action === "on" || data.action === "resume") && data.running === false;
+      const resultText = stoppedAfterEnable
+        ? `Đã nhận lệnh bật nhưng ${client?.label || data.clientId || "profile"} đã dừng${
+            data.statusReason
+              ? `: ${String(data.statusReason).replace(/\s+/gu, " ").slice(0, 180)}`
+              : "."
+          }`
+        : data.action === "reloadApi"
+          ? `♻️ Đã reload toàn bộ API trên ${client?.label || data.clientId || "profile"}.`
+          : `${data.action === "pause" ? "Đã tạm dừng" : data.action === "resume" ? "Đã tiếp tục" : data.enabled ? "Đã bật" : "Đã tắt"} ${client?.label || data.clientId || "profile"}.`;
+      await telegram.send(command.chatId, resultText).catch(() => {});
+      await telegram.refreshStatus(command.chatId).catch(() => {});
+      controlCommands.delete(command.commandId);
+    }
+    return json(res, 200, { ok: true });
+  }
+  if (req.method === "GET" && url.pathname === "/control/status")
+    return json(res, 200, { telegram: telegram.enabled, clients: controlStatus() });
+  if (req.method === "GET" && url.pathname === "/control/pairing")
+    return json(res, 200, {
+      enabled: telegram.enabled,
+      pairingCode: telegram.enabled ? String(config.telegramPairingCode || "") : "",
     });
   if (req.method === "GET" && url.pathname === "/device-identity")
     return json(res, 200, await getDeviceIdentity());
@@ -299,4 +477,9 @@ server.listen(config.port, "127.0.0.1", () => {
   console.log(`X Reply Assistant: http://127.0.0.1:${config.port}`);
   console.log("Mở X, bấm icon extension để mở bảng gợi ý. Ctrl+C để dừng.");
   console.log(`Thông tin đăng nhập local: ${auth.storagePath} (không chia sẻ thư mục này).`);
+  if (telegram.enabled) {
+    telegram.start();
+    console.log("Telegram control: đã bật polling cục bộ.");
+  }
 });
+server.on("close", () => telegram.stop());

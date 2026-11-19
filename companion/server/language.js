@@ -3,9 +3,12 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   const prose = String(text)
     .normalize("NFC")
     .replace(/https?:\/\/\S+|[#＃@][\p{L}\p{M}\p{N}_]+/gu, " ");
-  const count = (pattern) => (prose.match(pattern) || []).length;
+  // “GM/Gm” is a greeting abbreviation, not meaningful English evidence
+  // when Vietnamese words follow it (for example, “Gm em nha”).
+  const scoredProse = prose.replace(/\b(?:gm)\b/giu, " ");
+  const count = (pattern) => (scoredProse.match(pattern) || []).length;
   const latin = count(/\p{Script=Latin}/gu);
-  const words = prose.toLocaleLowerCase().match(/\p{Script=Latin}+/gu) || [];
+  const words = scoredProse.toLocaleLowerCase().match(/\p{Script=Latin}+/gu) || [];
   const viWords = new Set([
     "không",
     "có",
@@ -25,6 +28,11 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
     "người",
     "anh",
     "em",
+    "nha",
+    "nhe",
+    "ơi",
+    "oi",
+    "nè",
     "mọi",
     "rất",
     "thật",
@@ -97,7 +105,7 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   if (
     latin &&
     (/[ăđơưảạằẳẵắặầẩẫấậẻẽẹềểễếệỉĩịỏọồổỗốộờởỡớợủụừửữứựỷỹỵ]/i.test(prose) ||
-      (scored >= 3 && viScore / scored >= 0.6))
+      (scored >= 2 && viScore / scored >= 0.6))
   )
     return "vi";
   if (latin && scored >= 2 && enScore / scored >= 0.6) return "en";

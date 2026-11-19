@@ -1261,6 +1261,24 @@ input#models {
   margin: 0 0 4px;
   color: var(--muted);
 }
+.telegram-pairing {
+  gap: 6px;
+  padding: 10px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+.telegram-pairing .connection-row {
+  align-items: center;
+}
+.telegram-pairing input {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+.telegram-pairing .hint {
+  margin: 0 0 4px;
+  font-size: 10px;
+}
 .collapse-icon {
   display: block;
   width: 8px;
@@ -2551,8 +2569,7 @@ hr {
 
 /* Reference-derived platform tokens */
 :root {
-  --ui-font:
-    Roboto, "Segoe UI", Arial, sans-serif;
+  --ui-font: Roboto, "Segoe UI", Arial, sans-serif;
   --ui-font-size: 15px;
   --ui-line-height: 20px;
   --ui-weight-regular: 400;

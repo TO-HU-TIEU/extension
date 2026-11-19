@@ -11,42 +11,44 @@
   </head>
   <body>
     <div id="panelChrome" class="panel-chrome">
-    <header>
-      <img class="logo assistant-mark" src="assets/logo.svg" alt="Assistant" />
-      <hgroup class="panel-copy">
-        <h1>Assistant <small class="app-version">1.5.23</small></h1>
-        <p id="connection"></p>
-      </hgroup>
-      <button
-        id="themeToggle"
-        class="icon ghost theme-button"
-        data-theme-toggle
-        title="Chuyển sang giao diện sáng"
-        aria-label="Chuyển sang giao diện sáng"
-        ><span data-icon="light" aria-hidden="true"></span></button
-      ><button
-        id="settingsToggle"
-        class="icon ghost settings-button"
-        title="Cài đặt chung và hệ thống"
-        aria-label="Cài đặt chung và hệ thống"
-        ><span data-icon="setting" aria-hidden="true"></span
-      ></button>
-    </header>
-    <nav class="module-nav">
-      <button id="replyModule" class="active">
-        <span class="panel-nav-icon" data-icon="reply" aria-hidden="true"></span
-        ><span class="panel-nav-label">Trả lời</span></button
-      ><button id="contentModule">
-        <span class="panel-nav-icon" data-icon="post" aria-hidden="true"></span
-        ><span class="panel-nav-label">Content</span></button
-      ><button id="followModule">
-        <span class="panel-nav-icon" data-icon="follow" aria-hidden="true"></span
-        ><span class="panel-nav-label">Follow</span></button
-      ><button id="feedbackModule">
-        <span class="panel-nav-icon" data-icon="message-square" aria-hidden="true"></span
-        ><span class="panel-nav-label">Phản hồi</span>
-      </button>
-    </nav>
+      <header>
+        <img class="logo assistant-mark" src="assets/logo.svg" alt="Assistant" />
+        <hgroup class="panel-copy">
+          <h1>Assistant <small class="app-version">1.5.31</small></h1>
+          <p id="connection"></p>
+        </hgroup>
+        <button
+          id="themeToggle"
+          class="icon ghost theme-button"
+          data-theme-toggle
+          title="Chuyển sang giao diện sáng"
+          aria-label="Chuyển sang giao diện sáng"
+        >
+          <span data-icon="light" aria-hidden="true"></span></button
+        ><button
+          id="settingsToggle"
+          class="icon ghost settings-button"
+          title="Cài đặt chung và hệ thống"
+          aria-label="Cài đặt chung và hệ thống"
+        >
+          <span data-icon="setting" aria-hidden="true"></span>
+        </button>
+      </header>
+      <nav class="module-nav">
+        <button id="replyModule" class="active">
+          <span class="panel-nav-icon" data-icon="reply" aria-hidden="true"></span
+          ><span class="panel-nav-label">Trả lời</span></button
+        ><button id="contentModule">
+          <span class="panel-nav-icon" data-icon="post" aria-hidden="true"></span
+          ><span class="panel-nav-label">Content</span></button
+        ><button id="followModule">
+          <span class="panel-nav-icon" data-icon="follow" aria-hidden="true"></span
+          ><span class="panel-nav-label">Follow</span></button
+        ><button id="feedbackModule">
+          <span class="panel-nav-icon" data-icon="message-square" aria-hidden="true"></span
+          ><span class="panel-nav-label">Phản hồi</span>
+        </button>
+      </nav>
     </div>
     <main id="xWorkspace">
       <section class="panel-card x-mode-card reply-live-preview">
@@ -125,9 +127,23 @@
         <div class="style-length-row">
           <label for="styleMinWords">Độ dài gợi ý:</label>
           <span class="style-length-fields">
-            <input id="styleMinWords" type="number" min="1" max="100" value="6" aria-label="Số từ tối thiểu" />
+            <input
+              id="styleMinWords"
+              type="number"
+              min="1"
+              max="100"
+              value="6"
+              aria-label="Số từ tối thiểu"
+            />
             <span>đến</span>
-            <input id="styleMaxWords" type="number" min="1" max="100" value="10" aria-label="Số từ tối đa" />
+            <input
+              id="styleMaxWords"
+              type="number"
+              min="1"
+              max="100"
+              value="10"
+              aria-label="Số từ tối đa"
+            />
             <span>từ</span>
           </span>
         </div>
@@ -159,7 +175,13 @@
             <label for="style">Phong cách</label>
             <button id="styleButton" class="style-open wide" type="button"></button>
             <div class="style-picker-actions">
-              <button id="editConfig" class="icon ghost" type="button" title="Chỉnh sửa" aria-label="Chỉnh sửa"></button>
+              <button
+                id="editConfig"
+                class="icon ghost"
+                type="button"
+                title="Chỉnh sửa"
+                aria-label="Chỉnh sửa"
+              ></button>
               <button
                 id="deleteStyle"
                 class="icon ghost danger-icon"
@@ -335,7 +357,9 @@
           </label>
         </div>
         <div id="autoFollowStatus" class="hint" role="status">Đang tắt</div>
-        <button id="autoFollowStop" class="danger auto-follow-stop" type="button" hidden>Dừng tự động follow</button>
+        <button id="autoFollowStop" class="danger auto-follow-stop" type="button" hidden>
+          Dừng tự động follow
+        </button>
         <details class="auto-follow-log-details">
           <summary>Nhật ký lượt follow</summary>
           <div id="autoFollowLog" class="auto-follow-log"></div>
@@ -411,7 +435,8 @@
               <option value="newest">Mới nhất</option>
               <option value="oldest">Cũ nhất</option>
               <option value="name">Tên A–Z</option>
-            </select></label>
+            </select></label
+          >
           ><button
             class="follow-help"
             title="Các bộ lọc có thể bật đồng thời; danh sách chỉ giữ tài khoản phù hợp tất cả tiêu chí."
@@ -587,19 +612,36 @@
               Tệp xuất có thể chứa API key. Xoá tệp sau khi nhập xong.
             </p>
           </div>
+          <div class="telegram-pairing panel-stack">
+            <div class="label-line panel-row">
+              <label for="telegramPairingCode">Ghép Telegram với thiết bị</label>
+            </div>
+            <div class="connection-row panel-row">
+              <input
+                id="telegramPairingCode"
+                type="password"
+                readonly
+                autocomplete="off"
+                placeholder="Bấm Lấy mã để hiển thị"
+              />
+              <button id="getTelegramPairingCode" class="secondary" type="button">Lấy mã</button>
+              <button id="copyTelegramPairingCode" class="secondary" type="button" hidden>
+                Sao chép
+              </button>
+            </div>
+            <p id="telegramPairingStatus" class="hint" role="status" aria-live="polite">
+              Mã chỉ đọc từ companion trên máy này và không được lưu vào cấu hình extension.
+            </p>
+          </div>
           <div class="provider">
             <button id="geminiProvider" class="active">
-              <strong class="provider-name">Gemini</strong
-              ><small>Free tier</small></button
+              <strong class="provider-name">Gemini</strong><small>Free tier</small></button
             ><button id="deepseekProvider">
-              <strong class="provider-name">DeepSeek</strong
-              ><small>API</small></button
+              <strong class="provider-name">DeepSeek</strong><small>API</small></button
             ><button id="chatgptProvider">
-              <strong class="provider-name">ChatGPT</strong
-              ><small>Account</small></button
+              <strong class="provider-name">ChatGPT</strong><small>Account</small></button
             ><button id="apiProvider">
-              <strong class="provider-name">OpenAI</strong
-              ><small>API</small>
+              <strong class="provider-name">OpenAI</strong><small>API</small>
             </button>
           </div>
           <div id="chatgptPane">
@@ -651,6 +693,14 @@
                     type="button"
                     title="Thêm key"
                     aria-label="Thêm key"
+                  ></button
+                  ><button
+                    id="reloadGeminiKeys"
+                    class="icon ghost"
+                    type="button"
+                    title="Bật lại toàn bộ API key"
+                    aria-label="Bật lại toàn bộ API key"
+                    data-icon="refresh"
                   ></button
                 ></span>
               </div>

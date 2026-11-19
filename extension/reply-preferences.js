@@ -38,12 +38,14 @@
       "contentConfig",
     ],
     persistentPageKeys = [
+      "assistantAutoMinGapEnabled",
       "assistantAutoMinGapValue",
       "assistantAutoMinGapUnit",
       "assistantAutoDailyReplyLimit",
       "assistantAutoSpeed",
       "assistantAutoRestEnabled",
       "assistantAutoRestEveryMinutes",
+      "assistantAutoConsecutiveFailureLimit",
       "assistantAutoDashboardPositionV1",
       "assistantAutoSetupCollapsed",
     ],
@@ -180,10 +182,22 @@
     }
   };
   const catalog = (s) => {
-    const source = s.replyStyleCatalog?.length
-      ? s.replyStyleCatalog
-      : [...(s.remotePresetCache?.styles || defaults), ...(s.customStyles || [])];
-    return source
+    const source = [
+      ...(s.remotePresetCache?.styles || defaults),
+      ...(Array.isArray(s.replyStyleCatalog) ? s.replyStyleCatalog : []),
+      ...(Array.isArray(s.customStyles) ? s.customStyles : []),
+    ];
+    const byId = new Map();
+    for (const item of source) {
+      if (
+        item &&
+        typeof item.id === "string" &&
+        typeof item.name === "string" &&
+        typeof item.prompt === "string"
+      )
+        byId.set(item.id, item);
+    }
+    return [...byId.values()]
       .filter(
         (x) =>
           x &&
@@ -200,12 +214,19 @@
   const personFor = (s, value) => {
     const key = handle(value),
       map = s.personalReplyStyles;
-    return map &&
+    const person =
+      map &&
       Object.prototype.hasOwnProperty.call(map, key) &&
       map[key] &&
       typeof map[key] === "object"
-      ? map[key]
-      : null;
+        ? map[key]
+        : null;
+    if (!person) return null;
+    // styleId is the canonical assignment. The saved name/prompt are only a
+    // legacy fallback; refresh them from the current catalog so renaming a
+    // style immediately updates every account tag and its generated prompt.
+    const current = catalog(s).find((item) => item.id === person.styleId);
+    return current ? { ...person, name: current.name, prompt: current.prompt } : person;
   };
   function classifyType(post = {}) {
     const text = String(post.target_text || post.text || "").trim(),

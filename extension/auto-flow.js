@@ -6,6 +6,7 @@
       processed: [],
       skipped: [],
       isPaused: false,
+      lastStopReason: "",
       speed: 0,
       consecutiveFailures: 0,
       sessionFailures: 0,
@@ -118,6 +119,7 @@
   };
   let running = false,
     timer = 0,
+    dailyReplyResetTimer = 0,
     sessionStart = 0,
     activeRunElapsedMs = 0,
     activeRunSegmentStartedAt = 0;
@@ -208,7 +210,45 @@
         .querySelector('[data-testid^="UserAvatar-Container-"]')
         ?.getAttribute("data-testid")
         ?.replace("UserAvatar-Container-", "")
-        .toLowerCase() || ""));
+        .toLowerCase() || ""),
+    (ownIdentity = () => {
+      const normalizeHandle = (value) =>
+        String(value || "")
+          .trim()
+          .replace(/^@/u, "")
+          .replace(/^\/+|\/+$/gu, "")
+          .split(/[/?#]/u)[0]
+          .toLowerCase();
+      const profileNav =
+        document.querySelector('[data-testid="AppTabBar_Profile_Link"]') ||
+        [...document.querySelectorAll('a[href^="/"]')].find((link) => {
+          const label = String(link.innerText || link.textContent || "").trim();
+          return label === "Hồ sơ" || link.getAttribute("aria-label") === "Hồ sơ";
+        });
+      const profileHandle = normalizeHandle(profileNav?.getAttribute("href"));
+      const avatarHandle = normalizeHandle(own());
+      const handle = profileHandle || avatarHandle;
+      const accountButton = document.querySelector(
+        '[data-testid="SideNav_AccountSwitcher_Button"]',
+      );
+      const accountLines = String(
+        accountButton?.innerText || accountButton?.textContent || accountButton?.getAttribute("aria-label") || "",
+      )
+        .split(/\n+/u)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const displayName =
+        accountLines.find(
+          (value) =>
+            !value.startsWith("@") &&
+            value !== "Hồ sơ" &&
+            normalizeHandle(value) !== handle,
+        ) || "";
+      return {
+        displayName: displayName.slice(0, 100),
+        handle: handle ? `@${handle}` : "",
+      };
+    }));
   const excludedAuthorSet = async () => {
     try {
       const stored = await chrome.storage.local.get("autoReplyExcludedAuthors");
@@ -322,13 +362,29 @@
         0,
         Math.min(86_400, Number(localStorage.getItem("assistantAutoMinGapValue")) || 30),
       ),
-      unit = localStorage.getItem("assistantAutoMinGapUnit") === "minutes" ? "minutes" : "seconds";
-    memory.autoMinGapMs = value * (unit === "minutes" ? 60_000 : 1_000);
-    return { value, unit };
+      unit = localStorage.getItem("assistantAutoMinGapUnit") === "minutes" ? "minutes" : "seconds",
+      enabled = localStorage.getItem("assistantAutoMinGapEnabled") !== "false";
+    memory.autoMinGapEnabled = enabled;
+    memory.autoMinGapMs = enabled ? value * (unit === "minutes" ? 60_000 : 1_000) : 0;
+    return { enabled, value, unit };
   };
   const dailyReplyDayKey = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  };
+  const scheduleDailyReplyReset = () => {
+    clearTimeout(dailyReplyResetTimer);
+    const now = new Date(),
+      nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    dailyReplyResetTimer = setTimeout(() => {
+      const day = dailyReplyDayKey();
+      try {
+        localStorage.setItem("assistantAutoDailyReplyCount", JSON.stringify({ day, count: 0 }));
+      } catch {}
+      dashboard();
+      scheduleDailyReplyReset();
+    }, Math.max(1000, nextMidnight.getTime() - now.getTime() + 50));
   };
   const readDailyReplyLimit = () => {
     const value = Math.max(
@@ -341,7 +397,10 @@
   const readDailyReplyCount = () => {
     try {
       const saved = JSON.parse(localStorage.getItem("assistantAutoDailyReplyCount") || "null");
-      return saved?.day === dailyReplyDayKey() ? Math.max(0, Number(saved.count) || 0) : 0;
+      const day = dailyReplyDayKey();
+      if (saved?.day === day) return Math.max(0, Number(saved.count) || 0);
+      localStorage.setItem("assistantAutoDailyReplyCount", JSON.stringify({ day, count: 0 }));
+      return 0;
     } catch {
       return 0;
     }
@@ -381,16 +440,57 @@
     setting.append(document.createTextNode("Giới hạn trả lời/ngày:"), input);
     vietnameseFilter.after(setting);
   };
+  const readConsecutiveFailureLimit = () => {
+    const value = Math.max(
+      1,
+      Math.min(100, Number(localStorage.getItem("assistantAutoConsecutiveFailureLimit")) || 5),
+    );
+    memory.autoConsecutiveFailureLimit = value;
+    return value;
+  };
+  const configureConsecutiveFailureLimitControl = (box) => {
+    if (box.querySelector("[data-auto-failure-limit-control]")) return;
+    const restRow = box.querySelector("[data-auto-rest-row]"),
+      vietnameseFilter = box.querySelector("[data-auto-vietnamese]")?.closest("label");
+    if (!restRow || !vietnameseFilter) return;
+    const setting = document.createElement("label");
+    setting.dataset.autoFailureLimitControl = "";
+    setting.style.cssText =
+      "display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:6px 0;color:var(--xra-text,#edf1f5);font-size:13px";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = "100";
+    input.step = "1";
+    input.dataset.autoFailureLimit = "";
+    input.setAttribute("aria-label", "Số lỗi liên tiếp trước khi dừng");
+    input.style.cssText =
+      "width:60px;min-width:60px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const sync = () => {
+      const value = Math.max(1, Math.min(100, Number(input.value) || 5));
+      input.value = String(value);
+      memory.autoConsecutiveFailureLimit = value;
+      persistPageSetting("assistantAutoConsecutiveFailureLimit", value);
+    };
+    input.value = String(readConsecutiveFailureLimit());
+    input.addEventListener("change", sync);
+    setting.append(document.createTextNode("Dừng chạy khi lỗi"), input, document.createTextNode("lần liên tiếp"));
+    restRow.after(setting);
+  };
   const configureMinimumGapControl = (box) => {
     if (box.querySelector("[data-auto-min-gap-control]")) return;
     const speedInput = box.querySelector("[data-auto-speed]"),
       speedWrap = speedInput?.parentElement;
     if (!speedWrap) return;
-    const setting = document.createElement("div");
+    const setting = document.createElement("label");
     setting.dataset.autoMinGapControl = "";
     setting.style.cssText =
       "display:flex;align-items:center;flex-wrap:nowrap;gap:6px;padding:6px 0 3px;color:var(--xra-text,#edf1f5);font-size:13px";
-    const label = document.createElement("b");
+    const enabled = document.createElement("input");
+    enabled.type = "checkbox";
+    enabled.dataset.autoMinGapEnabled = "";
+    enabled.setAttribute("aria-label", "Bật thời gian giãn cách tối thiểu");
+    const label = document.createElement("span");
     label.textContent = "Thời gian giãn cách tối thiểu";
     label.style.cssText = "flex:0 0 auto;min-width:0;white-space:nowrap;font-weight:400";
     const input = document.createElement("input");
@@ -412,24 +512,34 @@
       const value = Math.max(0, Math.min(86_400, Number(input.value) || 0));
       input.value = String(value);
       const unit = select.value === "minutes" ? "minutes" : "seconds";
+      const isEnabled = enabled.checked;
       persistPageSetting("assistantAutoMinGapValue", value);
       persistPageSetting("assistantAutoMinGapUnit", unit);
-      memory.autoMinGapMs = value * (unit === "minutes" ? 60_000 : 1_000);
+      persistPageSetting("assistantAutoMinGapEnabled", isEnabled);
+      memory.autoMinGapEnabled = isEnabled;
+      memory.autoMinGapMs = isEnabled ? value * (unit === "minutes" ? 60_000 : 1_000) : 0;
+      setting.style.opacity = isEnabled ? "1" : "0.55";
+      input.disabled = !isEnabled;
+      select.disabled = !isEnabled;
     };
     const saved = readMinimumGapSetting();
+    enabled.checked = saved.enabled;
     input.value = String(saved.value);
     select.value = saved.unit;
+    enabled.addEventListener("change", sync);
     input.addEventListener("change", sync);
     select.addEventListener("change", sync);
-    setting.append(label, input, select);
+    setting.append(enabled, label, input, select);
+    sync();
     speedWrap.after(setting);
   };
   const reorderAutoSetupControls = (box) => {
     const controls = [
       box.querySelector("[data-auto-min-gap-control]"),
-      box.querySelector("[data-auto-daily-limit-control]"),
       box.querySelector("[data-auto-rest-row]"),
       box.querySelector("[data-auto-vietnamese]")?.closest("label"),
+      box.querySelector("[data-auto-daily-limit-control]"),
+      box.querySelector("[data-auto-failure-limit-control]"),
     ];
     const parent = controls.find(Boolean)?.parentElement;
     if (!parent || controls.some((node) => !node || node.parentElement !== parent)) return;
@@ -441,6 +551,22 @@
     } else {
       controls.forEach((node) => parent.append(node));
     }
+    const minGapRow = box.querySelector("[data-auto-min-gap-control]");
+    const minGapEnabled = minGapRow?.querySelector("[data-auto-min-gap-enabled]");
+    if (minGapRow && minGapEnabled) {
+      minGapRow.style.opacity = minGapEnabled.checked ? "1" : "0.55";
+      minGapRow.querySelector("[data-auto-min-gap-value]")?.toggleAttribute("disabled", !minGapEnabled.checked);
+      minGapRow.querySelector("[data-auto-min-gap-unit]")?.toggleAttribute("disabled", !minGapEnabled.checked);
+    }
+    const restRow = box.querySelector("[data-auto-rest-row]");
+    const restEnabled = restRow?.querySelector("[data-auto-rest]");
+    if (restRow && restEnabled) {
+      restRow.style.opacity = restEnabled.checked ? "1" : "0.55";
+      restRow.querySelector("[data-auto-rest-interval]")?.toggleAttribute("disabled", !restEnabled.checked);
+    }
+    const vietnameseRow = box.querySelector("[data-auto-vietnamese]")?.closest("label");
+    const vietnameseEnabled = vietnameseRow?.querySelector("[data-auto-vietnamese]");
+    if (vietnameseRow && vietnameseEnabled) vietnameseRow.style.opacity = vietnameseEnabled.checked ? "1" : "0.55";
   };
   const domHasOwnReply = (handle) => {
     if (!handle) return false;
@@ -454,6 +580,16 @@
           .includes(handle.toLowerCase()),
       );
   };
+  const isProviderTransportError = (value) =>
+    /failed to fetch|network error|network request failed|timed out|signal timed out|aborted/iu.test(
+      String(value || ""),
+    );
+  const isProviderCredentialError = (value) =>
+    /api key không hợp lệ|api key not valid|invalid api key|unauthorized|forbidden|credential|nhập .*api key/iu.test(
+      String(value || ""),
+    );
+  const isProviderQuotaError = (value) =>
+    /chạm hạn mức|quota|rate.?limit|resource_exhausted|http\s*429/iu.test(String(value || ""));
   async function submitSelectedReply(expectedText, handle) {
     const normalize = (value) =>
       String(value || "")
@@ -554,7 +690,8 @@
   function dashboard() {
     const p = read(processedKey),
       s = read(skippedKey),
-      mins = Math.max(1, Math.floor((Date.now() - sessionStart) / 60000)),
+      elapsedMs = Math.max(1_000, Date.now() - (Number(sessionStart) || Date.now())),
+      mins = elapsedMs / 60_000,
       d = new Date(sessionStart),
       stamp = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`,
       title = `[DANH SÁCH] Hoàn thành: ${p.length} | Bỏ qua: ${s.length} | Bắt đầu: ${stamp} | Trung bình: ${(p.length / mins).toFixed(2)} trả lời/phút`;
@@ -716,6 +853,17 @@
     memory.speed = Number(input.value);
     const output = box.querySelector("[data-auto-speed-value]");
     if (output) output.textContent = String(memory.speed);
+    if (input.dataset.autoSpeedBound !== "true") {
+      input.dataset.autoSpeedBound = "true";
+      input.addEventListener("input", (event) => {
+        const value = Math.max(-5, Math.min(5, Number(event.target.value) || 0));
+        event.target.value = String(value);
+        memory.speed = value;
+        persistPageSetting("assistantAutoSpeed", value);
+        const valueNode = box.querySelector("[data-auto-speed-value]");
+        if (valueNode) valueNode.textContent = String(value);
+      });
+    }
   }
   const AUTO_DASHBOARD_POSITION_KEY = "assistantAutoDashboardPositionV1";
   const AUTO_DASHBOARD_MIN_HEIGHT = 660;
@@ -750,6 +898,7 @@
       configureSpeedControl(box);
       configureMinimumGapControl(box);
       configureDailyReplyLimitControl(box);
+      configureConsecutiveFailureLimitControl(box);
       reorderAutoSetupControls(box);
       box.__autoSyncViewport?.();
       syncPauseButton();
@@ -849,6 +998,8 @@
         memory.autoRestEveryMinutes = everyMinutes;
         persistPageSetting("assistantAutoRestEnabled", enabled.checked);
         persistPageSetting("assistantAutoRestEveryMinutes", everyMinutes);
+        restRow.style.opacity = enabled.checked ? "1" : "0.55";
+        interval.disabled = !enabled.checked;
         if (!enabled.checked && memory.isAutoResting) {
           memory.isAutoResting = false;
           memory.autoRestUntil = 0;
@@ -862,12 +1013,21 @@
       memory.autoRestEveryMinutes = Number(interval.value);
       enabled.addEventListener("change", syncRestSettings);
       interval.addEventListener("change", syncRestSettings);
+      syncRestSettings();
+      const syncVietnameseFilter = () => {
+        vietnameseFilter.style.opacity = vietnameseFilter.querySelector("[data-auto-vietnamese]")?.checked
+          ? "1"
+          : "0.55";
+      };
+      vietnameseFilter.querySelector("[data-auto-vietnamese]")?.addEventListener("change", syncVietnameseFilter);
+      syncVietnameseFilter();
     }
     document.documentElement.appendChild(box);
     syncPauseButton();
     configureSpeedControl(box);
     configureMinimumGapControl(box);
     configureDailyReplyLimitControl(box);
+    configureConsecutiveFailureLimitControl(box);
     reorderAutoSetupControls(box);
     const tabBadge = document.createElement("span");
     memory.tabBadge ||= Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -1079,13 +1239,6 @@
       });
     };
     makeDraggable(box.querySelector("[data-auto-drag-handle]"));
-    const speedInput = box.querySelector("[data-auto-speed]");
-    speedInput.oninput = (event) => {
-      memory.speed = Number(event.target.value);
-      persistPageSetting("assistantAutoSpeed", memory.speed);
-      box.querySelector("[data-auto-speed-value]").value = memory.speed;
-      box.querySelector("[data-auto-speed-value]").textContent = memory.speed;
-    };
     box
       .querySelectorAll("[data-auto-pause], [data-auto-minimize], [data-auto-close]")
       .forEach((button) =>
@@ -1170,6 +1323,7 @@
     memory.autoRestUntil = 0;
     activeRunSegmentStartedAt = 0;
     globalThis.__assistantAutoFlowRunning = false;
+    memory.lastStopReason = String(reason || "Đã dừng").replace(/\s+/gu, " ").trim().slice(0, 240);
     document.dispatchEvent(new Event("assistant-auto-flow-state"));
     memory.runState = "stopped";
     clearTimeout(timer);
@@ -1199,8 +1353,13 @@
     }
     if (!(await waitIfPaused())) return;
     if (!location.href.includes("/home") && location.pathname !== "/") {
-      stop("Đã dừng: không còn ở trang Home");
-      return;
+      log("Không còn ở Home · đang tự chuyển về Home để tiếp tục");
+      const returnedHome = await returnHome();
+      if (!returnedHome) {
+        log("Chưa về được Home · sẽ thử lại sau");
+        if (running && !memory.isPaused) timer = setTimeout(loop, 1500);
+        return;
+      }
     }
     const p = read(processedKey),
       s = read(skippedKey),
@@ -1472,19 +1631,40 @@
           }
         }
         if (providerError) {
+          const transportFailure = isProviderTransportError(providerError);
           await coordinate("release", item);
           memory.consecutiveFailures += 1;
           memory.sessionFailures += 1;
-          s.push({ ...item, reason: providerError, skippedAt: Date.now() });
-          save(skippedKey, s);
+          // A transient provider/network failure is not a skipped post. Keep
+          // it eligible so the next loop can retry the same item.
+          if (!transportFailure) {
+            s.push({ ...item, reason: providerError, skippedAt: Date.now() });
+            save(skippedKey, s);
+          }
           log(
-            `Lỗi gợi ý (${memory.sessionFailures}/5 phiên, ${memory.consecutiveFailures}/3 liên tiếp):`,
+            `Lỗi gợi ý (${memory.sessionFailures}/5 phiên, ${memory.consecutiveFailures}/${readConsecutiveFailureLimit()} liên tiếp):`,
             providerError,
           );
           await returnHome();
           clearCurrentProcessing();
-          if (memory.sessionFailures > 5 || memory.consecutiveFailures >= 3) {
-            stop("Đã dừng: 3 bài liên tiếp không trả lời được");
+          const failureLimit = readConsecutiveFailureLimit();
+          if (memory.sessionFailures > 5 || memory.consecutiveFailures >= failureLimit) {
+            stop(`Đã dừng: ${failureLimit} bài liên tiếp không trả lời được`);
+            return;
+          }
+          if (transportFailure) {
+            log("kết nối API bị gián đoạn, không bỏ qua thêm bài");
+            log("Sẽ thử lại bài hiện tại sau một khoảng nghỉ");
+            await pauseSleep(Math.min(30_000, 5_000 * memory.consecutiveFailures));
+            dashboard();
+            break;
+          }
+          if (isProviderCredentialError(providerError)) {
+            stop("Đã dừng: các API key hiện tại không hợp lệ hoặc không còn quyền sử dụng");
+            return;
+          }
+          if (isProviderQuotaError(providerError)) {
+            stop("Đã dừng: các API key hiện tại đã chạm hạn mức");
             return;
           }
           dashboard();
@@ -1628,6 +1808,24 @@
       stop("Đã dừng do lỗi khi tiếp tục");
     });
   };
+  const currentFlowMetrics = () => {
+    const completed = read(processedKey),
+      skipped = read(skippedKey),
+      elapsedMinutes = Math.max(
+        1 / 60,
+        (Date.now() - (Number(sessionStart) || Date.now())) / 60_000,
+      ),
+      dailyLimit = readDailyReplyLimit(),
+      dailyCount = readDailyReplyCount();
+    return {
+      completed: completed.length,
+      skipped: skipped.length,
+      rate: completed.length / elapsedMinutes,
+      elapsedMinutes,
+      dailyCount,
+      dailyLimit,
+    };
+  };
   try {
     chrome.runtime.onMessage.addListener((m, _s, send) => {
       if (m?.type === "autoFlowIdentity") {
@@ -1637,9 +1835,21 @@
           enabled: !!memory.runState && memory.runState !== "idle",
           running,
           paused: !!memory.isPaused,
+          statusReason: String(memory.lastStopReason || "").slice(0, 240),
           account: own(),
+          accountProfile: ownIdentity(),
+          metrics: currentFlowMetrics(),
           url: location.href,
         });
+        return false;
+      }
+      if (m?.type === "autoFlowControl") {
+        if (m.action === "pause") setPaused(true);
+        else if (m.action === "resume") {
+          if (memory.isPaused && !running && memory.runState === "paused") resumeCurrentRun();
+          else setPaused(false);
+        } else if (m.action === "stop") stop("Đã dừng theo yêu cầu từ Telegram");
+        send({ ok: true, action: m.action });
         return false;
       }
       if (m?.type !== "autoReplyFlow") return;
@@ -1653,10 +1863,13 @@
           1,
           Math.min(1440, Number(localStorage.getItem("assistantAutoRestEveryMinutes")) || 30),
         );
+        readConsecutiveFailureLimit();
+        scheduleDailyReplyReset();
         memory.runId = createRunId();
         memory.runStartedAt = sessionStart;
         memory.runState = restoredPaused ? "paused" : "running";
         memory.isPaused = restoredPaused;
+        memory.lastStopReason = "";
         globalThis.__assistantAutoFlowPaused = restoredPaused;
         memory.isAutoResting = false;
         memory.autoRestUntil = 0;

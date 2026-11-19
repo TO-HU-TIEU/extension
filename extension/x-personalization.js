@@ -6,6 +6,12 @@
     styleMenu,
     timer;
   const P = globalThis.ReplyPreferences;
+  const PERSONAL_TONE_PROMPTS = {
+    male: "Xưng hô: Gọi 'em', xưng 'anh' hoặc 'a' ở những ngữ cảnh phù hợp (nếu cần)",
+    female: "Xưng hô: Gọi 'anh', xưng 'em' hoặc 'e' ở những ngữ cảnh phù hợp (nếu cần)",
+  };
+  const personalStylesMap = (value) =>
+    value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const save = async (patch) => {
     await chrome.storage.local.set(patch);
     settings = { ...settings, ...patch };
@@ -82,6 +88,34 @@
     extra.rows = 4;
     extra.value = person?.extraPrompt || "";
     extra.placeholder = "Ví dụ: Trao đổi thẳng thắn, tránh tiếng lóng.";
+    const preset = document.createElement("button");
+    preset.type = "button";
+    preset.className = "xra-person-preset";
+    const toneName = (tone) => (tone === "male" ? "Nam" : tone === "female" ? "Nữ" : "");
+    const selectedTone = () => {
+      const tone = settings.replyTone;
+      return PERSONAL_TONE_PROMPTS[tone] ? tone : "";
+    };
+    const refreshPreset = () => {
+      const tone = selectedTone();
+      preset.textContent = tone
+        ? `Chèn xưng hô theo tone ${toneName(tone)}`
+        : "Chèn xưng hô theo tone";
+      preset.disabled = !tone;
+      preset.title = tone
+        ? "Chèn câu xưng hô phù hợp với tone hiện tại"
+        : "Hãy chọn tone Nam hoặc Nữ trong phần thiết lập trước";
+    };
+    refreshPreset();
+    preset.onclick = () => {
+      const tone = selectedTone();
+      const text = tone && PERSONAL_TONE_PROMPTS[tone];
+      if (!text) return;
+      const current = extra.value.trim();
+      if (!current.includes(text)) extra.value = current ? `${current}\n${text}` : text;
+      extra.focus();
+      extra.selectionStart = extra.selectionEnd = extra.value.length;
+    };
     const row = document.createElement("div");
     row.className = "xra-dialog-actions";
     const error = document.createElement("small");
@@ -103,11 +137,12 @@
     };
     button("Lưu", async () => {
       const fresh = await chrome.storage.local.get("personalReplyStyles"),
+        people = personalStylesMap(fresh.personalReplyStyles),
         chosen = list.find((x) => x.id === select.value);
       if (!chosen) throw new Error("Hãy chọn phong cách.");
       await save({
         personalReplyStyles: {
-          ...fresh.personalReplyStyles,
+          ...people,
           [handle]: {
             styleId: chosen.id,
             name: chosen.name,
@@ -120,14 +155,18 @@
     if (person)
       button("Xoá phong cách riêng", async () => {
         const fresh = await chrome.storage.local.get("personalReplyStyles"),
-          people = { ...fresh.personalReplyStyles };
+          people = { ...personalStylesMap(fresh.personalReplyStyles) };
         delete people[handle];
         await save({ personalReplyStyles: people });
       });
     button("Huỷ", async () => {});
-    dialog.append(title, select, label, extra, error, row);
+    dialog.append(title, select, label, extra, preset, error, row);
     document.body.append(dialog);
     dialog.showModal();
+    setTimeout(() => {
+      extra.focus();
+      extra.selectionStart = extra.selectionEnd = extra.value.length;
+    }, 0);
   }
   document.addEventListener("contextmenu", (event) => {
     const handle = account(event.target);
@@ -271,11 +310,12 @@
         const handle = P.handle(location.href);
         if (P.person(settings, handle)) {
           const fresh = await chrome.storage.local.get("personalReplyStyles");
+          const people = personalStylesMap(fresh.personalReplyStyles);
           await save({
             personalReplyStyles: {
-              ...fresh.personalReplyStyles,
+              ...people,
               [handle]: {
-                ...fresh.personalReplyStyles[handle],
+                ...people[handle],
                 styleId: item.id,
                 name: item.name,
                 prompt: item.prompt,
@@ -403,6 +443,7 @@
       "remotePresetCache",
       "customStyles",
       "personalReplyStyles",
+      "replyTone",
       "fastReplyMode",
     ];
     if (!keys.some((key) => changes[key])) return;
@@ -419,6 +460,7 @@
       "remotePresetCache",
       "customStyles",
       "personalReplyStyles",
+      "replyTone",
       "fastReplyMode",
     ])
     .then((s) => {

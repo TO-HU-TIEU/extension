@@ -5,4 +5,11 @@ export default {
   openaiApiKey: "",
   apiModel: "gpt-4.1-mini",
   timeoutMs: 60000,
+  // Optional local Telegram control. Never commit the real token.
+  telegramBotToken: "",
+  telegramAllowedChatIds: [],
+  telegramPairingCode: "",
+  telegramPollMs: 2500,
+  // Optional allowlisted local script for Telegram /runps1 and /stopps1.
+  telegramPowerShellScriptPath: "",
 };

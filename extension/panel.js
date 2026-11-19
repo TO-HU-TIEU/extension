@@ -169,7 +169,13 @@ async function importSettingsBackup(file) {
   // Allow a raw object copied from chrome.storage.local.get(null) in the
   // legacy release. The allowlist below still prevents runtime/activation
   // data from being written into the new extension.
-  if (payload && typeof payload === "object" && !payload.schema && !own(payload, "local") && !own(payload, "page"))
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !payload.schema &&
+    !own(payload, "local") &&
+    !own(payload, "page")
+  )
     payload = { schema: SETTINGS_BACKUP_SCHEMA, version: SETTINGS_BACKUP_VERSION, local: payload };
   if (
     !payload ||
@@ -183,8 +189,7 @@ async function importSettingsBackup(file) {
     throw new Error("Tệp không phải cấu hình Assistant hợp lệ.");
   const keys = getSettingsBackupKeys();
   const localPatch = {};
-  for (const key of keys.local)
-    if (own(payload.local, key)) localPatch[key] = payload.local[key];
+  for (const key of keys.local) if (own(payload.local, key)) localPatch[key] = payload.local[key];
   if (Object.keys(localPatch).length) await chrome.storage.local.set(localPatch);
   for (const key of keys.page) {
     if (!own(payload.page, key)) continue;
@@ -213,20 +218,41 @@ async function safely(fn) {
     status(e.message, true);
   }
 }
+async function loadTelegramPairingCode() {
+  const response = await chrome.runtime.sendMessage({ type: "companionPairing" });
+  if (!response?.ok) throw new Error(response?.error || "Không đọc được mã ghép Telegram.");
+  const data = response.data || {};
+  if (!data.enabled) throw new Error("Telegram chưa được bật trong companion.");
+  if (!data.pairingCode) throw new Error("Chưa cấu hình mã ghép Telegram trên thiết bị.");
+  $("telegramPairingCode").value = data.pairingCode;
+  $("telegramPairingCode").type = "text";
+  $("copyTelegramPairingCode").hidden = false;
+  $("telegramPairingStatus").textContent =
+    "Gửi /pair <mã này> trong đúng chat Telegram muốn cấp quyền điều khiển.";
+}
+$("getTelegramPairingCode")?.addEventListener("click", () => safely(loadTelegramPairingCode));
+$("copyTelegramPairingCode")?.addEventListener("click", () =>
+  safely(async () => {
+    const code = $("telegramPairingCode").value.trim();
+    if (!code) throw new Error("Chưa có mã để sao chép.");
+    await navigator.clipboard.writeText(code);
+    $("telegramPairingStatus").textContent = "Đã sao chép mã. Không gửi mã này cho người khác.";
+  }),
+);
 const maskKey = (key) =>
   key ? (key.length > 10 ? `${key.slice(0, 2)}.${key.slice(2, 5)}.....${key.slice(-4)}` : key) : "";
 const looksLikeApiKey = (key) => /^[A-Za-z0-9_.-]{20,}$/.test(String(key || "").trim());
 const GEMINI_MODEL_FALLBACKS = [
   { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite" },
   { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash-Lite" },
-  { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash" },
   { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash" },
   { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash" },
   { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash" },
 ];
 function geminiModelOptions(models = []) {
   const map = new Map();
-  for (const m of models) if (m?.id) map.set(m.id, { ...m, extra: false });
+  for (const m of models)
+    if (m?.id && m.id !== "gemini-3.8-flash") map.set(m.id, { ...m, extra: false });
   for (const m of GEMINI_MODEL_FALLBACKS)
     if (!map.has(m.id)) map.set(m.id, { ...m, name: `${m.name} · thử`, extra: true });
   const order = new Map(GEMINI_MODEL_FALLBACKS.map((m, i) => [m.id, i]));
@@ -1349,7 +1375,7 @@ async function composeNews() {
   const provider = s.provider || "gemini",
     model =
       provider === "gemini"
-        ? s.geminiModel || "gemini-3.1-flash-lite"
+        ? s.geminiModel || "gemini-3.5-flash-lite"
         : provider === "deepseek"
           ? s.deepseekModel || "deepseek-flash"
           : s.apiModel || "gpt-4.1-mini";
@@ -1456,7 +1482,13 @@ async function generate(force) {
   ]);
   const provider = s.provider || "gemini";
   if (provider === "chatgpt" && !s.chatgptModel) throw new Error("Kết nối ChatGPT và chọn model.");
-  if (provider === "gemini" && !s.geminiKey) throw new Error("Kết nối Gemini trong Cài đặt.");
+  const hasGeminiKey =
+    !!String(s.geminiKey || "").trim() ||
+    (Array.isArray(s.geminiKeys) &&
+      s.geminiKeys.some((item) =>
+        String(typeof item === "string" ? item : item?.key || "").trim(),
+      ));
+  if (provider === "gemini" && !hasGeminiKey) throw new Error("Kết nối Gemini trong Cài đặt.");
   if (provider === "deepseek" && !s.deepseekKey)
     throw new Error("Kết nối DeepSeek API trong Cài đặt.");
   if (provider === "api" && !/^sk-/.test(s.apiKey || ""))
@@ -1465,7 +1497,7 @@ async function generate(force) {
     provider === "chatgpt"
       ? s.chatgptModel
       : provider === "gemini"
-        ? s.geminiModel || "gemini-3.1-flash-lite"
+        ? s.geminiModel || "gemini-3.5-flash-lite"
         : provider === "deepseek"
           ? s.deepseekModel || "deepseek-flash"
           : s.apiModel || "gpt-4.1-mini";
@@ -1916,6 +1948,7 @@ for (const [id, name] of [
   ["readNews", "refresh"],
   ["newStyle", "plus"],
   ["addGeminiQueueKey", "plus"],
+  ["reloadGeminiKeys", "refresh"],
   ["addChatGPT", "plus"],
   ["refreshChatGPT", "refresh"],
   ["settingsToggle", "setting"],
@@ -2141,6 +2174,13 @@ $("addGeminiQueueKey").onclick = () => {
   $("geminiQueueKey").type = "password";
   $("geminiQueueKey").focus();
 };
+$("reloadGeminiKeys")?.addEventListener("click", () =>
+  safely(async () => {
+    const response = await chrome.runtime.sendMessage({ type: "resetGeminiKeys" });
+    if (!response?.ok) throw new Error(response?.error || "Không reload được API key.");
+    status(`Đã bật lại toàn bộ API key (${Number(response.data?.count) || 0} key).`);
+  }),
+);
 $("cancelGeminiQueueKey").onclick = () => {
   $("geminiQueueKey").value = "";
   if ($("geminiQueueLabel")) $("geminiQueueLabel").value = "";
@@ -2262,9 +2302,7 @@ function validateStyleDraft() {
   if (!input || !save) return;
   const name = input.value.trim().toLocaleLowerCase();
   const duplicate = styles.some(
-    (x) =>
-      x.id !== editingStyleId &&
-      x.name.trim().toLocaleLowerCase() === name,
+    (x) => x.id !== editingStyleId && x.name.trim().toLocaleLowerCase() === name,
   );
   save.disabled = (!styleDraftMode && !editingStyleId) || !name || duplicate;
 }
@@ -2339,8 +2377,7 @@ $("saveSettings").onclick = () =>
     const name = $("styleName").value.trim();
     const duplicate = styles.some(
       (x) =>
-        x.id !== editingStyleId &&
-        x.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+        x.id !== editingStyleId && x.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
     );
     if (!name || duplicate) return;
     let chosen;
@@ -2424,7 +2461,7 @@ async function regenerateQuoteDraft() {
       provider === "gemini"
         ? /gemini-2\.(?:5|0)-flash-lite/i.test(saved.geminiModel || "")
           ? "gemini-3.5-flash-lite"
-          : saved.geminiModel || "gemini-3.1-flash-lite"
+          : saved.geminiModel || "gemini-3.5-flash-lite"
         : provider === "deepseek"
           ? saved.deepseekModel || "deepseek-flash"
           : saved.apiModel || "gpt-4.1-mini",
@@ -2856,10 +2893,7 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
   if (panelWindowId && activeInfo.windowId !== panelWindowId) return;
   // In split view the radio target is explicit. Do not let Chrome's active-tab
   // event silently switch feedback/auto actions to the other pane.
-  if (
-    panelTargets.length < 2 &&
-    (!panelTargetTabId || panelTargetTabId !== activeInfo.tabId)
-  )
+  if (panelTargets.length < 2 && (!panelTargetTabId || panelTargetTabId !== activeInfo.tabId))
     panelTargetTabId = activeInfo.tabId;
   syncQuotePostFromTab().catch(() => {});
   refreshPanelTargets();

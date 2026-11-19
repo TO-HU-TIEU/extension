@@ -549,6 +549,26 @@
 .xra-person-dialog label {
   display: block;
 }
+.xra-person-preset {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: -4px 0 2px;
+  padding: 6px 10px;
+  border: 1px solid #1d9bf0;
+  border-radius: 999px;
+  background: transparent;
+  color: #1d9bf0;
+  font: 600 12px system-ui;
+  cursor: pointer;
+}
+.xra-person-preset:hover:not(:disabled) {
+  background: #1d9bf018;
+}
+.xra-person-preset:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .xra-dialog-actions {
   display: flex;
   gap: 8px;
@@ -857,6 +877,10 @@
   color: inherit;
   border-color: color-mix(in srgb, var(--xra-color, #e7e9ea) 30%, transparent);
   border-radius: 6px;
+}
+.xra-person-preset {
+  border-color: color-mix(in srgb, #1d9bf0 70%, var(--xra-color, #e7e9ea));
+  color: #1d9bf0;
 }
 .xra-dialog-actions button {
   border: 1px solid color-mix(in srgb, var(--xra-color, #e7e9ea) 30%, transparent);

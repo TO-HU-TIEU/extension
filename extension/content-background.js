@@ -98,11 +98,11 @@
     ]);
     const keys = geminiKeys(s);
     if (s.provider === "gemini" && keys.length)
-      return { kind: "gemini", keys, model: s.geminiModel || "gemini-3.1-flash-lite" };
+      return { kind: "gemini", keys, model: s.geminiModel || "gemini-3.5-flash-lite" };
     if (s.provider === "api" && s.apiKey)
       return { kind: "api", key: s.apiKey, model: s.apiModel || "gpt-4.1-mini" };
     if (keys.length)
-      return { kind: "gemini", keys, model: s.geminiModel || "gemini-3.1-flash-lite" };
+      return { kind: "gemini", keys, model: s.geminiModel || "gemini-3.5-flash-lite" };
     if (s.apiKey) return { kind: "api", key: s.apiKey, model: s.apiModel || "gpt-4.1-mini" };
     throw new Error("Kết nối Gemini hoặc OpenAI API trong Cài đặt để dịch và soạn Content.");
   }
