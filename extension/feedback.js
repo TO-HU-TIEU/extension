@@ -408,6 +408,13 @@
     const article = [...document.querySelectorAll('main article[data-testid="tweet"]')].find(
       (candidate) => postId(candidate, expectedId) === String(expectedId),
     );
+    const alreadyLiked =
+      !!article?.querySelector('[data-testid="unlike"]') ||
+      article?.querySelector('[data-testid="like"]')?.getAttribute("aria-pressed") === "true" ||
+      /(?:unlike|đã thích|bỏ thích)/iu.test(
+        article?.querySelector('[data-testid="like"],[data-testid="unlike"]')?.getAttribute("aria-label") || "",
+      );
+    if (alreadyLiked) return false;
     const like = article?.querySelector('[data-testid="like"]');
     if (!like) return false;
     like.click();

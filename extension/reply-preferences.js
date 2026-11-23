@@ -46,6 +46,9 @@
       "assistantAutoRestEnabled",
       "assistantAutoRestEveryMinutes",
       "assistantAutoConsecutiveFailureLimit",
+      "assistantAutoSkipOldPostsEnabled",
+      "assistantAutoSkipOldPostsHours",
+      "assistantAutoRefreshIdlePosts",
       "assistantAutoDashboardPositionV1",
       "assistantAutoSetupCollapsed",
     ],
@@ -171,7 +174,8 @@
   };
   const handle = (value) => {
     try {
-      const path = new URL(value, "https://x.com").pathname;
+      const raw = String(value || "").trim().replace(/^@/u, "");
+      const path = new URL(raw, "https://x.com").pathname;
       const name = path.match(/^\/([A-Za-z0-9_]{1,15})(?:\/|$)/)?.[1];
       return name &&
         !/^(home|explore|notifications|messages|search|settings|i|compose|intent)$/i.test(name)
@@ -212,10 +216,27 @@
       }));
   };
   const personFor = (s, value) => {
-    const key = handle(value),
-      map = s.personalReplyStyles;
+    const map = s.personalReplyStyles;
+    const candidates =
+      value && typeof value === "object"
+        ? [
+            value.handle,
+            value.author_handle,
+            value.authorHandle,
+            value.username,
+            value.author,
+            value.url,
+            value.postUrl,
+          ]
+        : [value];
+    let key = "";
+    for (const candidate of candidates) {
+      key = handle(candidate);
+      if (key) break;
+    }
     const person =
       map &&
+      key &&
       Object.prototype.hasOwnProperty.call(map, key) &&
       map[key] &&
       typeof map[key] === "object"
@@ -316,7 +337,16 @@
     return `\nMẫu tự viết theo loại bài ${type}${mediaKind ? `/${mediaKind}` : ""}${chosenLanguage ? `, ngôn ngữ ${chosenLanguage}` : ""} (${relevant.length} mẫu; ${confidence}): thường khoảng ${averageWords} từ, kiểu kết câu ${ending}. Chỉ xem đây là xu hướng giọng văn; dùng tối đa các ví dụ gần ngữ cảnh sau để học nhịp/cách diễn đạt, không sao chép câu hoặc lấy nội dung làm dữ kiện: ${JSON.stringify(examples)}`;
   }
   function resolve(post, s) {
-    const person = personFor(s, post.url),
+    const person = [
+        post?.url,
+        post?.handle,
+        post?.author_handle,
+        post?.authorHandle,
+        post?.username,
+        post?.author,
+      ]
+        .map((value) => personFor(s, value))
+        .find(Boolean) || null,
       list = catalog(s),
       preset = person && (list.find((x) => x.id === person.styleId) || person);
     const baseStyle = preset

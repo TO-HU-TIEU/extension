@@ -114,6 +114,9 @@ const SETTINGS_BACKUP_LOCAL_KEYS = [
 const SETTINGS_BACKUP_PAGE_KEYS = [
   "assistantAutoDashboardPositionV1",
   "assistantAutoSetupCollapsed",
+  "assistantAutoSkipOldPostsEnabled",
+  "assistantAutoSkipOldPostsHours",
+  "assistantAutoRefreshIdlePosts",
 ];
 const getSettingsBackupKeys = () => {
   const configured = globalThis.AssistantSettingsBackup?.keys || {};

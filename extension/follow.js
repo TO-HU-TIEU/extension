@@ -119,6 +119,36 @@
     collectMultiplier = 1,
     profileKey = location.pathname.split("/")[1] || "",
     observedItems = new Map();
+  let scrollHost = null;
+  const resolveScrollHost = () => {
+    const row = document.querySelector('[data-testid="UserCell"],article[data-testid="UserCell"]');
+    for (let node = row?.parentElement; node && node !== document.body; node = node.parentElement) {
+      const style = getComputedStyle(node),
+        overflow = `${style.overflowY || ""} ${style.overflow || ""}`;
+      if (/(?:auto|scroll)/i.test(overflow) && node.scrollHeight > node.clientHeight + 24) return node;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+  const scrollPosition = () => {
+    const host = scrollHost || resolveScrollHost();
+    scrollHost = host;
+    return host === document.scrollingElement || host === document.documentElement
+      ? Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0)
+      : host.scrollTop;
+  };
+  const scrollPage = (step) => {
+    const host = resolveScrollHost();
+    scrollHost = host;
+    if (host && host !== document.scrollingElement && host !== document.documentElement) {
+      host.scrollBy?.({ top: step, left: 0, behavior: "smooth" });
+      return;
+    }
+    (document.scrollingElement || document.documentElement).scrollBy?.({
+      top: step,
+      left: 0,
+      behavior: "smooth",
+    });
+  };
   function progress(mode, all) {
     if (!contextAlive) return;
     profileKey = location.pathname.split("/")[1] || profileKey;
@@ -155,12 +185,12 @@
     for (let i = 0; i < 250 && !stopped; i++) {
       for (const item of read()) all.set(item.id, item);
       progress(mode, all);
-      const before = scrollY,
+      const before = scrollPosition(),
         multiplier = collectMultiplier,
         step = Math.max(320, Math.min(innerHeight * 0.9, innerHeight * 0.58 * multiplier));
-      window.scrollBy({ top: step, left: 0, behavior: "smooth" });
+      scrollPage(step);
       await new Promise((r) => setTimeout(r, Math.max(260, 550 / multiplier)));
-      if (all.size === last && Math.abs(scrollY - before) < 20) stable++;
+      if (all.size === last && Math.abs(scrollPosition() - before) < 20) stable++;
       else stable = 0;
       last = all.size;
       if (stable >= 6) break;
@@ -754,6 +784,11 @@
     if (message?.type === "followStop") {
       stopped = true;
       sendResponse({ ok: true });
+      return;
+    }
+    if (message?.type === "followSpeed") {
+      collectMultiplier = collectMultiplier >= 2 ? 1 : 2;
+      sendResponse({ ok: true, multiplier: collectMultiplier });
       return;
     }
     if (message?.type === "followUnfollow") {

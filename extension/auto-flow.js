@@ -10,9 +10,14 @@
       speed: 0,
       consecutiveFailures: 0,
       sessionFailures: 0,
+      noActionPostIds: new Set(),
+      noActionPostCount: 0,
+      lastIdleRefreshAt: 0,
     };
   }
   const memory = globalThis.AutoBotMemory;
+  if (!(memory.noActionPostIds instanceof Set)) memory.noActionPostIds = new Set();
+  memory.noActionPostCount = Math.max(0, Number(memory.noActionPostCount) || 0);
   const sendRuntimeMessage = (message, fallback = null) => {
     try {
       return Promise.resolve(chrome.runtime.sendMessage(message)).catch(() => fallback);
@@ -106,6 +111,10 @@
           ? `● Tạm dừng (${elapsed} phút)`
           : `● ${running ? `Đang chạy (${elapsed} phút)` : "Đã dừng"}`;
     }
+    // Reply controls are muted only while the run is actively processing.
+    // Notify the content script immediately so pausing restores the saved
+    // autoSuggest/autoReply settings in the composer.
+    document.dispatchEvent(new Event("assistant-auto-flow-state"));
     console.log(`[Assistant Auto] ${memory.isPaused ? "Tạm dừng" : "Tiếp tục"}`);
     sendRuntimeMessage({
       type: "autoFlowPauseState",
@@ -191,9 +200,59 @@
     console.log("[Assistant Auto]", ...a);
     const list = document.querySelector("[data-auto-log-list]");
     if (list) {
-      list.textContent = memory.logs.join("\n") || "Đang chờ bài tiếp theo";
-      list.scrollTop = list.scrollHeight;
+      const latest = compactCurrentLog(list.dataset.expanded !== "false");
+      list.textContent = latest;
+      list.title = latest;
     }
+  };
+  const compactCurrentLog = (expanded = true) => {
+    const entries = (memory.logs || [])
+      .map((value) => String(value).replace(/^\d{2}:\d{2}:\d{2}\s+/u, "").trim())
+      .filter(Boolean);
+    const compact = [];
+    for (let index = 0; index < entries.length; index++) {
+      const result = entries[index].match(/^Kết quả gợi ý:\s*(\d+)/iu);
+      const choice = entries[index + 1]?.match(/^Lựa chọn:\s*(\d+)/iu);
+      if (result && choice) {
+        compact.push(`Số gợi ý: ${result[1]} | Lựa chọn ${choice[1]}`);
+        index += 1;
+      } else compact.push(entries[index]);
+    }
+    return compact.slice(-3).join(expanded ? "\n" : " · ") || "Đang chờ bài tiếp theo";
+  };
+  const statusLinkForArticle = (article, preferredId = "") => {
+    const links = [...(article?.querySelectorAll?.('a[href*="/status/"]') || [])];
+    if (!links.length) return null;
+    const parsed = links
+      .map((link) => {
+        try {
+          const url = new URL(link.getAttribute("href") || link.href, location.origin);
+          const parts = url.pathname.split("/").filter(Boolean);
+          const id = parts[1] === "status" ? parts[2] || "" : "";
+          return { link, url, parts, id };
+        } catch {
+          return { link, url: null, parts: [], id: "" };
+        }
+      })
+      .filter(({ parts }) => parts.length === 3 && parts[1] === "status" && /^\d+$/u.test(parts[2] || ""));
+    // A card that only exposes a views/analytics/photo link is not safe to open.
+    // Skipping it is preferable to clicking a secondary X action by accident.
+    if (!parsed.length) return null;
+    const articleHandle = String(
+      article.querySelector('[data-testid="User-Name"] a[href^="/"]')?.getAttribute("href") || "",
+    )
+      .replace(/^\//u, "")
+      .split(/[/?#]/u)[0]
+      .toLowerCase();
+    const own = parsed.find(
+      ({ parts }) => !articleHandle || String(parts[0] || "").toLowerCase() === articleHandle,
+    );
+    if (own) return own.link;
+    if (preferredId) {
+      const preferred = parsed.find(({ id }) => id === String(preferredId));
+      if (preferred) return preferred.link;
+    }
+    return parsed[0].link;
   };
   ((read = (k) => {
     try {
@@ -204,7 +263,7 @@
   }),
     (save = (k, v) => localStorage.setItem(k, JSON.stringify(v))),
     (postId = (a) =>
-      a?.querySelector('a[href*="/status/"]')?.href.match(/\/status\/(\d+)/)?.[1] || ""),
+      statusLinkForArticle(a)?.href.match(/\/status\/(\d+)(?:$|[?#/])/u)?.[1] || ""),
     (own = () =>
       document
         .querySelector('[data-testid^="UserAvatar-Container-"]')
@@ -232,7 +291,10 @@
         '[data-testid="SideNav_AccountSwitcher_Button"]',
       );
       const accountLines = String(
-        accountButton?.innerText || accountButton?.textContent || accountButton?.getAttribute("aria-label") || "",
+        accountButton?.innerText ||
+          accountButton?.textContent ||
+          accountButton?.getAttribute("aria-label") ||
+          "",
       )
         .split(/\n+/u)
         .map((value) => value.trim())
@@ -240,15 +302,57 @@
       const displayName =
         accountLines.find(
           (value) =>
-            !value.startsWith("@") &&
-            value !== "Hồ sơ" &&
-            normalizeHandle(value) !== handle,
+            !value.startsWith("@") && value !== "Hồ sơ" && normalizeHandle(value) !== handle,
         ) || "";
       return {
         displayName: displayName.slice(0, 100),
         handle: handle ? `@${handle}` : "",
       };
     }));
+  const normalizeAutoTopic = (value) =>
+    String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}+#.-]+/gu, " ")
+      .replace(/\s+/gu, " ")
+      .trim();
+  const autoTopicAliases = {
+    crypto: [
+      "crypto",
+      "tien ma hoa",
+      "tien dien tu",
+      "bitcoin",
+      "ethereum",
+      "blockchain",
+      "altcoin",
+      "token",
+      "defi",
+      "web3",
+      "nft",
+    ],
+    "nhay cam": [
+      "nhay cam",
+      "tinh duc",
+      "bao luc",
+      "tu hai",
+      "ma tuy",
+      "thu ghet",
+      "18+",
+    ],
+  };
+  const matchingAutoTopicRule = (topic, rules) => {
+    const value = normalizeAutoTopic(topic);
+    if (!value) return "";
+    for (const rule of Array.isArray(rules) ? rules : []) {
+      const normalized = normalizeAutoTopic(rule);
+      if (!normalized) continue;
+      const aliases = autoTopicAliases[normalized] || [normalized];
+      if (aliases.some((alias) => value.includes(normalizeAutoTopic(alias)))) return rule;
+    }
+    return "";
+  };
   const excludedAuthorSet = async () => {
     try {
       const stored = await chrome.storage.local.get("autoReplyExcludedAuthors");
@@ -333,7 +437,10 @@
     const current = document.querySelector("[data-auto-current-log]");
     const list = document.querySelector("[data-auto-log-list]");
     if (current) current.textContent = "Đang chờ bài tiếp theo";
-    if (list) list.textContent = "Đang chờ bài tiếp theo";
+    if (list) {
+      list.textContent = "Đang chờ bài tiếp theo";
+      list.title = "Đang chờ bài tiếp theo";
+    }
   };
   const hasVietnamese = (text) => {
     const value = String(text || "");
@@ -377,14 +484,17 @@
     const now = new Date(),
       nextMidnight = new Date(now);
     nextMidnight.setHours(24, 0, 0, 0);
-    dailyReplyResetTimer = setTimeout(() => {
-      const day = dailyReplyDayKey();
-      try {
-        localStorage.setItem("assistantAutoDailyReplyCount", JSON.stringify({ day, count: 0 }));
-      } catch {}
-      dashboard();
-      scheduleDailyReplyReset();
-    }, Math.max(1000, nextMidnight.getTime() - now.getTime() + 50));
+    dailyReplyResetTimer = setTimeout(
+      () => {
+        const day = dailyReplyDayKey();
+        try {
+          localStorage.setItem("assistantAutoDailyReplyCount", JSON.stringify({ day, count: 0 }));
+        } catch {}
+        dashboard();
+        scheduleDailyReplyReset();
+      },
+      Math.max(1000, nextMidnight.getTime() - now.getTime() + 50),
+    );
   };
   const readDailyReplyLimit = () => {
     const value = Math.max(
@@ -393,6 +503,103 @@
     );
     memory.autoDailyReplyLimit = value;
     return value;
+  };
+  const readSkipOldPostsSetting = () => {
+    const hours = Math.max(
+      1,
+      Math.min(8_760, Number(localStorage.getItem("assistantAutoSkipOldPostsHours")) || 12),
+    );
+    const enabled = localStorage.getItem("assistantAutoSkipOldPostsEnabled") !== "false";
+    memory.autoSkipOldPostsEnabled = enabled;
+    memory.autoSkipOldPostsHours = hours;
+    return { enabled, hours };
+  };
+  const readIdleRefreshPostsSetting = () => {
+    const value = Math.max(
+      5,
+      Math.min(100, Number(localStorage.getItem("assistantAutoRefreshIdlePosts")) || 20),
+    );
+    memory.autoRefreshIdlePosts = value;
+    return value;
+  };
+  const postAgeHours = (article) => {
+    const datetime = article?.querySelector("time[datetime]")?.getAttribute("datetime");
+    const publishedAt = Date.parse(String(datetime || ""));
+    if (!Number.isFinite(publishedAt)) return null;
+    return Math.max(0, (Date.now() - publishedAt) / 3_600_000);
+  };
+  const configureSkipOldPostsControl = (box) => {
+    if (box.querySelector("[data-auto-skip-old-control]")) return;
+    const vietnameseFilter = box.querySelector("[data-auto-vietnamese]")?.closest("label");
+    if (!vietnameseFilter) return;
+    const setting = document.createElement("label");
+    setting.dataset.autoSkipOldControl = "";
+    setting.style.cssText =
+      "display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:6px 0;color:var(--xra-text,#edf1f5);font-size:13px";
+    const enabled = document.createElement("input");
+    enabled.type = "checkbox";
+    enabled.dataset.autoSkipOldEnabled = "";
+    enabled.setAttribute("aria-label", "Bỏ qua những bài quá số giờ đã chọn");
+    const label = document.createElement("span");
+    label.textContent = "Bỏ qua những bài quá";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = "8760";
+    input.step = "1";
+    input.dataset.autoSkipOldHours = "";
+    input.setAttribute("aria-label", "Số giờ để bỏ qua bài cũ");
+    input.style.cssText =
+      "width:60px;min-width:60px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const sync = () => {
+      const hours = Math.max(1, Math.min(8_760, Number(input.value) || 12));
+      input.value = String(hours);
+      const isEnabled = enabled.checked;
+      memory.autoSkipOldPostsEnabled = isEnabled;
+      memory.autoSkipOldPostsHours = hours;
+      persistPageSetting("assistantAutoSkipOldPostsHours", hours);
+      persistPageSetting("assistantAutoSkipOldPostsEnabled", isEnabled);
+      setting.style.opacity = isEnabled ? "1" : "0.55";
+      input.disabled = !isEnabled;
+    };
+    const saved = readSkipOldPostsSetting();
+    enabled.checked = saved.enabled;
+    input.value = String(saved.hours);
+    enabled.addEventListener("change", sync);
+    input.addEventListener("change", sync);
+    setting.append(enabled, label, input, document.createTextNode("giờ"));
+    vietnameseFilter.after(setting);
+    sync();
+  };
+  const configureIdleRefreshPostsControl = (box) => {
+    if (box.querySelector("[data-auto-refresh-idle-control]")) return;
+    const skipOldRow = box.querySelector("[data-auto-skip-old-control]"),
+      vietnameseFilter = box.querySelector("[data-auto-vietnamese]")?.closest("label");
+    if (!vietnameseFilter) return;
+    const setting = document.createElement("label");
+    setting.dataset.autoRefreshIdleControl = "";
+    setting.style.cssText =
+      "display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:6px 0;color:var(--xra-text,#edf1f5);font-size:13px";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "5";
+    input.max = "100";
+    input.step = "1";
+    input.dataset.autoRefreshIdlePosts = "";
+    input.setAttribute("aria-label", "Số bài không có thao tác trước khi tải lại");
+    input.style.cssText =
+      "width:60px;min-width:60px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
+    const sync = () => {
+      const value = Math.max(5, Math.min(100, Number(input.value) || 20));
+      input.value = String(value);
+      memory.autoRefreshIdlePosts = value;
+      persistPageSetting("assistantAutoRefreshIdlePosts", value);
+    };
+    input.value = String(readIdleRefreshPostsSetting());
+    input.addEventListener("change", sync);
+    setting.append(document.createTextNode("Làm mới sau"), input, document.createTextNode("bài không có thao tác"));
+    (skipOldRow || vietnameseFilter).after(setting);
+    sync();
   };
   const readDailyReplyCount = () => {
     try {
@@ -474,7 +681,11 @@
     };
     input.value = String(readConsecutiveFailureLimit());
     input.addEventListener("change", sync);
-    setting.append(document.createTextNode("Dừng chạy khi lỗi"), input, document.createTextNode("lần liên tiếp"));
+    setting.append(
+      document.createTextNode("Dừng chạy khi lỗi"),
+      input,
+      document.createTextNode("lần liên tiếp"),
+    );
     restRow.after(setting);
   };
   const configureMinimumGapControl = (box) => {
@@ -538,6 +749,8 @@
       box.querySelector("[data-auto-min-gap-control]"),
       box.querySelector("[data-auto-rest-row]"),
       box.querySelector("[data-auto-vietnamese]")?.closest("label"),
+      box.querySelector("[data-auto-skip-old-control]"),
+      box.querySelector("[data-auto-refresh-idle-control]"),
       box.querySelector("[data-auto-daily-limit-control]"),
       box.querySelector("[data-auto-failure-limit-control]"),
     ];
@@ -555,18 +768,33 @@
     const minGapEnabled = minGapRow?.querySelector("[data-auto-min-gap-enabled]");
     if (minGapRow && minGapEnabled) {
       minGapRow.style.opacity = minGapEnabled.checked ? "1" : "0.55";
-      minGapRow.querySelector("[data-auto-min-gap-value]")?.toggleAttribute("disabled", !minGapEnabled.checked);
-      minGapRow.querySelector("[data-auto-min-gap-unit]")?.toggleAttribute("disabled", !minGapEnabled.checked);
+      minGapRow
+        .querySelector("[data-auto-min-gap-value]")
+        ?.toggleAttribute("disabled", !minGapEnabled.checked);
+      minGapRow
+        .querySelector("[data-auto-min-gap-unit]")
+        ?.toggleAttribute("disabled", !minGapEnabled.checked);
     }
     const restRow = box.querySelector("[data-auto-rest-row]");
     const restEnabled = restRow?.querySelector("[data-auto-rest]");
     if (restRow && restEnabled) {
       restRow.style.opacity = restEnabled.checked ? "1" : "0.55";
-      restRow.querySelector("[data-auto-rest-interval]")?.toggleAttribute("disabled", !restEnabled.checked);
+      restRow
+        .querySelector("[data-auto-rest-interval]")
+        ?.toggleAttribute("disabled", !restEnabled.checked);
     }
     const vietnameseRow = box.querySelector("[data-auto-vietnamese]")?.closest("label");
     const vietnameseEnabled = vietnameseRow?.querySelector("[data-auto-vietnamese]");
-    if (vietnameseRow && vietnameseEnabled) vietnameseRow.style.opacity = vietnameseEnabled.checked ? "1" : "0.55";
+    if (vietnameseRow && vietnameseEnabled)
+      vietnameseRow.style.opacity = vietnameseEnabled.checked ? "1" : "0.55";
+    const skipOldRow = box.querySelector("[data-auto-skip-old-control]");
+    const skipOldEnabled = skipOldRow?.querySelector("[data-auto-skip-old-enabled]");
+    if (skipOldRow && skipOldEnabled) {
+      skipOldRow.style.opacity = skipOldEnabled.checked ? "1" : "0.55";
+      skipOldRow
+        .querySelector("[data-auto-skip-old-hours]")
+        ?.toggleAttribute("disabled", !skipOldEnabled.checked);
+    }
   };
   const domHasOwnReply = (handle) => {
     if (!handle) return false;
@@ -596,14 +824,8 @@
     ) || null;
   const editorFromAssistantBox = (box) => {
     if (!box?.isConnected) return null;
-    // x-content inserts the Assistant card immediately after the native
-    // composer host. Resolve the editor from that exact host so an unrelated
-    // global post composer can never be selected by the auto flow.
     const host = box.previousElementSibling;
-    return (
-      host?.querySelector?.('[data-testid^="tweetTextarea_"][contenteditable="true"]') ||
-      null
-    );
+    return host?.querySelector?.('[data-testid^="tweetTextarea_"][contenteditable="true"]') || null;
   };
   async function submitSelectedReply(expectedText, handle, targetId) {
     const normalize = (value) =>
@@ -618,23 +840,55 @@
       const style = getComputedStyle(node);
       return style.display !== "none" && style.visibility !== "hidden";
     };
-    const targetBox = assistantBoxForTarget(targetId);
-    const targetEditor = editorFromAssistantBox(targetBox);
-    const findEditor = () => (visible(targetEditor) ? targetEditor : null);
+    const buttonText = (node) =>
+      String(node?.innerText || node?.textContent || node?.getAttribute?.("aria-label") || "")
+        .replace(/\s+/gu, " ")
+        .trim();
+    const isReplyButton = (node) => buttonText(node) === "Trả lời";
+    let targetBox = assistantBoxForTarget(targetId);
     const onTargetStatus = () =>
       location.pathname.match(/\/status\/(\d+)(?:\/|$)/)?.[1] === String(targetId || "");
+    const findEditor = () => {
+      targetBox = assistantBoxForTarget(targetId) || targetBox;
+      const candidate = editorFromAssistantBox(targetBox);
+      return visible(candidate) ? candidate : null;
+    };
     const findSendButton = (candidate) => {
       if (!candidate || !targetBox?.isConnected) return null;
+      const selector = '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]';
+      const editorForButton = (button) => {
+        for (let root = button; root && root !== document.documentElement; root = root.parentElement) {
+          if (root.matches?.('[data-testid^="tweetTextarea_"][contenteditable="true"]'))
+            return root === candidate ? candidate : null;
+          const editors = [
+            ...(root.querySelectorAll?.(
+              '[data-testid^="tweetTextarea_"][contenteditable="true"]',
+            ) || []),
+          ];
+          if (editors.includes(candidate)) return candidate;
+          if (editors.length === 1) return editors[0];
+        }
+        return null;
+      };
       const host = targetBox.previousElementSibling;
-      const scope = host || candidate.parentElement;
+      const scopes = [
+        host,
+        host?.parentElement,
+        candidate.parentElement,
+        candidate.closest('[role="dialog"]'),
+        candidate.closest('article[data-testid="tweet"]'),
+        document,
+      ].filter(Boolean);
+      const buttons = scopes.flatMap((scope) => [...(scope.querySelectorAll?.(selector) || [])]);
       return (
-        [...(scope?.querySelectorAll?.(
-          '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]',
-        ) || [])].find(
-          (button) =>
-            visible(button) &&
-            !button.disabled &&
-            button.getAttribute("aria-disabled") !== "true",
+        buttons.find(
+          (node, index) =>
+            buttons.indexOf(node) === index &&
+            editorForButton(node) === candidate &&
+            isReplyButton(node) &&
+            visible(node) &&
+            !node.disabled &&
+            node.getAttribute("aria-disabled") !== "true",
         ) || null
       );
     };
@@ -656,7 +910,17 @@
       }
       await pauseSleep(250);
     }
-    if (!running || !onTargetStatus() || !targetBox || !editor || !send || send.disabled)
+    if (!running || !onTargetStatus() || !editor || !send || send.disabled) return false;
+    editor = findEditor() || editor;
+    const latestText = normalize(editor?.innerText || editor?.textContent);
+    send = findSendButton(editor) || send;
+    if (
+      !visible(editor) ||
+      (expected && !latestText.includes(expected)) ||
+      !visible(send) ||
+      send.disabled ||
+      send.getAttribute("aria-disabled") === "true"
+    )
       return false;
     const beforeSendBlock = readAutomationBlockNotice();
     if (beforeSendBlock) {
@@ -694,6 +958,48 @@
     }
     return false;
   }
+  const resetNoActionScan = () => {
+    memory.noActionPostIds = new Set();
+    memory.noActionPostCount = 0;
+  };
+  const maybeRefreshAfterIdleScan = () => {
+    const threshold = readIdleRefreshPostsSetting();
+    if (memory.noActionPostCount < threshold) return false;
+    const now = Date.now();
+    let lastRefresh = Number(memory.lastIdleRefreshAt) || 0;
+    try {
+      lastRefresh = Math.max(
+        lastRefresh,
+        Number(localStorage.getItem("assistantAutoLastIdleRefreshAt")) || 0,
+      );
+    } catch {}
+    if (now - lastRefresh < 120_000) {
+      log(`Đã quét ${memory.noActionPostCount} bài không có thao tác · tiếp tục cuộn`);
+      resetNoActionScan();
+      return false;
+    }
+    memory.lastIdleRefreshAt = now;
+    try {
+      localStorage.setItem("assistantAutoLastIdleRefreshAt", String(now));
+    } catch {}
+    log(`Đã cuộn qua ${memory.noActionPostCount} bài không có thao tác · tải lại trang`);
+    clearTimeout(timer);
+    running = false;
+    globalThis.__assistantAutoFlowRunning = false;
+    memory.runState = "reloading";
+    document.dispatchEvent(new Event("assistant-auto-flow-state"));
+    location.reload();
+    return true;
+  };
+  const noteNoActionPost = (id) => {
+    const value = String(id || "");
+    if (!value) return false;
+    if (!(memory.noActionPostIds instanceof Set)) memory.noActionPostIds = new Set();
+    if (memory.noActionPostIds.has(value)) return false;
+    memory.noActionPostIds.add(value);
+    memory.noActionPostCount = memory.noActionPostIds.size;
+    return maybeRefreshAfterIdleScan();
+  };
   function dashboard() {
     const p = read(processedKey),
       s = read(skippedKey),
@@ -743,23 +1049,29 @@
     if (!stats) return;
     const iconMarkup = (name) => globalThis.AssistantIcons?.svg(name) || "";
     stats.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:8px"><div style="display:grid;grid-template-columns:40px minmax(0,1fr);align-items:stretch;min-height:62px;padding:0;border-radius:8px;overflow:hidden;background:transparent;border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;width:40px;min-width:40px;height:100%;padding-left:5px;box-sizing:border-box;color:#35a7ee">${iconMarkup("arrow")}</span><span style="display:flex;min-width:0;flex:1;flex-direction:column;justify-content:center;padding:5px 7px"><strong style="display:block;font-size:18px;color:#35a7ee">${(p.length / mins).toFixed(2)}</strong><small style="display:block;color:var(--xra-muted,#9aa4af);font-size:10px;white-space:nowrap">trả lời/phút</small></span></div><div style="display:grid;grid-template-columns:40px minmax(0,1fr);align-items:stretch;min-height:62px;padding:0;border-radius:8px;overflow:hidden;background:transparent;border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;width:40px;min-width:40px;height:100%;padding-left:5px;box-sizing:border-box;color:#20c997">${iconMarkup("badge-check")}</span><span style="display:flex;min-width:0;flex:1;flex-direction:column;justify-content:center;padding:5px 7px"><strong style="display:block;font-size:18px;color:#20c997">${p.length}</strong><small style="display:block;color:var(--xra-muted,#9aa4af);font-size:10px;white-space:nowrap">Hoàn thành</small></span></div><div style="display:grid;grid-template-columns:40px minmax(0,1fr);align-items:stretch;min-height:62px;padding:0;border-radius:8px;overflow:hidden;background:transparent;border:1px solid var(--xra-border,#303842)"><span style="display:grid;place-items:center;width:40px;min-width:40px;height:100%;padding-left:5px;box-sizing:border-box;color:#ff5864">${iconMarkup("circle-x")}</span><span style="display:flex;min-width:0;flex:1;flex-direction:column;justify-content:center;padding:5px 7px"><strong style="display:block;font-size:18px;color:#ff5864">${s.length}</strong><small style="display:block;color:var(--xra-muted,#9aa4af);font-size:10px;white-space:nowrap">Bỏ qua</small></span></div></div>`;
+    const statsGrid = stats.firstElementChild;
+    if (statsGrid) {
+      statsGrid.style.gap = "6px";
+      statsGrid.style.marginBottom = "6px";
+    }
+    stats.style.margin = "4px 0 6px";
     box.querySelectorAll("[data-auto-stats] > div > div").forEach((card) => {
       card.style.setProperty("background", "transparent", "important");
-      card.style.gridTemplateColumns = "40px minmax(0,1fr)";
-      card.style.minHeight = "62px";
+      card.style.gridTemplateColumns = "32px minmax(0,1fr)";
+      card.style.minHeight = "50px";
       card.style.borderRadius = "8px";
       const icon = card.querySelector("span:first-child");
-      icon?.style.setProperty("width", "40px");
-      icon?.style.setProperty("min-width", "40px");
-      icon?.style.setProperty("padding-left", "5px");
+      icon?.style.setProperty("width", "32px");
+      icon?.style.setProperty("min-width", "32px");
+      icon?.style.setProperty("padding-left", "2px");
       icon?.style.setProperty("box-sizing", "border-box");
-      icon?.style.setProperty("font-size", "36px");
-      icon?.querySelector("svg")?.style.setProperty("width", "36px");
-      icon?.querySelector("svg")?.style.setProperty("height", "36px");
-      card.querySelector("strong")?.style.setProperty("font-size", "18px");
-      card.querySelector("small")?.style.setProperty("font-size", "10px");
+      icon?.style.setProperty("font-size", "28px");
+      icon?.querySelector("svg")?.style.setProperty("width", "28px");
+      icon?.querySelector("svg")?.style.setProperty("height", "28px");
+      card.querySelector("strong")?.style.setProperty("font-size", "15px");
+      card.querySelector("small")?.style.setProperty("font-size", "9px");
       card.querySelector("span:nth-child(2)")?.style.setProperty("min-width", "0");
-      card.querySelector("span:nth-child(2)")?.style.setProperty("padding", "5px 7px");
+      card.querySelector("span:nth-child(2)")?.style.setProperty("padding", "4px 6px");
     });
     const sessionStatus = box.querySelector("[data-auto-session-status]");
     if (sessionStatus)
@@ -770,7 +1082,7 @@
           : `● ${running ? `Đang chạy (${elapsed} phút)` : "Đã dừng"}`;
     const processedList = box.querySelector("[data-auto-list]");
     if (processedList) {
-      processedList.style.maxHeight = "280px";
+      processedList.style.maxHeight = "220px";
       processedList.style.overflowY = "auto";
       processedList.style.overflowX = "hidden";
       const nextItems = [
@@ -836,8 +1148,9 @@
       processedCount.textContent = `: ${p.length + s.length} (Hoàn thành ${p.length} | Bỏ qua ${s.length})`;
     const currentLog = box.querySelector("[data-auto-log-list]");
     if (currentLog) {
-      currentLog.textContent = (memory.logs || []).join("\n") || "Đang chờ bài tiếp theo";
-      currentLog.scrollTop = currentLog.scrollHeight;
+      const latest = compactCurrentLog(currentLog.dataset.expanded !== "false");
+      currentLog.textContent = latest;
+      currentLog.title = latest;
     }
     syncPauseButton();
   }
@@ -873,7 +1186,7 @@
     }
   }
   const AUTO_DASHBOARD_POSITION_KEY = "assistantAutoDashboardPositionV1";
-  const AUTO_DASHBOARD_MIN_HEIGHT = 660;
+  const AUTO_DASHBOARD_MIN_HEIGHT = 560;
   function readDashboardPosition() {
     try {
       const value = JSON.parse(localStorage.getItem(AUTO_DASHBOARD_POSITION_KEY) || "null");
@@ -895,7 +1208,11 @@
       top = Number.parseFloat(box.style.top);
     if (!Number.isFinite(left) || !Number.isFinite(top)) return;
     try {
-      const position = JSON.stringify({ left: Math.round(left), top: Math.round(top), mode: "free" });
+      const position = JSON.stringify({
+        left: Math.round(left),
+        top: Math.round(top),
+        mode: "free",
+      });
       persistPageSetting(AUTO_DASHBOARD_POSITION_KEY, position);
     } catch {}
   }
@@ -904,6 +1221,8 @@
     if (box) {
       configureSpeedControl(box);
       configureMinimumGapControl(box);
+      configureSkipOldPostsControl(box);
+      configureIdleRefreshPostsControl(box);
       configureDailyReplyLimitControl(box);
       configureConsecutiveFailureLimitControl(box);
       reorderAutoSetupControls(box);
@@ -916,7 +1235,7 @@
       if (!box.isConnected || box.dataset.minimized === "true") return;
       const available = Math.max(180, innerHeight - 24);
       // The dashboard follows the browser viewport. When the viewport is
-      // shorter than the intended 660px design height, let the dashboard
+      // shorter than the intended compact design height, let the dashboard
       // shrink and scroll internally instead of extending past the window.
       box.style.height = `${available}px`;
       box.style.maxHeight = `${available}px`;
@@ -928,7 +1247,7 @@
     box.__autoDisposeViewport = () => removeEventListener("resize", syncViewport);
     box.id = "assistant-auto-dashboard";
     box.style.cssText =
-      "--xra-font:Roboto,Segoe UI,Arial,sans-serif;--xra-text:var(--xra-color,#e7e9ea);--xra-border:color-mix(in srgb,var(--xra-color,#e7e9ea) 22%,var(--xra-bg,#000));--xra-muted:color-mix(in srgb,var(--xra-color,#e7e9ea) 60%,var(--xra-bg,#000));position:fixed;right:14px;top:auto;bottom:12px;width:min(440px,calc(100vw - 24px));min-width:min(300px,calc(100vw - 24px));min-height:min(260px,calc(100vh - 24px));max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);resize:both;overflow:auto;z-index:2147483647;background:var(--xra-bg,#000);color:var(--xra-color,#e7e9ea);border:1px solid var(--xra-border);border-radius:12px;box-shadow:0 8px 24px #0004;font:12px/1.4 var(--xra-font);padding:12px";
+      "--xra-font:Roboto,Segoe UI,Arial,sans-serif;--xra-text:var(--xra-color,#e7e9ea);--xra-border:color-mix(in srgb,var(--xra-color,#e7e9ea) 22%,var(--xra-bg,#000));--xra-muted:color-mix(in srgb,var(--xra-color,#e7e9ea) 60%,var(--xra-bg,#000));position:fixed;right:14px;top:auto;bottom:12px;width:min(400px,calc(100vw - 20px));min-width:min(280px,calc(100vw - 20px));min-height:min(240px,calc(100vh - 24px));max-width:calc(100vw - 20px);max-height:calc(100vh - 24px);resize:both;overflow:auto;z-index:2147483647;background:var(--xra-bg,#000);color:var(--xra-color,#e7e9ea);border:1px solid var(--xra-border);border-radius:10px;box-shadow:0 8px 24px #0004;font:12px/1.35 var(--xra-font);padding:10px";
     const savedPosition = readDashboardPosition();
     if (savedPosition?.mode === "free") {
       box.style.left = `${savedPosition.left}px`;
@@ -952,7 +1271,17 @@
     box.querySelectorAll("label").forEach((node) => node.style.setProperty("font-size", "13px"));
     box
       .querySelectorAll("[data-auto-log-list],[data-auto-list]")
-      .forEach((node) => node.style.setProperty("font-size", "12px"));
+      .forEach((node) => {
+        node.style.setProperty("font-size", "12px");
+        if (node.matches("[data-auto-log-list]")) {
+          node.style.setProperty("margin-top", "4px");
+          node.style.setProperty("max-height", "18px");
+          node.style.setProperty("overflow", "hidden");
+          node.style.setProperty("white-space", "nowrap");
+          node.style.setProperty("text-overflow", "ellipsis");
+          node.style.setProperty("line-height", "1.35");
+        }
+      });
     const speedLabel = box
       .querySelector("[data-auto-speed]")
       ?.previousElementSibling?.querySelector("b");
@@ -966,9 +1295,24 @@
       dragHandle.style.position = "sticky";
       dragHandle.style.top = "-16px";
       dragHandle.style.zIndex = "5";
-      dragHandle.style.margin = "-16px -16px 12px";
-      dragHandle.style.padding = "16px 16px 12px";
+      dragHandle.style.margin = "-14px -14px 8px";
+      dragHandle.style.padding = "12px 14px 8px";
       dragHandle.style.background = "var(--xra-bg,#000)";
+    }
+    const headerActions = box.querySelector("[data-auto-drag-handle] > span:last-child");
+    if (headerActions) headerActions.style.gap = "4px";
+    box.querySelectorAll("[data-auto-drag-handle] > span:last-child button").forEach((button) => {
+      if (button.matches("[data-auto-pause]")) return;
+      button.style.width = "28px";
+      button.style.height = "28px";
+      button.style.fontSize = "18px";
+    });
+    const processingCard = box.querySelector("[data-auto-log-list]")?.parentElement;
+    if (processingCard) {
+      processingCard.style.padding = "8px";
+      processingCard.style.marginBottom = "8px";
+      processingCard.style.borderRadius = "9px";
+      processingCard.style.fontSize = "13px";
     }
     const vietnameseFilter = box.querySelector("[data-auto-vietnamese]")?.closest("label");
     if (vietnameseFilter) {
@@ -1022,17 +1366,22 @@
       interval.addEventListener("change", syncRestSettings);
       syncRestSettings();
       const syncVietnameseFilter = () => {
-        vietnameseFilter.style.opacity = vietnameseFilter.querySelector("[data-auto-vietnamese]")?.checked
+        vietnameseFilter.style.opacity = vietnameseFilter.querySelector("[data-auto-vietnamese]")
+          ?.checked
           ? "1"
           : "0.55";
       };
-      vietnameseFilter.querySelector("[data-auto-vietnamese]")?.addEventListener("change", syncVietnameseFilter);
+      vietnameseFilter
+        .querySelector("[data-auto-vietnamese]")
+        ?.addEventListener("change", syncVietnameseFilter);
       syncVietnameseFilter();
     }
     document.documentElement.appendChild(box);
     syncPauseButton();
     configureSpeedControl(box);
     configureMinimumGapControl(box);
+    configureSkipOldPostsControl(box);
+    configureIdleRefreshPostsControl(box);
     configureDailyReplyLimitControl(box);
     configureConsecutiveFailureLimitControl(box);
     reorderAutoSetupControls(box);
@@ -1050,7 +1399,7 @@
     if (setupTitle) {
       const setupCard = document.createElement("section");
       setupCard.style.cssText =
-        "padding:10px;border:1px solid var(--xra-border);border-radius:10px;background:transparent;margin-bottom:10px";
+        "padding:8px;border:1px solid var(--xra-border);border-radius:9px;background:transparent;margin-bottom:8px";
       setupTitle.parentNode.insertBefore(setupCard, setupTitle);
       setupTitle.style.cssText +=
         ";display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px";
@@ -1076,6 +1425,22 @@
         if (isSessionRow) break;
         setupBody.append(next);
       }
+      setupCard.style.padding = "7px";
+      setupBody.querySelectorAll("label,[data-auto-min-gap-control]").forEach((row) => {
+        row.style.padding = "4px 0";
+        row.style.gap = "5px";
+        row.style.fontSize = "12px";
+        row.style.lineHeight = "1.25";
+      });
+      setupBody.querySelectorAll('input[type="number"]').forEach((input) => {
+        input.style.width = "52px";
+        input.style.minWidth = "52px";
+        input.style.padding = "4px 6px";
+      });
+      setupBody.querySelectorAll("select").forEach((select) => {
+        select.style.minWidth = "72px";
+        select.style.padding = "4px 6px";
+      });
       const setupCollapsedKey = "assistantAutoSetupCollapsed";
       const setSetupCollapsed = (collapsed) => {
         setupBody.hidden = collapsed;
@@ -1110,7 +1475,7 @@
     if (sessionRow) {
       const sessionCard = document.createElement("section");
       sessionCard.style.cssText =
-        "padding:12px;border:1px solid var(--xra-border);border-radius:10px;background:transparent";
+        "padding:8px;border:1px solid var(--xra-border);border-radius:9px;background:transparent";
       sessionRow.parentNode.insertBefore(sessionCard, sessionRow);
       sessionCard.append(
         sessionRow,
@@ -1122,18 +1487,18 @@
     box.querySelector("[data-auto-reset]")?.remove();
     box.querySelectorAll("[data-auto-stats] > div > div").forEach((card) => {
       card.style.setProperty("background", "transparent", "important");
-      card.style.gridTemplateColumns = "26% 74%";
-      card.style.minHeight = "62px";
+      card.style.gridTemplateColumns = "30% 70%";
+      card.style.minHeight = "50px";
       card.style.borderRadius = "8px";
-      card.querySelector("span:first-child")?.style.setProperty("font-size", "18px");
+      card.querySelector("span:first-child")?.style.setProperty("font-size", "15px");
       const statIcon = card.querySelector("span:first-child .ui-icon");
       if (statIcon) {
-        statIcon.style.width = "34px";
-        statIcon.style.height = "34px";
+        statIcon.style.width = "28px";
+        statIcon.style.height = "28px";
       }
-      card.querySelector("strong")?.style.setProperty("font-size", "18px");
-      card.querySelector("small")?.style.setProperty("font-size", "10px");
-      card.querySelector("span:nth-child(2)")?.style.setProperty("padding", "5px");
+      card.querySelector("strong")?.style.setProperty("font-size", "15px");
+      card.querySelector("small")?.style.setProperty("font-size", "9px");
+      card.querySelector("span:nth-child(2)")?.style.setProperty("padding", "4px 5px");
     });
     const speedStyle = document.createElement("style");
     speedStyle.textContent =
@@ -1144,9 +1509,9 @@
     const processedCard = box.querySelector("details");
     if (processedCard) {
       processedCard.style.cssText =
-        "margin-top:12px;padding:12px;border:1px solid var(--xra-border,#303842);border-radius:10px;background:transparent";
+        "margin-top:8px;padding:8px;border:1px solid var(--xra-border,#303842);border-radius:9px;background:transparent";
       const summary = processedCard.querySelector("summary");
-      if (summary) summary.style.padding = "0 0 8px";
+      if (summary) summary.style.padding = "0 0 6px";
       const resizeProcessedCard = () => {
         if (!processedCard.open) {
           syncViewport();
@@ -1154,7 +1519,7 @@
           const list = processedCard.querySelector("[data-auto-list]");
           if (list) {
             list.style.height = "";
-            list.style.maxHeight = "280px";
+            list.style.maxHeight = "220px";
           }
           return;
         }
@@ -1177,10 +1542,10 @@
       box.__autoResizeProcessedCard = resizeProcessedCard;
       processedCard.addEventListener("toggle", resizeProcessedCard);
     }
-    box.style.width = "min(380px, calc(100vw - 24px))";
-    box.style.height = "660px";
-    box.style.minWidth = "min(380px, calc(100vw - 24px))";
-    box.style.minHeight = "660px";
+    box.style.width = "min(360px, calc(100vw - 20px))";
+    box.style.height = "560px";
+    box.style.minWidth = "min(280px, calc(100vw - 20px))";
+    box.style.minHeight = "560px";
     box.style.maxHeight = "calc(100vh - 24px)";
     box.style.resize = "both";
     box.style.overflow = "auto";
@@ -1194,6 +1559,36 @@
       box.querySelectorAll("[data-auto-dropdown]").forEach((span) => {
         span.innerHTML = dropdownSvg;
       });
+    const currentLog = box.querySelector("[data-auto-log-list]");
+    const currentToggle = box.querySelector("[data-auto-current-toggle]");
+    if (currentLog && currentToggle) {
+      const setCurrentExpanded = (expanded) => {
+        const next = !!expanded;
+        currentLog.dataset.expanded = String(next);
+        currentLog.style.maxHeight = next ? "56px" : "18px";
+        currentLog.style.whiteSpace = next ? "pre-line" : "nowrap";
+        currentToggle.setAttribute("aria-expanded", String(next));
+        currentToggle.setAttribute("aria-label", next ? "Thu gọn đang xử lý" : "Mở rộng đang xử lý");
+        currentToggle.title = next ? "Thu gọn đang xử lý" : "Mở rộng đang xử lý";
+        currentToggle.innerHTML = iconMarkup(next ? "up" : "down");
+        currentLog.textContent = compactCurrentLog(next);
+        currentLog.title = compactCurrentLog(true);
+      };
+      currentToggle.setAttribute("role", "button");
+      currentToggle.tabIndex = 0;
+      currentToggle.style.cursor = "pointer";
+      currentToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setCurrentExpanded(currentLog.dataset.expanded !== "true");
+      });
+      currentToggle.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        setCurrentExpanded(currentLog.dataset.expanded !== "true");
+      });
+      setCurrentExpanded(true);
+    }
     const makeDraggable = (
       dragHandle,
       allowInteractive = dragHandle?.matches("[data-auto-restore]"),
@@ -1330,7 +1725,10 @@
     memory.autoRestUntil = 0;
     activeRunSegmentStartedAt = 0;
     globalThis.__assistantAutoFlowRunning = false;
-    memory.lastStopReason = String(reason || "Đã dừng").replace(/\s+/gu, " ").trim().slice(0, 240);
+    memory.lastStopReason = String(reason || "Đã dừng")
+      .replace(/\s+/gu, " ")
+      .trim()
+      .slice(0, 240);
     document.dispatchEvent(new Event("assistant-auto-flow-state"));
     memory.runState = "stopped";
     clearTimeout(timer);
@@ -1385,7 +1783,7 @@
       )
         continue;
       const id = postId(article),
-        link = article.querySelector('a[href*="/status/"]'),
+        link = statusLinkForArticle(article, id),
         author = link?.href.match(/x\.com\/([^/]+)\/status/)?.[1]?.toLowerCase();
       const authorText =
         article
@@ -1395,7 +1793,11 @@
         author ||
         "unknown";
       const displayName = authorText.split("@")[0].trim() || authorText;
-      if (!id || done.has(id) || author === me) continue;
+      if (!id) continue;
+      if (done.has(id) || author === me) {
+        if (noteNoActionPost(id)) return;
+        continue;
+      }
       if (author && excludedAuthors.has(author)) {
         s.push({
           id,
@@ -1409,10 +1811,33 @@
         save(skippedKey, s);
         log(`Bỏ qua @${author}: nằm trong danh sách tài khoản loại trừ`);
         dashboard();
+        if (noteNoActionPost(id)) return;
+        continue;
+      }
+      const skipOldPosts = readSkipOldPostsSetting();
+      const ageHours = postAgeHours(article);
+      if (skipOldPosts.enabled && ageHours !== null && ageHours > skipOldPosts.hours) {
+        s.push({
+          id,
+          url: link.href,
+          handle: author || "unknown",
+          displayName,
+          reason: `Bài quá ${skipOldPosts.hours} giờ`,
+          skippedAt: Date.now(),
+        });
+        done.add(id);
+        save(skippedKey, s);
+        log(`Bỏ qua ${id}: bài đã quá ${skipOldPosts.hours} giờ`);
+        dashboard();
+        if (noteNoActionPost(id)) return;
         continue;
       }
       const onlyVietnamese = document.querySelector("[data-auto-vietnamese]")?.checked !== false;
-      if (onlyVietnamese && !isVietnamesePost(article)) continue;
+      if (onlyVietnamese && !isVietnamesePost(article)) {
+        if (noteNoActionPost(id)) return;
+        continue;
+      }
+      resetNoActionScan();
       clearCurrentProcessing();
       const item = { id, url: link.href, handle: author || "unknown", displayName };
       log(`Bài viết của: ${displayName} - ${author ? "@" + author : "unknown"} | ID: ${id}`);
@@ -1464,8 +1889,8 @@
             ),
         );
         const nativeReply = targetArticle?.querySelector('[data-testid="reply"]');
-        if (nativeReply && !nativeReply.dataset.opened) {
-          nativeReply.dataset.opened = "1";
+        if (nativeReply && !nativeReply.dataset.xraOpened) {
+          nativeReply.dataset.xraOpened = "1";
           nativeReply.click();
           log("Đã mở ô Trả lời của bài viết");
           window.dispatchEvent(new Event("assistant-auto-flow-mount"));
@@ -1484,7 +1909,8 @@
       let replyButton = null;
       for (let toolbarWait = 0; toolbarWait < 20; toolbarWait++) {
         targetBox = assistantBoxForTarget(id);
-        replyButton = targetBox?.querySelector(".xra-button.xra-generate,.xra-button.xra-sync") || null;
+        replyButton =
+          targetBox?.querySelector(".xra-button.xra-generate,.xra-button.xra-sync") || null;
         if (replyButton) {
           if (!(await waitIfPaused())) return;
           replyButton.scrollIntoView({ behavior: "auto", block: "center" });
@@ -1535,7 +1961,8 @@
       let button = null;
       let buttonWait = 0;
       while (running && buttonWait < 60) {
-        button = document.querySelector(".xra-button.xra-generate,.xra-button.xra-sync");
+        targetBox = assistantBoxForTarget(id);
+        button = targetBox?.querySelector(".xra-button.xra-generate,.xra-button.xra-sync") || null;
         if (button && !button.disabled) break;
         // Do not click X's native Reply button here: that opens the global
         // compose dialog and steals the target article from the assistant.
@@ -1589,7 +2016,9 @@
             suggestion = targetBox?.querySelector(
               ".xra-results .xra-suggestion-wrap .xra-chip-main",
             );
-            const errorNode = document.querySelector(".xra-error,[role=alert],.xra-status-error");
+            const errorNode = targetBox?.querySelector(
+              ".xra-error,[role=alert],.xra-status-error",
+            );
             providerError = errorNode?.textContent?.trim() || "";
             if (providerError) break;
           }
@@ -1602,9 +2031,8 @@
           return;
         }
         if (providerError) {
-          const retryButton = document.querySelector(
-            ".xra-button.xra-sync,.xra-button.xra-generate",
-          );
+          const retryButton =
+            targetBox?.querySelector(".xra-button.xra-sync,.xra-button.xra-generate") || null;
           if (retryButton && running) {
             log("Lỗi gợi ý -> Tạo lại gợi ý");
             if (!(await waitIfPaused())) {
@@ -1626,11 +2054,11 @@
                 await stopForAutomationBlock(item, blockNotice);
                 return;
               }
-              const retryError =
-                document
-                  .querySelector(".xra-error,[role=alert],.xra-status-error")
-                  ?.textContent?.trim() || "";
               targetBox = assistantBoxForTarget(id);
+              const retryError =
+                targetBox
+                  ?.querySelector(".xra-error,[role=alert],.xra-status-error")
+                  ?.textContent?.trim() || "";
               const retrySuggestion = targetBox?.querySelector(
                 ".xra-results .xra-suggestion-wrap .xra-chip-main",
               );
@@ -1687,7 +2115,7 @@
         }
         if (suggestion) {
           const suggestions = Array.from(
-            targetBox?.querySelectorAll(".xra-results .xra-suggestion-wrap") || [],
+              targetBox?.querySelectorAll(".xra-results .xra-suggestion-wrap") || [],
             ),
             preferredSuggestions =
               globalThis.AutoReplySelection?.preferAboveScore(suggestions, 30) || suggestions;
@@ -1699,6 +2127,31 @@
             !suggestions.some((item) => Number(item.dataset.relevanceScore) > 30)
           )
             log("Không có câu trên 30% · dùng danh sách hiện có");
+          const detectedTopic = String(targetBox?.dataset.replyTopic || "")
+              .replace(/\s+/gu, " ")
+              .trim(),
+            autoSkipRules = String(targetBox?.dataset.autoSkipTopics || "")
+              .split(/\n+/u)
+              .map((value) => value.trim())
+              .filter(Boolean),
+            matchedAutoSkipRule = matchingAutoTopicRule(detectedTopic, autoSkipRules);
+          if (matchedAutoSkipRule) {
+            const reason = `Chủ đề “${matchedAutoSkipRule}” nằm trong quy tắc bỏ qua tự động`;
+            s.push({
+              ...item,
+              topic: detectedTopic,
+              reason,
+              skippedAt: Date.now(),
+            });
+            save(skippedKey, s);
+            log(`Bỏ qua ${id}: ${reason}${detectedTopic ? ` · Nhãn: ${detectedTopic}` : ""}`);
+            await coordinate("release", item);
+            if (noteNoActionPost(id)) return;
+            await returnHome();
+            clearCurrentProcessing();
+            dashboard();
+            break;
+          }
           const chosen = Math.floor(Math.random() * preferredSuggestions.length);
           log("Lựa chọn: " + (chosen + 1));
           suggestion = preferredSuggestions[chosen]?.querySelector(".xra-chip-main") || suggestion;
@@ -1755,6 +2208,7 @@
           const dailyCount = recordDailyReply();
           p.push({ ...item, completedAt: Date.now() });
           save(processedKey, p);
+          resetNoActionScan();
           log(
             "Hoàn thành [Total done: " +
               p.length +
@@ -1870,77 +2324,80 @@
       if (m?.type !== "autoReplyFlow") return;
       stop("Đã reset phiên");
       if (m.enabled) {
-        persistentSettingsReady.then(() => {
-          const restoredPaused = m.restore === true && m.paused === true;
-        sessionStart = Date.now();
-        memory.autoRestEnabled = localStorage.getItem("assistantAutoRestEnabled") === "true";
-        memory.autoRestEveryMinutes = Math.max(
-          1,
-          Math.min(1440, Number(localStorage.getItem("assistantAutoRestEveryMinutes")) || 30),
-        );
-        readConsecutiveFailureLimit();
-        scheduleDailyReplyReset();
-        memory.runId = createRunId();
-        memory.runStartedAt = sessionStart;
-        memory.runState = restoredPaused ? "paused" : "running";
-        memory.isPaused = restoredPaused;
-        memory.lastStopReason = "";
-        globalThis.__assistantAutoFlowPaused = restoredPaused;
-        memory.isAutoResting = false;
-        memory.autoRestUntil = 0;
-        activeRunElapsedMs = 0;
-        activeRunSegmentStartedAt = restoredPaused ? 0 : sessionStart;
-        processedKey = runStorageKey(memory.runId, "processed");
-        skippedKey = runStorageKey(memory.runId, "skipped");
-        memory.sessionFailures = 0;
-        memory.consecutiveFailures = 0;
-        memory.autoBlockNotice = "";
-        memory.processed = [];
-        memory.skipped = [];
-        memory.logs = [];
-        save(processedKey, []);
-        save(skippedKey, []);
-        running = true;
-        globalThis.__assistantAutoFlowRunning = true;
-        markXUsageMode();
-        document.dispatchEvent(new Event("assistant-auto-flow-state"));
-        notifyPanel(true);
-        log(
-          restoredPaused
-            ? `Khôi phục phiên tự động đang tạm dừng · ID ${memory.runId}`
-            : `Bắt đầu phiên tự động · ID ${memory.runId}`,
-        );
-        dashboardView();
-        dashboard();
-          (async () => {
-          // A restored paused session must not navigate or process anything
-          // until the user explicitly presses Continue.
-          if (restoredPaused && !(await waitIfPaused())) return;
-          if (!location.href.includes("/home") && location.pathname !== "/") {
-            const currentAuthor = location.pathname
-                .match(/^\/([^/]+)\/status\//i)?.[1]
-                ?.toLowerCase(),
-              excluded = await excludedAuthorSet();
-            log(
-              currentAuthor && excluded.has(currentAuthor)
-                ? `Bài của @${currentAuthor} nằm trong danh sách bỏ qua · chuyển về Home`
-                : "Đang chuyển về Home (click 2 lần)",
+        persistentSettingsReady
+          .then(() => {
+            const restoredPaused = m.restore === true && m.paused === true;
+            sessionStart = Date.now();
+            memory.autoRestEnabled = localStorage.getItem("assistantAutoRestEnabled") === "true";
+            memory.autoRestEveryMinutes = Math.max(
+              1,
+              Math.min(1440, Number(localStorage.getItem("assistantAutoRestEveryMinutes")) || 30),
             );
-            const home = document.querySelector("a[data-testid=AppTabBar_Home_Link]");
-            home?.click();
-            await pauseSleep(700);
-            home?.click();
-            await pauseSleep(4000);
-          }
-          loop().catch((e) => {
-            log("Lỗi:", e);
-            stop("Đã dừng do lỗi");
+            readConsecutiveFailureLimit();
+            scheduleDailyReplyReset();
+            memory.runId = createRunId();
+            memory.runStartedAt = sessionStart;
+            memory.runState = restoredPaused ? "paused" : "running";
+            memory.isPaused = restoredPaused;
+            memory.lastStopReason = "";
+            globalThis.__assistantAutoFlowPaused = restoredPaused;
+            memory.isAutoResting = false;
+            memory.autoRestUntil = 0;
+            activeRunElapsedMs = 0;
+            activeRunSegmentStartedAt = restoredPaused ? 0 : sessionStart;
+            processedKey = runStorageKey(memory.runId, "processed");
+            skippedKey = runStorageKey(memory.runId, "skipped");
+            memory.sessionFailures = 0;
+            memory.consecutiveFailures = 0;
+            memory.autoBlockNotice = "";
+            resetNoActionScan();
+            memory.processed = [];
+            memory.skipped = [];
+            memory.logs = [];
+            save(processedKey, []);
+            save(skippedKey, []);
+            running = true;
+            globalThis.__assistantAutoFlowRunning = true;
+            markXUsageMode();
+            document.dispatchEvent(new Event("assistant-auto-flow-state"));
+            notifyPanel(true);
+            log(
+              restoredPaused
+                ? `Khôi phục phiên tự động đang tạm dừng · ID ${memory.runId}`
+                : `Bắt đầu phiên tự động · ID ${memory.runId}`,
+            );
+            dashboardView();
+            dashboard();
+            (async () => {
+              // A restored paused session must not navigate or process anything
+              // until the user explicitly presses Continue.
+              if (restoredPaused && !(await waitIfPaused())) return;
+              if (!location.href.includes("/home") && location.pathname !== "/") {
+                const currentAuthor = location.pathname
+                    .match(/^\/([^/]+)\/status\//i)?.[1]
+                    ?.toLowerCase(),
+                  excluded = await excludedAuthorSet();
+                log(
+                  currentAuthor && excluded.has(currentAuthor)
+                    ? `Bài của @${currentAuthor} nằm trong danh sách bỏ qua · chuyển về Home`
+                    : "Đang chuyển về Home (click 2 lần)",
+                );
+                const home = document.querySelector("a[data-testid=AppTabBar_Home_Link]");
+                home?.click();
+                await pauseSleep(700);
+                home?.click();
+                await pauseSleep(4000);
+              }
+              loop().catch((e) => {
+                log("Lỗi:", e);
+                stop("Đã dừng do lỗi");
+              });
+            })();
+          })
+          .catch((error) => {
+            log("Lỗi khôi phục cài đặt tự động:", error);
+            stop("Đã dừng do lỗi khôi phục cài đặt");
           });
-          })();
-        }).catch((error) => {
-          log("Lỗi khôi phục cài đặt tự động:", error);
-          stop("Đã dừng do lỗi khôi phục cài đặt");
-        });
       }
       send({ ok: true });
       return false;

@@ -1,4 +1,16 @@
 // Hashtags, mentions and URLs are context, not evidence of the caption language.
+// Expand common Vietnamese chat shorthand only as an interpretation hint; keep
+// the original target_text unchanged so replies still answer the exact comment.
+globalThis.X_REPLY_NORMALIZE = (text) => {
+  const value = String(text || "").normalize("NFC");
+  if (!/\bt\s*[2-7]\b|\bcn\b|\bz\s+ta\b|\b(?:e|a)\b\s*$/iu.test(value)) return value;
+  return value
+    .replace(/\bt\s*([2-7])\b/giu, "thứ $1")
+    .replace(/\bcn\b/giu, "chủ nhật")
+    .replace(/\bz\s+ta\b/giu, "vậy ta")
+    .replace(/\be\b/giu, "em")
+    .replace(/\ba\b/giu, "anh");
+};
 globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   const prose = String(text)
     .normalize("NFC")
@@ -7,6 +19,8 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   // when Vietnamese words follow it (for example, “Gm em nha”).
   const standaloneGm = prose.replace(/[\p{P}\p{S}\s]/gu, "").toLocaleLowerCase() === "gm";
   const scoredProse = prose.replace(/\b(?:gm)\b/giu, " ");
+  const vietnameseShorthand =
+    /\bt\s*[2-7]\b|\bcn\b|\bz\s+ta\b|\b(?:e|a)\b\s*$/iu.test(scoredProse);
   const count = (pattern) => (scoredProse.match(pattern) || []).length;
   const latin = count(/\p{Script=Latin}/gu);
   const words = scoredProse.toLocaleLowerCase().match(/\p{Script=Latin}+/gu) || [];
@@ -36,6 +50,9 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
     "nè",
     "mọi",
     "rất",
+    "nay",
+    "à",
+    "e",
     "thật",
     "nhìn",
     "thấy",
@@ -109,6 +126,7 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   if (
     latin &&
     (/[ăđơưảạằẳẵắặầẩẫấậẻẽẹềểễếệỉĩịỏọồổỗốộờởỡớợủụừửữứựỷỹỵ]/i.test(prose) ||
+      vietnameseShorthand ||
       (scored >= 2 && viScore / scored >= 0.6))
   )
     return "vi";

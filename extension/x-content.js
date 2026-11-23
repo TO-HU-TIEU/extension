@@ -16,6 +16,8 @@
       postId: null,
       replies: [],
       replyHistory: [],
+      topic: "",
+      autoSkipTopics: [],
       selected: null,
       generated: false,
       liked: false,
@@ -355,10 +357,14 @@
     const ownMedia = mediaFor(article),
       embedded = embeddedContext(article).embedded,
       articles = [...document.querySelectorAll('main article[data-testid="tweet"]')],
-      before = articles
+      beforeCandidates = articles
         .slice(0, articles.indexOf(article))
         .filter((a) => !promotedArticle(a) && originalTextNode(a))
-        .slice(-6),
+        .filter(Boolean),
+      before =
+        beforeCandidates.length > 24
+          ? [beforeCandidates[0], ...beforeCandidates.slice(-23)]
+          : beforeCandidates,
       urls = [...ownMedia.mediaUrls];
     const turns = before
       .map((a, index) => {
@@ -415,8 +421,10 @@
           ? "Reply directly to target_text, which is the exact latest comment/post being answered. If it is a comment, answer its claim or tone first; use the nearest ancestor/root post only as background to resolve references. Do not reply to the root post instead of the target comment, and do not repeat the root caption."
           : "The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview or visible ancestor/root posts as the context being reacted to.",
         turns,
+        conversation_history: turns,
         embedded,
       }).slice(0, 3000),
+      conversationHistory: turns,
       conversationDepth: turns.length + 1,
       lang: text ? scriptLanguage(text, node?.lang || "") : "",
       mediaUrls: urls,
@@ -537,6 +545,7 @@
           : "The target post has no caption or only an icon. Use its own media first; if absent, use quoted_post/link_preview context.",
         embedded,
       }).slice(0, 3000),
+      conversationHistory: [],
       conversationDepth: 1,
       lang: text ? scriptLanguage(text, node?.lang || "") : "",
       mediaUrls: ownMedia.mediaUrls,
@@ -670,7 +679,7 @@
       .forEach((node) => node.remove());
     document
       .querySelectorAll('article[data-testid="tweet"]')
-      .forEach((article) => delete article.dataset.quoteButton);
+      .forEach((article) => delete article.dataset.assistantQuoteButton);
   }
   function injectQuoteButtons() {
     const id = location.pathname.match(/^\/[^/]+\/status\/(\d+)/)?.[1];
@@ -687,7 +696,7 @@
     // The current target already has its control. Most X mutations are feed
     // updates; avoid rescanning every article for the same target each time.
     if (
-      target.dataset.quoteButton &&
+      target.dataset.assistantQuoteButton &&
       lastQuoteTarget === id &&
       target.querySelector(".xra-quote-top-wrap,.xra-quote-floating")
     )
@@ -698,10 +707,10 @@
         article
           .querySelectorAll(".xra-quote-top-wrap,.xra-quote-floating")
           .forEach((node) => node.remove());
-        delete article.dataset.quoteButton;
+        delete article.dataset.assistantQuoteButton;
         continue;
       }
-      if (article.dataset.quoteButton) continue;
+      if (article.dataset.assistantQuoteButton) continue;
       const link = ownPermalink(article);
       if (!link) continue;
       const own = (el) => el.closest("article") === article && !insideQuote(el, article),
@@ -729,7 +738,7 @@
           row ||
           (subscribe ? subscribe.parentElement?.parentElement : anchor?.parentElement) ||
           article;
-      article.dataset.quoteButton = "1";
+      article.dataset.assistantQuoteButton = "1";
       const button = document.createElement("button");
       button.type = "button";
       button.className = "xra-quote-action xra-quote-top-action";
@@ -777,7 +786,9 @@
   const manuallyEditedEditors = new WeakSet();
   const manualReplyDrafts = new WeakMap();
   const autoFlowMutedSetting = (key) =>
-    globalThis.__assistantAutoFlowRunning === true && ["autoReply", "autoSuggest"].includes(key);
+    globalThis.__assistantAutoFlowRunning === true &&
+    globalThis.__assistantAutoFlowPaused !== true &&
+    ["autoReply", "autoSuggest"].includes(key);
   function syncAutoFlowSettingUi() {
     const update = (control, key) => {
       if (!["autoReply", "autoSuggest"].includes(key)) return;
@@ -793,7 +804,7 @@
     };
     document
       .querySelectorAll(".xra-box .xra-auto-reply,.xra-box .xra-auto-suggest")
-      .forEach((button) => update(button, button.dataset.settingKey));
+      .forEach((button) => update(button, button.dataset.assistantSettingKey));
     document
       .querySelectorAll(
         '.xra-auto-panel input[data-key="autoReply"],.xra-auto-panel input[data-key="autoSuggest"]',
@@ -823,6 +834,21 @@
     }
     return null;
   };
+  const normalizedButtonText = (node) =>
+    String(node?.innerText || node?.textContent || node?.getAttribute?.("aria-label") || "")
+      .replace(/\s+/gu, " ")
+      .trim();
+  const isReplyButton = (node) => normalizedButtonText(node) === "Trả lời";
+  const sendButtonForEditor = (targetEditor) =>
+    [...document.querySelectorAll(replySendButtonSelector)]
+      .filter(isReplyControlVisible)
+      .find(
+        (button) =>
+          isReplyButton(button) &&
+          replyEditorFrom(button) === targetEditor &&
+          !button.disabled &&
+          button.getAttribute("aria-disabled") !== "true",
+      ) || null;
   function replyContextType(editor, replyText) {
     const postId = location.pathname.match(/\/status\/(\d+)/)?.[1],
       article = editor?.closest?.('article[data-testid="tweet"]') || currentArticle(postId),
@@ -1001,6 +1027,8 @@
     }
   }
   function fill(text, auto) {
+    const targetEditor = editor();
+    if (!targetEditor) return;
     fillOnce(text);
     // The feedback runner submits the selected suggestion itself. Its chip
     // click must not also schedule the toolbar's auto-submit, otherwise X can
@@ -1011,7 +1039,10 @@
       globalThis.__assistantFeedbackReplyRunning !== true &&
       globalThis.__assistantAutoFlowRunning !== true
     )
-      setTimeout(() => document.querySelector('[data-testid="tweetButtonInline"]')?.click(), 90);
+      setTimeout(() => {
+        const sendButton = sendButtonForEditor(targetEditor);
+        if (sendButton) sendButton.click();
+      }, 90);
   }
   async function openMediaPicker(query, kind = "gif") {
     const visible = (e) => {
@@ -1270,7 +1301,18 @@
   });
   function likePost() {
     if (state.liked) return;
-    const b = articleFor(state.postId)?.querySelector('[data-testid="like"]');
+    const article = articleFor(state.postId),
+      alreadyLiked =
+        !!article?.querySelector('[data-testid="unlike"]') ||
+        article?.querySelector('[data-testid="like"]')?.getAttribute("aria-pressed") === "true" ||
+        /(?:unlike|đã thích|bỏ thích)/iu.test(
+          article?.querySelector('[data-testid="like"],[data-testid="unlike"]')?.getAttribute("aria-label") || "",
+        ),
+      b = article?.querySelector('[data-testid="like"]');
+    if (alreadyLiked) {
+      state.liked = true;
+      return;
+    }
     if (b) {
       b.click();
       state.liked = true;
@@ -1337,10 +1379,12 @@
       score.textContent = Number.isFinite(item.relevance_score) ? `${item.relevance_score}%` : "";
       row.append(t, score);
       b.append(row);
-      if (item.translation_vi) {
+      const translation =
+        typeof item.translation_vi === "string" ? item.translation_vi.trim() : "";
+      if (translation && !/^null$/iu.test(translation)) {
         const s = document.createElement("small");
         s.className = "xra-translation";
-        s.textContent = item.translation_vi;
+        s.textContent = translation;
         b.append(s);
       }
       b.onclick = () => {
@@ -1440,8 +1484,12 @@
       // Opening the native Reply button is only part of an explicitly
       // enabled automatic run. Normal navigation must not activate the
       // Reply tab/editor by itself.
-      if (globalThis.__assistantAutoFlowRunning === true && reply && !reply.dataset.opened) {
-        reply.dataset.opened = "1";
+      if (
+        globalThis.__assistantAutoFlowRunning === true &&
+        reply &&
+        !reply.dataset.assistantOpened
+      ) {
+        reply.dataset.assistantOpened = "1";
         reply.click();
         setTimeout(safeMount, 250);
       }
@@ -1454,6 +1502,8 @@
         postId: post?.postId || null,
         replies: [],
         replyHistory: [],
+        topic: "",
+        autoSkipTopics: [],
         selected: null,
         generated: false,
         liked: false,
@@ -1466,6 +1516,8 @@
       box = document.createElement("div");
     box.className = "xra-box";
     box.dataset.postId = post?.postId || "";
+    box.dataset.replyTopic = "";
+    box.dataset.autoSkipTopics = "";
     const icon = (name) => globalThis.AssistantIcons?.svg(name) || "";
     box.innerHTML = `<div class="xra-tools"><span class="xra-spacer"></span><div class="xra-tools-group xra-tools-left"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại">${icon("refresh")}</button></div><div class="xra-tools-group xra-tools-right"><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><button class="xra-button xra-settings" title="Cài đặt tự động">${icon("setting")}</button></div><div class="xra-tools-group xra-tools-hidden"><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài">${icon("sparkles")}</button><button class="xra-button xra-auto-like" title="Tự like khi mở bài">${icon("heart")}</button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý">${icon("send")}</button></div></div><div class="xra-results"></div>`;
     const tools = box.querySelector(".xra-tools");
@@ -1507,7 +1559,7 @@
       countMenu.hidden = !countMenu.hidden;
     };
     const toggle = (button, key, value) => {
-      button.dataset.settingKey = key;
+      button.dataset.assistantSettingKey = key;
       button.dataset.savedEnabled = String(!!value);
       button.classList.toggle("active", !!value && !autoFlowMutedSetting(key));
       button.setAttribute("aria-pressed", String(!!value && !autoFlowMutedSetting(key)));
@@ -1573,10 +1625,6 @@
     let remountBox = null;
     const enterReplyInput = autoPanel.querySelector('input[data-key="replyEnterToSend"]');
     let boundEditor = null;
-    const sendButtonForEditor = (targetEditor) =>
-      [...document.querySelectorAll(replySendButtonSelector)]
-        .filter(isReplyControlVisible)
-        .find((button) => replyEditorFrom(button) === targetEditor) || null;
     const onEditorKeydown = (event) => {
       if (
         !box.isConnected ||
@@ -1750,6 +1798,12 @@
           location.pathname.match(/\/status\/(\d+)/)?.[1] === box.dataset.postId
         ) {
           state.replies = data.result.replies;
+          state.topic = String(data.result.topic || "").replace(/\s+/gu, " ").trim().slice(0, 180);
+          state.autoSkipTopics = Array.isArray(data.result.auto_skip_topics)
+            ? data.result.auto_skip_topics.map((value) => String(value).trim()).filter(Boolean)
+            : [];
+          box.dataset.replyTopic = state.topic;
+          box.dataset.autoSkipTopics = state.autoSkipTopics.join("\n");
           state.replyHistory = [
             ...new Set([
               ...state.replyHistory,
@@ -1927,18 +1981,18 @@
   safeMount();
   // Cho phép nút Phân tích chuyển thành nút dừng trong lúc chờ mô hình, không khoá nút.
   async function composeQuoteFromArticle(article, button) {
-    if (button.dataset.quoteRunning === "1") {
-      button.dataset.quoteCancel = "1";
+    if (button.dataset.assistantQuoteRunning === "1") {
+      button.dataset.assistantQuoteCancel = "1";
       button.title = "Đang dừng phân tích…";
       button.setAttribute("aria-label", "Đang dừng phân tích…");
       return;
     }
-    button.dataset.quoteRunning = "1";
-    button.dataset.quoteCancel = "0";
+    button.dataset.assistantQuoteRunning = "1";
+    button.dataset.assistantQuoteCancel = "0";
     button.classList.add("xra-quote-loading");
     button.title = "Dừng phân tích";
     button.setAttribute("aria-label", "Dừng phân tích");
-    const cancelled = () => button.dataset.quoteCancel === "1";
+    const cancelled = () => button.dataset.assistantQuoteCancel === "1";
     try {
       safeMessage({ type: "openPanel" }).catch(() => {});
       const post = await readQuotePost(article);
@@ -2017,8 +2071,8 @@
       });
     } finally {
       const wasCancelled = cancelled();
-      button.dataset.quoteRunning = "0";
-      button.dataset.quoteCancel = "0";
+      button.dataset.assistantQuoteRunning = "0";
+      button.dataset.assistantQuoteCancel = "0";
       button.classList.remove("xra-quote-loading");
       button.disabled = false;
       button.title = "Viết bài trích dẫn phân tích góc nhìn";
