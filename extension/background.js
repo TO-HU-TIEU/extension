@@ -760,7 +760,7 @@ function providerApiError(error) {
     )
   );
 }
-const ASSISTANT_VERSION = globalThis.chrome?.runtime?.getManifest?.().version || "1.5.33";
+const ASSISTANT_VERSION = globalThis.chrome?.runtime?.getManifest?.().version || "1.5.32";
 function friendlyRuntimeError(error) {
   const detail = String(error?.message || error || "")
     .replace(/\s+/g, " ")
