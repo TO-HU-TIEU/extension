@@ -825,7 +825,14 @@
   const editorFromAssistantBox = (box) => {
     if (!box?.isConnected) return null;
     const host = box.previousElementSibling;
-    return host?.querySelector?.('[data-testid^="tweetTextarea_"][contenteditable="true"]') || null;
+    const selector = '[data-testid^="tweetTextarea_"][contenteditable="true"]';
+    const direct = host?.querySelector?.(selector);
+    if (direct) return direct;
+    // X can wrap the composer one level higher after a route update. Only
+    // use the parent fallback when it contains a single editor, so a second
+    // composer can never steal this post's reply target.
+    const nearby = [...(host?.parentElement?.querySelectorAll?.(selector) || [])];
+    return nearby.length === 1 ? nearby[0] : null;
   };
   async function submitSelectedReply(expectedText, handle, targetId) {
     const normalize = (value) =>
@@ -840,11 +847,13 @@
       const style = getComputedStyle(node);
       return style.display !== "none" && style.visibility !== "hidden";
     };
-    const buttonText = (node) =>
-      String(node?.innerText || node?.textContent || node?.getAttribute?.("aria-label") || "")
-        .replace(/\s+/gu, " ")
-        .trim();
-    const isReplyButton = (node) => buttonText(node) === "Trả lời";
+    const buttonLabels = (node) =>
+      [node?.getAttribute?.("aria-label"), node?.innerText, node?.textContent]
+        .map((value) => normalize(value))
+        .filter(Boolean);
+    // Never click a generic submit button. At least one native label must be
+    // exactly the Vietnamese reply action text.
+    const isReplyButton = (node) => buttonLabels(node).includes("Trả lời");
     let targetBox = assistantBoxForTarget(targetId);
     const onTargetStatus = () =>
       location.pathname.match(/\/status\/(\d+)(?:\/|$)/)?.[1] === String(targetId || "");
@@ -879,18 +888,27 @@
         candidate.closest('article[data-testid="tweet"]'),
         document,
       ].filter(Boolean);
-      const buttons = scopes.flatMap((scope) => [...(scope.querySelectorAll?.(selector) || [])]);
-      return (
-        buttons.find(
-          (node, index) =>
-            buttons.indexOf(node) === index &&
-            editorForButton(node) === candidate &&
-            isReplyButton(node) &&
-            visible(node) &&
-            !node.disabled &&
-            node.getAttribute("aria-disabled") !== "true",
-        ) || null
+      const buttons = [
+        ...new Set(scopes.flatMap((scope) => [...(scope.querySelectorAll?.(selector) || [])])),
+      ];
+      const enabledReplyButtons = buttons.filter(
+        (node) =>
+          isReplyButton(node) &&
+          visible(node) &&
+          !node.disabled &&
+          node.getAttribute("aria-disabled") !== "true",
       );
+      const matched = enabledReplyButtons.find((node) => editorForButton(node) === candidate);
+      if (matched) return matched;
+      // During an X DOM refresh the button can briefly sit beside, rather
+      // than inside, the subtree used to resolve the editor. If this
+      // composer scope has exactly one visible native “Trả lời” button, it
+      // is safe to use that exact-labelled button as the fallback.
+      const nearby = enabledReplyButtons.filter(
+        (node) => host?.contains(node) || host?.parentElement?.contains(node),
+      );
+      if (nearby.length === 1) return nearby[0];
+      return enabledReplyButtons.length === 1 ? enabledReplyButtons[0] : null;
     };
     let editor = null;
     let send = null;
