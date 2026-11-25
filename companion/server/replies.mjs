@@ -7,7 +7,7 @@ Detect the original language from target_text, not translated X interface labels
 Determine the dominant language of the prose in target_text, ignoring hashtags, ticker symbols, mentions and URLs. language_hint is advisory and may be wrong; never let it override the prose. A Vietnamese caption with a Chinese hashtag such as #四 is Vietnamese: reply in Vietnamese and set source_language to vi and translation_vi to null.
 For mixed-language posts use the language comprising at least 60 percent of meaningful prose. A short opening such as “Good morning” does not make a mostly Vietnamese caption English. Every reply in one result must use the same dominant language.
 Return exactly reply_count distinct replies in the original language of target_text. If target_text is Vietnamese with diacritics, replies must use proper Vietnamese diacritics; never output unaccented Vietnamese. When a post or visible media contains numbers, keep numbers compact with digits like 10k, 5tr, 100tr, 1 tỷ; do not spell them out as mười nghìn, năm triệu, một trăm triệu. If a short comment says an amount is the author's view/timeline milestone for today (for example, “số view timeline”), read it as playful encouragement or a wish for that content goal, not literal cash; reply with a natural congratulations or encouragement tied to the milestone, without focusing on the banknote or spending money. When the target says “xin vía” in this context, answer as the root author playfully granting or sharing the vía: use natural wording such as “nhả vía”, “cho vía” or “gửi vía” tied to the stated milestone, not generic “năng lượng” or “biểu đồ” wording. This is figurative conversation, not a literal transfer of luck or views.
-Vietnamese naturalness is strict: never mutate words into nonsense or write the malformed phrase “lành lợn”; use ordinary wording such as “buổi sáng vui vẻ” or “lành mạnh” only when it fits the target.
+Vietnamese naturalness is strict: never mutate words into nonsense, write the malformed phrase “lành lợn”, invent the dialect vocative “ní/nís”, or start with an orphan fragment such as “Nhiều nha,” unless the target explicitly uses that exact wording; start with the actual subject or action and use ordinary wording such as “buổi sáng vui vẻ” or “lành mạnh” only when it fits the target.
 Record concrete visual evidence in grounding.media_observation, resolved caption/media context in grounding.combined_context and honest confidence. Without attachments use no_media and an empty observation. Before writing, silently identify concrete objects/actions visible in every attached image or video thumbnail,
 then combine that evidence with the caption to resolve ambiguous references, jokes, metaphors, and wordplay.
 The caption and media form one post; never analyze them independently. Reject interpretations contradicted by
@@ -16,7 +16,7 @@ apple/peeling, not clothing. Video frames may be sampled out of order; use media
 If the attached media appears to be a generic illustration or mismatched with the caption, do not make the mismatch the reply unless the author explicitly asks about it. Prefer replying to the author's text and only use media details that support the text.
 If media is a screenshot of a profile, account page, follower list, or social UI, use only details directly relevant to the post such as name, handle, bio, counts, status, or the specific claim. Do not comment on avatars, banners, profile pictures, how cool/stylish they look, appearance, or decorative UI details unless the author explicitly asks about them. If media is unclear, reply neutrally instead of naming a guessed object. Do not roleplay as a lover, buyer, sponsor, sender, recipient, or character inside the caption/image; never write as if you will transfer money, buy gifts, call someone em/anh romantically, or fulfill the fantasy unless the author explicitly asked you to roleplay. Default voice: short, tightly grounded.
 Write like a real person replying on X, with natural capitalization for sentence starts, proper nouns, tickers, brands, and language-specific orthography; never force all-lowercase. Never write like an assistant, bot, summary, customer-support template, or poetic ad copy. Avoid stiff phrases like “nguyên trái cảm động”, “xua tan cái oi ả”, “giải nhiệt giữa ngày”, “nạp lại năng lượng”, “chữa lành tâm hồn”. Do not state obvious calendar facts or simply repeat the greeting, such as “hôm nay thứ 4 rồi”; avoid empty good-wish formulas like “thấy tươi công việc hẳn” or hollow meta comments like “hôm qua cày việc trễ quá nên giờ đọc lại mới thấy bài này” unless tied to a concrete detail. Avoid hedged/awkward filler such as “chỉ dám gợi ý”, “chỉ biết chúc”, “chỉ xin ké”, or “chiều mới thấy bài nên…”; reply directly to a concrete phrase or visual detail instead.
-Be specific to the post: react directly, ask a relevant question, or use light wit only when appropriate. Before returning, run a naturalness pass: every reply must sound like a real next turn, have a complete thought and natural word order, and avoid the same opening, sentence shape, punctuation, emoji or praise formula across the set. Do not force a question, agreement, slang or emoji; choose the simplest wording that fits the author's register. Prefer a concrete reaction to a mechanical summary, and reject any sentence that would feel awkward if pasted directly into X.
+Be specific to the post: react directly, ask a relevant question, or use light wit only when appropriate. Before returning, run a naturalness pass: every reply must sound like a real next turn, have a complete thought and natural word order, and avoid the same opening, sentence shape, punctuation, emoji or praise formula across the set. Do not force a question, agreement, slang or emoji; choose the simplest wording that fits the author's register. Prefer a concrete reaction to a mechanical summary, and reject any sentence that would feel awkward if pasted directly into X. Avoid performative, thảo mai phrasing such as “nhận lời chúc ... thêm động lực hoàn thành việc”; reply directly and briefly instead.
 For fashion or women's clothing posts, discuss visible outfit details such as color coordination, layering, silhouette, styling or overall visual impression. Do not infer anyone's gender from names, avatars or clothing, and do not comment on body shape, sexiness, attractiveness, age or intimate body parts unless explicitly asked. Use the same neutral fashion language for male and female users; prefer a concrete style observation over generic praise, flirting, shopping assumptions or unsolicited advice.
 Match the author's register: casual Vietnamese may use everyday wording, but laugh markers and symbols such as
 "kkk", :v, :)), =)), emoji, or emoticons are rare accents only when they genuinely improve the reply.
@@ -213,8 +213,10 @@ const MEDIA_ACTION_INSTRUCTIONS =
   " For a short comment with a clear image, name the verified object and action (for example, xôi in the poster's hand) instead of generic ‘món ăn’, ‘năng lượng’ or invented hunger.";
 const CONVERSATION_CHAIN_INSTRUCTIONS =
   " CONVERSATION CHAIN RULE: Treat turns as an ordered dialogue (oldest_to_newest) and target_text as the latest speaker. Use the immediate preceding turn to resolve pronouns and references, then connect to the root only when needed. Review every supplied prior turn so the next reply does not repeat an earlier sentence, angle, question or speaker attribution. Generate distinct next-turn responses; never answer the root again, merge two speakers, invent a missing action, or reuse a suggestion already present in the chain.";
+const OWN_POST_COMMENT_INTENT_INSTRUCTIONS =
+  " OWN-POST COMMENT INTENT RULE: When reply_context is reply_to_comment_on_own_post and the latest comment uses a joke, craving, hunger metaphor or eager action such as ‘chiếc bụng đói’, ‘muốn cuốn liền tay’, ‘thèm’ or ‘tâm đắc cách hưởng ứng’, treat that wording as the main conversational cue. Reply to the commenter's joke/desire first, then optionally use at most one concrete food detail as support. Do not turn the options into a visual inventory of bánh, rau, chén, nước chấm, mẹt or xiên; do not repeat the root caption or describe the image instead of continuing the comment. A line that only names what is visible is off-topic even when the named food is accurate. Keep the current user as the speaker and never pretend the commenter ate the food.";
 const LANGUAGE_NATURALNESS_INSTRUCTIONS =
-  " VIETNAMESE NATURALNESS RULE: Do not mutate words into nonsense. Never write the malformed phrase ‘lành lợn’; for a morning wish use ordinary wording such as ‘buổi sáng vui vẻ’ or ‘lành mạnh’ only when it fits the target.";
+  " VIETNAMESE NATURALNESS RULE: Do not mutate words into nonsense. Never write the malformed phrase ‘lành lợn’ or invent the dialect vocative ‘ní/nís’ unless the target explicitly uses that exact word; for a morning wish use ordinary wording such as ‘buổi sáng vui vẻ’ or ‘lành mạnh’ only when it fits the target.";
 const ENGAGEMENT_AUTHENTICITY_INSTRUCTIONS =
   " ENGAGEMENT AUTHENTICITY RULE: Do not write or repeat calls to artificial engagement exchange or boosting. Avoid terms and phrases such as ‘tương tác’, ‘tương tác chéo’, ‘like chéo’, ‘fl chéo’, ‘follow chéo’, ‘F4F’, ‘follow for follow’, ‘xin like’, ‘xin follow’, ‘xin RT’, ‘xin view’, ‘thả tim’, ‘thả like’, ‘thả tim và follow’, ‘follow lấy động lực’, ‘like lấy động lực’, ‘buff tương tác’, ‘kích tương tác’, ‘chéo nhóm’ or ‘group chéo’. If the source discusses this subject, answer neutrally without reproducing those calls; prefer ‘phản hồi tự nhiên’, ‘trò chuyện thật’ or ‘người theo dõi phù hợp’ when that meaning is needed. Do not add a thank-you unless the target explicitly thanks, congratulates, or gives a specific reason to thank the author; a casual greeting or ordinary update does not require ‘cảm ơn’.";
 export function buildRequest(model, post, mode) {
@@ -224,6 +226,9 @@ export function buildRequest(model, post, mode) {
       (post.fast_mode ? FAST_INSTRUCTIONS : INSTRUCTIONS) +
       ENGAGEMENT_AUTHENTICITY_INSTRUCTIONS +
       CONVERSATION_CHAIN_INSTRUCTIONS +
+      (post.reply_context === "reply_to_comment_on_own_post"
+        ? OWN_POST_COMMENT_INTENT_INSTRUCTIONS
+        : "") +
       LANGUAGE_NATURALNESS_INSTRUCTIONS +
       xinViaMilestoneRule(post) +
       readerFeedbackRule(post) +
@@ -485,6 +490,14 @@ const danglingReplyEnding = (text) => {
     last,
   );
 };
+const malformedOpeningReply = (text) =>
+  /^(?:nhiều|ít|vui|ổn|hay|đúng|tuyệt|đẹp)\s+(?:nha|nhé|ạ)\s*[,!…]/iu.test(
+    String(text || "").trim(),
+  );
+const overpolishedMotivationalReply = (text) =>
+  /(?:nhận\s+(?:lời\s+)?chúc|lời\s+chúc).{0,60}(?:thêm\s+)?động\s+lực|động\s+lực.{0,55}(?:hoàn\s+thành|làm\s+việc).{0,25}(?:nhanh|suôn\s+sẻ|thuận\s+lợi)/iu.test(
+    String(text || "").trim(),
+  );
 const offContextThreadReply = (text, temporal = {}) => {
   const value = String(text || "").trim(),
     target = String(temporal.target_text || temporal.caption || ""),
@@ -561,9 +574,15 @@ const threadQualityContext = (temporal = {}) => {
   });
   return uniqueTurns.length ? { target, turns: uniqueTurns } : null;
 };
-const malformedVietnameseReply = (text) => /\blanh\s+lon\b/iu.test(normalizeReplyText(text));
+const malformedVietnameseReply = (text) =>
+  /\blanh\s+lon\b|(?<![\p{L}])n(?:í|i)s?(?![\p{L}])/iu.test(normalizeReplyText(text));
 const repairMalformedVietnameseReply = (text) =>
-  String(text || "").replace(/\blành\s+lợn\b/iu, "thật vui vẻ");
+  String(text || "")
+    .replace(/\blành\s+lợn\b/iu, "thật vui vẻ")
+    .replace(/\s*(?<![\p{L}])n(?:í|i)s?(?![\p{L}])/giu, "")
+    .replace(/\s{2,}/gu, " ")
+    .replace(/\s+([,.!?…])/gu, "$1")
+    .trim();
 const conversationHistoryTexts = (temporal = {}) => {
   const context = threadQualityContext(temporal);
   if (!context) return [];
@@ -653,6 +672,25 @@ const markThreadReplyLowQuality = (item, temporal = {}) => {
   const score = Number(item.relevance_score);
   item.relevance_score = Number.isFinite(score) ? Math.min(Math.max(0, score), cap) : cap;
   return item;
+};
+const ownPostCommentMediaDriftReply = (text, temporal = {}) => {
+  if (temporal.reply_context !== "reply_to_comment_on_own_post") return false;
+  const target = String(temporal.target_text || "").trim();
+  if (
+    !target ||
+    !/(?:bụng\s+đói|đói|thèm|muốn|tâm\s+đắc|hưởng\s+ứng|cuốn\s+liền\s+tay|ăn\s+liền|gắp\s+liền)/iu.test(
+      target,
+    )
+  )
+    return false;
+  const value = String(text || "").trim();
+  const mediaInventory = /(?:bánh\s*xèo|rau\s+sống|nước\s+chấm|mẹt|chén|xiên|đĩa|cuộn|gắp|giòn|xém\s+cạnh)/iu.test(
+    value,
+  );
+  const intentBridge = /(?:bụng|đói|thèm|muốn|tâm\s+đắc|hưởng\s+ứng|cuốn\s+liền\s+tay|ăn\s+liền|gắp\s+liền|nghe\s+anh|nghe\s+vậy|vậy\s+là)/iu.test(
+    value,
+  );
+  return mediaInventory && !intentBridge;
 };
 const markGenericReplyLowQuality = (item, temporal = {}) => {
   if (!item || !genericBotReply(item.reply, temporal)) return item;
@@ -815,6 +853,12 @@ export function parseReplies(
       const score = Number(item.relevance_score);
       item.relevance_score = Number.isFinite(score) ? Math.min(score, 30) : 30;
     }
+    if (malformedOpeningReply(item.reply))
+      throw new Error("AI trả về câu có mở đầu bị cụt. Thử tạo lại.");
+    if (overpolishedMotivationalReply(item.reply))
+      throw new Error("AI trả về câu quá thảo mai hoặc dài dòng. Thử tạo lại.");
+    if (ownPostCommentMediaDriftReply(item.reply, temporal))
+      throw new Error("AI bám chi tiết media nhưng bỏ lạc ý bình luận. Thử tạo lại.");
     if (danglingReplyEnding(item.reply))
       throw new Error("AI trả về câu bị cắt giữa chừng. Thử tạo lại.");
     if (staleTemporalReply(item.reply, temporal))

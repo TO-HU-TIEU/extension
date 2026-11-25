@@ -843,11 +843,53 @@
     }
     return null;
   };
+  const normalizeReplyButtonLabel = (value) =>
+      String(value || "")
+        .normalize("NFKC")
+        .replace(/\s+/gu, " ")
+        .replace(/[.…:]+$/gu, "")
+        .trim()
+        .toLowerCase(),
+    replyButtonLabels = new Set([
+      "trả lời",
+      "reply",
+      "répondre",
+      "responder",
+      "rispondi",
+      "antworten",
+      "antwoorden",
+      "svara",
+      "odpowiedz",
+      "ответить",
+      "відповісти",
+      "返信",
+      "回复",
+      "回覆",
+      "답글",
+      "yanıtla",
+      "balas",
+      "ตอบกลับ",
+      "رد",
+      "जवाब दें",
+      "răspunde",
+      "odpovědět",
+      "svar",
+      "vastaa",
+      "válasz",
+      "απάντηση",
+      "השב",
+    ]);
   const normalizedButtonText = (node) =>
-    String(node?.innerText || node?.textContent || node?.getAttribute?.("aria-label") || "")
-      .replace(/\s+/gu, " ")
-      .trim();
-  const isReplyButton = (node) => normalizedButtonText(node) === "Trả lời";
+    [
+      node?.getAttribute?.("aria-label"),
+      node?.getAttribute?.("title"),
+      node?.innerText,
+      node?.textContent,
+    ]
+      .map(normalizeReplyButtonLabel)
+      .filter(Boolean);
+  const isReplyButton = (node) =>
+    normalizedButtonText(node).some((label) => replyButtonLabels.has(label));
   const sendButtonForEditor = (targetEditor) =>
     [...document.querySelectorAll(replySendButtonSelector)]
       .filter(isReplyControlVisible)

@@ -948,7 +948,7 @@ function personalAddressingRule(style) {
     return {
       forbidden: /\b\B/u,
       instruction:
-        ` ACCOUNT-SPECIFIC ADDRESSING RULE: This account has a custom addressing style${customCall ? ` (call the other person “${customCall}”)` : ""}${customSelf ? ` (self-reference may use “${customSelf}”)` : ""}. Use those words only when a direct address is natural; do not force a name into every reply. Never infer gender or relationship and do not substitute anh/chị/em unless the target conversation explicitly establishes it.`,
+        ` ACCOUNT-SPECIFIC ADDRESSING RULE: This account has a custom addressing style${customCall ? ` (call the other person “${customCall}”)` : ""}${customSelf ? ` (self-reference may use “${customSelf}”)` : ""}. Use those words only when a direct address is natural and the target/conversation establishes that relationship; otherwise omit the custom vocative instead of forcing “bà”, “ông” or another label into the reply. Never infer gender or relationship and do not substitute anh/chị/em unless the target conversation explicitly establishes it.`,
     };
   if (/xưng\s*hô/iu.test(value))
     return {
@@ -1084,6 +1084,41 @@ function incompleteReplyEnding(text) {
   const last = (value.match(/[\p{L}\p{N}]+$/u) || [])[0]?.toLocaleLowerCase();
   return /^(?:chỉ|và|nhưng|vì|nên|để|khi|nếu|với|cho|của|là|đang|được|một|những|the|a|an|and|but|because|if|when|with|of|to|for|only|just)$/iu.test(
     last || "",
+  );
+}
+function normalizeReplyCapitalization(text) {
+  const original = String(text || "").trim();
+  if (!original) return original;
+  const mentionPrefix = original.match(/^@[\p{L}\d_]+\s*/u)?.[0] || "";
+  const match = original.slice(mentionPrefix.length).match(/[\p{L}]/u);
+  if (!match || match.index === undefined) return original;
+  const index = mentionPrefix.length + match.index,
+    letter = original[index];
+  // Preserve brand/camel-case starts such as iPhone while fixing ordinary
+  // sentence starts, including after an emoji or an opening quote.
+  if (letter === "i" && /[A-Z]/u.test(original[index + 1] || "")) return original;
+  const upper = letter.toLocaleUpperCase();
+  return upper === letter ? original : original.slice(0, index) + upper + original.slice(index + 1);
+}
+function shortFragmentReply(text, post = {}) {
+  const value = String(text || "").trim();
+  if (!value || simpleGreetingTarget(post)) return false;
+  const words = value.split(/\s+/u).filter(Boolean);
+  if (words.length > 3 || /[.!?…]$/u.test(value)) return false;
+  // Keep genuinely complete, common short reactions. The retry is for a
+  // truncated/empty-feeling fragment, not every concise X reply.
+  return !/^(?:đúng\s+(?:rồi|đó)|hay\s+quá|đỉnh\s+quá|ổn\s+(?:rồi|đó)|tuyệt\s+quá|cố\s+lên(?:\s+(?:nha|nhé|ạ))?|cảm\s*ơn(?:\s+(?:bạn|anh|chị|em|a|c))?|chúc\s+mừng(?:\s+(?:bạn|anh|chị|em|a|c))?|xin\s+vía|nhả\s+vía|gửi\s+vía|yên\s+bình\s+quá|ngon\s+quá|vui\s+quá|được\s+đó|ok(?:ay)?|yes|no|nice|great|good\s+morning|good\s+night|gm|morning)$/iu.test(
+    value,
+  );
+}
+function malformedOpeningReply(text) {
+  return /^(?:nhiều|ít|vui|ổn|hay|đúng|tuyệt|đẹp)\s+(?:nha|nhé|ạ)\s*[,!…]/iu.test(
+    String(text || "").trim(),
+  );
+}
+function overpolishedMotivationalReply(text) {
+  return /(?:nhận\s+(?:lời\s+)?chúc|lời\s+chúc).{0,60}(?:thêm\s+)?động\s+lực|động\s+lực.{0,55}(?:hoàn\s+thành|làm\s+việc).{0,25}(?:nhanh|suôn\s+sẻ|thuận\s+lợi)/iu.test(
+    String(text || "").trim(),
   );
 }
 function normalizeReplyText(text) {
@@ -1354,6 +1389,40 @@ function offContextThreadReply(text, post) {
     return true;
   return false;
 }
+function ownPostCommentMediaDriftReply(text, post = {}) {
+  if (post?.reply_context !== "reply_to_comment_on_own_post") return false;
+  const target = String(post?.target_text || "").trim();
+  if (!target) return false;
+  // A craving/joke in the comment is the turn to answer; an inventory of
+  // visible dish details is off-topic unless it also bridges that intent.
+  if (
+    !/(?:bụng\s+đói|đói|thèm|muốn|tâm\s+đắc|hưởng\s+ứng|cuốn\s+liền\s+tay|ăn\s+liền|gắp\s+liền)/iu.test(
+      target,
+    )
+  )
+    return false;
+  const value = String(text || "").trim();
+  if (!value) return false;
+  const mediaInventory = /(?:bánh\s*xèo|rau\s+sống|nước\s+chấm|mẹt|chén|xiên|đĩa|cuộn|gắp|giòn|xém\s+cạnh)/iu.test(
+    value,
+  );
+  const intentBridge = /(?:bụng|đói|thèm|muốn|tâm\s+đắc|hưởng\s+ứng|cuốn\s+liền\s+tay|ăn\s+liền|gắp\s+liền|nghe\s+anh|nghe\s+vậy|vậy\s+là)/iu.test(
+    value,
+  );
+  return mediaInventory && !intentBridge;
+}
+function markOwnPostCommentMediaDrift(item, post = {}) {
+  if (!item || !ownPostCommentMediaDriftReply(item.reply, post)) return item;
+  item.quality_issues = [
+    ...new Set([
+      ...(Array.isArray(item.quality_issues) ? item.quality_issues : []),
+      "Bám chi tiết media nhưng bỏ lạc ý bình luận",
+    ]),
+  ];
+  const score = Number(item.relevance_score);
+  item.relevance_score = Number.isFinite(score) ? Math.min(Math.max(0, score), 30) : 30;
+  return item;
+}
 function threadQualityContext(post = {}) {
   const target = String(post?.target_text || post?.caption || "").trim();
   if (!target) return null;
@@ -1378,13 +1447,17 @@ function threadQualityContext(post = {}) {
 }
 function malformedVietnameseReply(text) {
   const value = normalizeReplyText(text);
-  // A common model token/word mutation: “lành lợn” has no valid meaning in
-  // a morning wish. Keep it visible as a low-quality option, never as a
-  // transport/model error, so the user can still inspect the batch.
-  return /\blanh\s+lon\b/iu.test(value);
+  // Common model token/word mutations that sound nonsensical in Vietnamese.
+  // Keep them as a recoverable wording issue, never a transport/model error.
+  return /\blanh\s+lon\b|(?<![\p{L}])n(?:í|i)s?(?![\p{L}])/iu.test(value);
 }
 function repairMalformedVietnameseReply(text) {
-  return String(text || "").replace(/\blành\s+lợn\b/iu, "thật vui vẻ");
+  return String(text || "")
+    .replace(/\blành\s+lợn\b/iu, "thật vui vẻ")
+    .replace(/\s*(?<![\p{L}])n(?:í|i)s?(?![\p{L}])/giu, "")
+    .replace(/\s{2,}/gu, " ")
+    .replace(/\s+([,.!?…])/gu, "$1")
+    .trim();
 }
 const COMPACT_NUMBER_WORDS = Object.freeze({
   một: "1",
@@ -1591,6 +1664,8 @@ function stripMisattributedShareThanks(text, post = {}) {
 function normalizeReplies(result, post) {
   if (!Array.isArray(result?.replies)) return result;
   for (const item of result.replies) {
+    const capitalized = normalizeReplyCapitalization(item.reply);
+    if (capitalized !== item.reply) item.reply = capitalized;
     const compact = normalizeCompactNumberWords(item.reply);
     if (compact !== item.reply) item.reply = compact;
     const repaired = repairMalformedVietnameseReply(item.reply);
@@ -1812,7 +1887,7 @@ function validateTranslations(result, post, allowMissing = false) {
 // network, parsing and other technical failures should reach the error UI.
 function technicalValidationError(error) {
   const text = String(error?.message || error || "");
-  return /(?:mô hình trả lời sai ngôn ngữ|mô hình thiếu bản dịch|mô hình đã viết tiếng|mô hình đã trộn gợi ý|mô hình trả tiếng việt không dấu|mô hình chưa phân tích được media|mô hình trả về câu bị cắt giữa chừng)/iu.test(
+  return /(?:mô hình trả lời sai ngôn ngữ|mô hình thiếu bản dịch|mô hình đã viết tiếng|mô hình đã trộn gợi ý|mô hình trả tiếng việt không dấu|mô hình chưa phân tích được media|mô hình trả về câu bị cắt giữa chừng|mô hình trả về câu quá ngắn)/iu.test(
     text,
   );
 }
@@ -1985,6 +2060,8 @@ function cleanPost(input) {
     style_hint: style,
     reply_count: Math.min(10, Math.max(1, Number(input.replyCount) || 3)),
     quick_greeting_used: input.quickGreetingUsed === true,
+    short_reply_retry_used:
+      input.shortReplyRetryUsed === true || input.short_reply_retry_used === true,
     exclude_replies: (Array.isArray(input.excludeReplies) ? input.excludeReplies : [])
       .filter((x) => typeof x === "string" && x.trim())
       .map((x) => x.trim().slice(0, 180))
@@ -3086,7 +3163,7 @@ function conversationSpeakerRule(post = {}) {
   return ` SPEAKER ATTRIBUTION LOCK: The current replying account is @${viewer} (A). The exact target_text was written by @${target} (B), and the generated text must be the next reply from A to B. Never speak as B, never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan, and never write “em sẽ...” as if A owns B's goal. If B hopes to reach a goal, keep that goal attributed to B: A may encourage B, but must not write “em sẽ cố gắng”, “em sẽ đạt/chạm/hoàn thành”, or otherwise claim A owns B's target. A status update or hope from B is not a reason to thank B; do not start with “dạ cảm ơn” unless B directly thanked or congratulated A. The target's self-reference does not establish a relationship for A to use; if the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`;
 }
 const LANGUAGE_NATURALNESS_RULE =
-  " VIETNAMESE NATURALNESS RULE: Do not mutate words into nonsense. Never write the malformed phrase ‘lành lợn’; for a morning wish use an ordinary phrase such as ‘buổi sáng vui vẻ’ or ‘lành mạnh’ only when it fits the target.";
+  " VIETNAMESE NATURALNESS RULE: Do not mutate words into nonsense. Never write the malformed phrase ‘lành lợn’, invent the dialect vocative ‘ní/nís’, or start with an orphan fragment such as ‘Nhiều nha,’. Start with the actual subject or action; for a morning wish use an ordinary phrase such as ‘buổi sáng vui vẻ’ or ‘lành mạnh’ only when it fits the target.";
 function fastThinking(model, fast) {
   if (!fast) return {};
   if (/^gemini-2\.5-flash(?:-|$)/.test(model)) return { thinkingConfig: { thinkingBudget: 0 } };
@@ -3133,10 +3210,10 @@ function replyInstructions(message) {
       ? " THREAD: target_text is the latest turn; use the immediate prior turn, avoid earlier speakers and do not repeat a prior reply."
       : CONVERSATION_CHAIN_RULE) +
     (message.post?.fastMode
-      ? " Never write the malformed Vietnamese phrase ‘lành lợn’."
+      ? " Never write the malformed Vietnamese phrase ‘lành lợn’, invent the vocative ‘ní/nís’, or start with an orphan fragment such as ‘Nhiều nha,’; begin with the actual subject or action."
       : LANGUAGE_NATURALNESS_RULE) +
     (message.post?.fastMode ? FAST_ADDRESSING_INSTRUCTIONS : "") +
-    " Before returning JSON, silently repair every candidate that violates a rule. Never return an error object, empty array, partial draft or unfinished sentence; return the exact requested count of complete replies." +
+    " Before returning JSON, silently repair every candidate that violates a rule. Never return an error object, empty array, partial draft or unfinished sentence; return the exact requested count of complete replies. Start each ordinary reply with an uppercase letter (after any leading emoji or mention), and rewrite substantive replies that would otherwise be only a three-word-or-shorter fragment into a complete thought with a concrete detail." +
     " Use style_hint as the requested writing voice, subordinate to accuracy, the original language and safety. Interpret money-related wording from the post in its own context: when the author discusses a long-awaited viral post, view/reach results, writing text, posting images, crossing a performance threshold, or prioritizing income-producing tasks, “có tiền thì ưu tiên” means choosing work that can earn money, not investing or spending. Treat an attached account analytics chart as evidence of views/reach and content performance, never as a budget or ad-spend chart. If a short comment says an amount is the author's view/timeline milestone for today (for example, “số view timeline”), resolve that comment as playful encouragement or a wish for the content to reach that milestone, not as literal cash. Reply with a concise congratulations or encouragement tied to the milestone; do not focus on the banknote, finding money or spending money. Prefer a concise general observation about the result and which content format is worth prioritizing; do not repeat the metric mechanically or ask the author a routine follow-up question. Do not introduce investment, trading, portfolio, budget, advertising spend, or financial advice unless the target text explicitly establishes that domain. Video frames may be sampled out of order; use media_frame_notes to understand timestamps. Full video bytes, when attached, can be inspected directly. Never claim events outside the attached evidence. Complete every reply as a standalone thought; never stop after a dangling conjunction or unfinished phrase." +
     " Before returning JSON, self-check every reply against these hard bans and rewrite internally until clean: for a short comment in a thread, every reply must connect to the ancestor/root topic and must not drift into generic mood/time filler or the wrong domain; do not turn legal/software/fine posts into investing/portfolio comments, no generic thanks, avoid turning replies into questions for the author unless a question is clearly useful, no generic reminders, no poetic ad-copy phrases, no vague hype such as “nhìn cuốn ghê”, “trông cuốn quá” or “nhìn mê quá” without a concrete reason, no vague news repetition, no replies that merely restate filing/news facts like SEC/Nasdaq/ETF/S-1/ticker without a personal reaction or angle, no mutable view/flop numbers, no overconfident chart/price calls or doom calls like “về 0”, no unnecessary complaints that attached media/chart is mismatched when the text is enough to answer, no forced roleplay as lover/buyer/sender or offering money/gifts, no spelled-out large numbers when digit form is better, no stale Vietnamese time-of-day reactions, and do not reframe a morning/GM/day-start post as lunch/afternoon like “bắt đầu buổi trưa/chiều với...” or “xử lý xong công việc chiều nay”." +
     (message.post?.fastMode
@@ -3188,6 +3265,10 @@ function replyInstructions(message) {
       String(message?.post?.target_text || ""),
     )
       ? " OWN-POST SHORT PRAISE RULE: The current user (A) is replying to a short compliment about A's current root post. Treat target_text as praise of the current post/result, not as a new task or as a request to revisit older posts. Reply as A with a natural humble or playful acknowledgment, then tie it to one concrete detail from the current root text such as the current view count, growth or next milestone when supported. Do not write ‘cũng bình thường’, ‘nhớ mấy bài trước’, ‘kéo lại nhiệt huyết’, or another unrelated meta-comment; do not invent effort, mood or a new action. Ignore quoted/embedded older posts and their metrics unless target_text explicitly mentions them. Do not answer the root post from scratch or let the quoted card replace the current root topic."
+      : "";
+  const ownPostCommentIntentRule =
+    message?.post?.reply_context === "reply_to_comment_on_own_post"
+      ? " OWN-POST COMMENT INTENT RULE: When the latest comment uses a joke, craving, hunger metaphor or eager action such as ‘chiếc bụng đói’, ‘muốn cuốn liền tay’, ‘thèm’ or ‘tâm đắc cách hưởng ứng’, treat that wording as the main conversational cue. Reply to the commenter's joke/desire first, then optionally use at most one concrete food detail as support. Do not turn the four options into a visual inventory of bánh, rau, chén, nước chấm, mẹt or xiên; do not repeat the root caption or describe the image instead of continuing the comment. A line that only names what is visible is off-topic even when the named food is accurate. Keep the current user as the speaker and never pretend the commenter ate the food."
       : "";
   const contextText = [
       message?.post?.target_text,
@@ -3277,6 +3358,7 @@ function replyInstructions(message) {
     threadSubjectRule +
     ownershipRule +
     ownPostShortPraiseRule +
+    ownPostCommentIntentRule +
     greetingRule +
     greetingTargetRule +
     draftRule +
@@ -3296,6 +3378,14 @@ function replyInstructions(message) {
 }
 function retryReason(error) {
   const text = String(error?.message || "");
+  if (/câu quá ngắn|reply too short|short fragment/iu.test(text))
+    return "One or more replies was only a few words and felt cut off. Rewrite every reply as a complete natural thought with at least 6 meaningful words, while staying concise and grounded in the exact target.";
+  if (/mở đầu bị cụt|orphan fragment|nhiều nha/iu.test(text))
+    return "Do not start with an orphan fragment such as ‘Nhiều nha,’. Begin with the actual subject or action and write a complete natural reply grounded in the exact target.";
+  if (/thảo mai|overpolished|động lực.*hoàn thành/iu.test(text))
+    return "Rewrite as a short, plain-spoken X reaction. Do not use performative phrasing like ‘nhận lời chúc ... thêm động lực hoàn thành việc’; react directly to the target instead.";
+  if (/bám chi tiết media|bỏ lạc ý bình luận|comment intent|media drift/iu.test(text))
+    return "The target comment contains the main joke or desire (for example, a hungry metaphor or wanting to roll/eat). Reply to that exact cue first. Do not list the attached dish, vegetables, sauce or plate as standalone observations; use at most one concrete food detail as support and keep the root author as speaker.";
   if (/Expected|JSON|Unexpected token|property value|double-quoted|unterminated/i.test(text))
     return "Return strict valid JSON only. Use double-quoted property names, commas between every field, no trailing comma, no Markdown, and exactly the required schema.";
   if (/xưng hô của phong cách riêng|ACCOUNT-SPECIFIC ADDRESSING RULE/i.test(text))
@@ -3588,6 +3678,14 @@ async function suggestWithPreferences(message) {
           ...(mediaProblem ? textOnlyRetryPost(currentPost) : currentPost),
           retryReason: repairReason,
           genericRetry: genericRetry || currentPost.genericRetry,
+          shortReplyRetryUsed:
+            currentPost.shortReplyRetryUsed === true ||
+            currentPost.short_reply_retry_used === true ||
+            error?.shortReplyRetry === true,
+          short_reply_retry_used:
+            currentPost.shortReplyRetryUsed === true ||
+            currentPost.short_reply_retry_used === true ||
+            error?.shortReplyRetry === true,
           excludeReplies: [
             ...(currentPost.excludeReplies || []),
             ...(error?.result?.replies || []).map((x) => x.reply).filter(Boolean),
@@ -3781,9 +3879,8 @@ finishReplies = async function (result, post, message) {
     value.replies.unshift(first);
   }
   const dangling =
-    /^(?:vẫn|còn|chưa|rất|khá|hơn|nhất|mà|thì|với|cho|của|là|đang|được|một|những|and|but|because|if|when|with|of|to|for|only|just)$/iu;
-  if (
-    value.replies?.some((item) =>
+    /^(?:vẫn|còn|chưa|rất|khá|hơn|nhất|mà|thì|với|cho|của|là|đang|được|một|những|and|but|because|if|when|with|of|to|for|only|just)$/iu,
+    hasDangling = value.replies?.some((item) =>
       dangling.test(
         String(item.reply || "")
           .trim()
@@ -3791,9 +3888,40 @@ finishReplies = async function (result, post, message) {
           .split(/\s+/u)
           .pop() || "",
       ),
-    )
-  )
-    throw new Error("Mô hình trả về câu bị cắt giữa chừng. Hãy tạo lại gợi ý.");
+    ),
+    hasShortFragment = value.replies?.some((item) => shortFragmentReply(item?.reply, post)),
+    hasMalformedOpening = value.replies?.some((item) => malformedOpeningReply(item?.reply)),
+    hasOverpolishedMotivation = value.replies?.some((item) =>
+      overpolishedMotivationalReply(item?.reply),
+    ),
+    hasCommentIntentDrift = value.replies?.some((item) =>
+      ownPostCommentMediaDriftReply(item?.reply, post),
+    );
+  for (const item of value.replies || []) markOwnPostCommentMediaDrift(item, post);
+  if (
+    !post?.short_reply_retry_used &&
+    !post?.shortReplyRetryUsed &&
+    (hasDangling ||
+      hasShortFragment ||
+      hasMalformedOpening ||
+      hasOverpolishedMotivation ||
+      hasCommentIntentDrift)
+  ) {
+    const error = new Error(
+      hasShortFragment
+        ? "Mô hình trả về câu quá ngắn hoặc bị cắt giữa chừng. Hãy tạo lại gợi ý."
+        : hasMalformedOpening
+          ? "Mô hình trả về câu có mở đầu bị cụt. Hãy tạo lại gợi ý."
+          : hasOverpolishedMotivation
+            ? "Mô hình trả về câu quá thảo mai hoặc dài dòng. Hãy tạo lại gợi ý."
+            : hasCommentIntentDrift
+              ? "Mô hình bám chi tiết media nhưng bỏ lạc ý bình luận. Hãy tạo lại gợi ý."
+        : "Mô hình trả về câu bị cắt giữa chừng. Hãy tạo lại gợi ý.",
+    );
+    error.result = value;
+    error.shortReplyRetry = true;
+    throw error;
+  }
   return value;
 };
 
@@ -3900,7 +4028,7 @@ retryReason = function (error) {
   return assistantRetryReasonNatural(error);
 };
 const assistantHumanTemplateReply =
-  /(?:đúng là|chúc mừng .* cột mốc|khó cưỡng|tràn đầy năng lượng|chắc chắn sẽ|không thể không|quả ngọt|xứng đáng với|nhìn .* là thấy|nhìn .* là hiểu|nhìn .* cuốn|trông .* cuốn|xin\s+phép(?:\s+nhấm\s+nháp)?|cho\s+em\s+xin\s+phép)/iu;
+  /(?:đúng là|chúc mừng .* cột mốc|khó cưỡng|tràn đầy năng lượng|chắc chắn sẽ|không thể không|quả ngọt|xứng đáng với|nhìn .* là thấy|nhìn .* là hiểu|nhìn .* cuốn|trông .* cuốn|nhận\s+(?:lời\s+)?chúc.{0,60}(?:thêm\s+)?động\s+lực|động\s+lực.{0,55}(?:hoàn\s+thành|làm\s+việc).{0,25}(?:nhanh|suôn\s+sẻ|thuận\s+lợi)|xin\s+phép(?:\s+nhấm\s+nháp)?|cho\s+em\s+xin\s+phép)/iu;
 const assistantCannedHumanReply =
   /(?:chuẩn\s*bài|đúng\s*bài|hết\s*sảy|ăn\s*(?:là\s*)?ghiền|hao\s*cơm|tỉnh\s*táo\s*(?:làm\s*việc\s*)?cả\s*ngày|ăn\s*cuốn\s*thật|nổi\s*bật\s*hẳn\s*góc\s*phố|\babsolutely\b\s*!?|\bgreat\s+insights?\b\s*!?|\b(?:this\s+is\s+)?a\s+game[ -]changer\b)/iu;
 function assistantHumanTemplateMatches(text) {
@@ -3970,7 +4098,7 @@ replyInstructions = function (message) {
   return message.post?.fastMode
     ? base
     : base +
-        " Strict human voice: do not begin every option with “đúng là”, “nhìn”, or “chúc mừng”. For casual posts, react to one concrete detail in natural spoken language. Do not praise generically, restate the post, explain why it is good, or force a joke. Make alternatives genuinely different in angle, rhythm, and length. Some may be 5–10 words; use 20–40 only when another specific thought genuinely adds value. Never optimize for polished wording. Hard ban canned phrases such as “chuẩn bài”, “đúng bài”, “hết sảy”, “ăn là ghiền”, “hao cơm”, “ăn cuốn thật”, or “tỉnh táo làm việc cả ngày”; do not replace them with another slogan. For English, avoid stock reactions such as “Absolutely!”, “Great insights!”, and “This is a game changer”. Prefer a specific detail and a simple spoken reaction.";
+        " Strict human voice: do not begin every option with “đúng là”, “nhìn”, or “chúc mừng”. For casual posts, react to one concrete detail in natural spoken language. Do not praise generically, restate the post, explain why it is good, or force a joke. Make alternatives genuinely different in angle, rhythm, and length. Some may be 5–10 words; use 20–40 only when another specific thought genuinely adds value. Never optimize for polished wording. Hard ban canned phrases such as “chuẩn bài”, “đúng bài”, “hết sảy”, “ăn là ghiền”, “hao cơm”, “ăn cuốn thật”, or “tỉnh táo làm việc cả ngày”; do not replace them with another slogan. Avoid performative phrasing such as “nhận lời chúc ... thêm động lực hoàn thành việc”; reply directly and briefly instead. For English, avoid stock reactions such as “Absolutely!”, “Great insights!”, and “This is a game changer”. Prefer a specific detail and a simple spoken reaction.";
 };
 const assistantReplyInstructionsConversation = replyInstructions;
 replyInstructions = function (message) {
