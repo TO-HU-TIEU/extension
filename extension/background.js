@@ -4017,6 +4017,25 @@ function xinViaMilestoneRule(message) {
   const target = String(message?.post?.target_text || "");
   return /xin\s+vía|xin\s+via/iu.test(target) ? xinViaMilestoneInstructions : "";
 }
+function mealWorkThreadRule(message) {
+  const post = message?.post || {};
+  if (post.reply_context !== "reply_to_comment_on_own_post") return "";
+  const source = [
+    post.target_text,
+    post.caption,
+    post.visible_context,
+    post.visible_ancestor_context,
+    ...(Array.isArray(post.conversation_history) ? post.conversation_history.map((turn) => turn?.text || "") : []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (
+    !/(?:bữa\s+sáng|ăn\s+sáng|ăn\s+xong|lót\s+dạ|mì\s+(?:gói|Modern)|đi\s+làm)/iu.test(source) ||
+    !/(?:đi\s+làm|làm\s+việc|làm\s+nữa|công\s+việc)/iu.test(source)
+  )
+    return "";
+  return " MEAL-WORK THREAD RULE: The root only establishes a quick breakfast and going to work. Answer the latest comment about that point directly. Do not invent papers, a laptop, desk, email, tasks, deadlines, meetings, or any other specific work action; ‘đi làm’ is the only grounded work detail unless the text explicitly names more. Do not claim those invented actions are happening now. Keep the reply short and natural, for example acknowledging that the meal was quick so the author could go to work. ";
+}
 const uncertaintyCauseInstructions =
   " UNCERTAINTY AND CAUSALITY RULE: If the post only reports a symptom, status, amount, date, screenshot or missing payment and does not state the cause, do not invent one. Never attribute it to network congestion, a system error, an automatic reschedule, eligibility, a processing cycle or any other cause unless the exact text or clearly legible media explicitly provides that cause. For payment/reward screenshots, treat dates and labels as evidence only; do not promise a payment or explain why it moved. Reply to the known fact with a neutral observation or brief empathy, and say that the reason is unclear when needed.";
 const uncertaintyCauseInstructionsFast =
@@ -4039,6 +4058,7 @@ replyInstructions = function (message) {
     readerFeedbackRule(message) +
      (message.post?.fastMode ? engagementAuthenticityInstructionsFast : engagementAuthenticityInstructions) +
     (message.post?.fastMode ? uncertaintyCauseInstructionsFast : uncertaintyCauseInstructions) +
+    mealWorkThreadRule(message) +
     (message.post?.fastMode ? groundedActionInstructionsFast : groundedActionInstructions)
   );
 };
