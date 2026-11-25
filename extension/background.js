@@ -1570,6 +1570,24 @@ function stripUnnecessaryGratitude(text, post = {}) {
     .trim();
   return cleaned || original;
 }
+function stripMisattributedShareThanks(text, post = {}) {
+  const original = String(text || "").trim();
+  if (
+    !original ||
+    post?.reply_context !== "reply_to_comment_on_own_post" ||
+    !/(?:cảm\s*ơn|thanks|thank\s+you)/iu.test(original)
+  )
+    return original;
+  const cleaned = original
+    .replace(
+      /\s*(?:[,;:–-]\s*)?(?:dạ\s*)?(?:(?:em|mình|tôi|tui)\s+)?cảm\s*ơn(?=$|[^\p{L}])(?:\s+(?:anh|chị|bạn|em|a|c))?\s+(?:đã\s+)?(?:chia\s+sẻ|đăng|gửi)(?=$|[^\p{L}])[^.!?…]{0,100}[.!?…]?/iu,
+      "",
+    )
+    .replace(/\s{2,}/gu, " ")
+    .replace(/\s+([,.!?…])/gu, "$1")
+    .trim();
+  return cleaned || original;
+}
 function normalizeReplies(result, post) {
   if (!Array.isArray(result?.replies)) return result;
   for (const item of result.replies) {
@@ -1584,6 +1602,8 @@ function normalizeReplies(result, post) {
       const score = Number(item.relevance_score);
       item.relevance_score = Number.isFinite(score) ? Math.min(score, 30) : 30;
     }
+    const shareThanksFree = stripMisattributedShareThanks(item.reply, post);
+    if (shareThanksFree !== item.reply) item.reply = shareThanksFree;
     const gratitudeFree = stripUnnecessaryGratitude(item.reply, post);
     if (gratitudeFree !== item.reply) item.reply = gratitudeFree;
     // Generic gratitude/reminder replies are intentionally surfaced and scored
@@ -3040,6 +3060,8 @@ const FAST_ADDRESSING_INSTRUCTIONS =
   " Keep direct address consistent within one reply: never call the same person ‘bạn’ and then ‘nàng’, or switch between anh/chị/em/cô/chú/bác; when unclear, omit direct address. Never use ‘nàng’ unless target_text, visible context or style establishes it.";
 const CONVERSATION_CHAIN_RULE =
   " CONVERSATION CHAIN RULE: Treat turns as an ordered dialogue (oldest_to_newest) and target_text as the latest speaker. Use the immediately preceding turn to resolve pronouns and references, then connect to the root only when needed. Review every supplied conversation_history/turn for points already said. Each suggestion must be a genuinely new next turn with a different angle and rhythm; never answer the root again, merge speakers, invent a missing action, or repeat an earlier sentence or reply. If a chain is long, preserve the latest speaker and the local exchange instead of collapsing everything into a generic greeting.";
+const OPENING_DIVERSITY_RULE =
+  " OPENING DIVERSITY RULE: Do not use ‘Dạ đúng … ơi’ as the default opener. Across one batch, use that pattern at most once, and only when the target explicitly confirms a fact and the relationship/address is established. Other suggestions must start differently and should prefer a direct observation, reaction, or natural continuation; never repeat ‘Dạ đúng’, ‘Đúng là’ or the same address particle as a template.";
 function conversationSpeakerRule(post = {}) {
   const normalize = (value) =>
     String(value || "")
@@ -3091,6 +3113,9 @@ function replyInstructions(message) {
   const diversityRule = message.post?.fastMode
     ? " DIVERSITY: Keep every reply on the exact target but use a different angle, opening, rhythm and conclusion; do not paraphrase another option."
     : " DIVERSITY CONTRACT: Before writing, privately assign each reply a different supported angle and rhythm. Across the requested set, mix direct agreement or answer, one concrete detail, one emotional or social reaction, one nuance or contrast, and one light conversational extension when the target supports them. Do not force an angle the target does not support. No two replies may share the same opening, first three meaningful words, sentence skeleton, dominant detail, or conclusion. Vary sentence length and punctuation naturally; do not make every reply a compliment or a question. Compare every pair before returning JSON and silently rewrite any paraphrase until all replies are materially different while staying on the exact target.";
+  const openingDiversityRule = message.post?.fastMode
+    ? " Avoid repeating ‘Dạ đúng … ơi’; use it at most once per batch and vary the openings."
+    : OPENING_DIVERSITY_RULE;
   const base =
     (globalThis.RemoteConfig?.get("reply")?.supplement || "") +
     (message.post?.fastMode
@@ -3103,6 +3128,7 @@ function replyInstructions(message) {
     addressingRule +
     speakerRule +
     diversityRule +
+    openingDiversityRule +
     (message.post?.fastMode
       ? " THREAD: target_text is the latest turn; use the immediate prior turn, avoid earlier speakers and do not repeat a prior reply."
       : CONVERSATION_CHAIN_RULE) +
@@ -3149,7 +3175,7 @@ function replyInstructions(message) {
     " MEDIA ACTION RULE: With a clear image, name the verified object/action (e.g. xôi in the poster's hand), not generic ‘món ăn’/‘năng lượng’ or invented hunger. Media is secondary when target_text already contains a concrete claim, plan, answer or opinion; in that case do not import decorative or unrelated image details such as a sign, cat, flowers, furniture or background into the reply. Do not ask for a portion unless sharing is explicit.";
   const ownershipRule =
     message?.post?.reply_context === "reply_to_comment_on_own_post"
-       ? " OWN-POST COMMENT MODE: The root post belongs to the current user, but target_text is another person's comment. Write from the root author's point of view and reply to that comment's exact claim, joke, question or tone first. Use the root post to resolve who did what: an action, meal, experience or object described in the root post belongs to the current user unless the comment explicitly assigns it to someone else. If the comment says the commenter has not eaten something for a long time, treat that as the commenter's memory/reaction; do not write as if the commenter just ate the root author's food, and do not swap speakers with phrases like ‘chị ăn lại’ or ‘em cũng thèm’ without textual support. If the comment states a first-person plan or answer (‘mình sẽ…’, ‘tôi muốn…’, ‘dự định…’), respond to that plan as the commenter's hypothetical choice and preserve its named activity and objects; never let the attached image replace the plan with a sign, cat, flowers, furniture or other decorative detail. If the root praises, quotes or celebrates a third party's result, keep the achievement attributed to that third party: do not make the current user sound as if they received the money, earned the result, were praised or caused it, and do not invent causes such as ‘trộm vía’, ‘nhờ chăm chỉ/cày cuốc’, ‘may mắn’ or ‘được mọi người ủng hộ’. Prefer a direct bridge between both turns: acknowledge the commenter's reaction or joke, then confirm one concrete detail without taking credit. Do not generate a fresh reply to the root post, summarize the root caption, or let the root post drown out the comment. CONTEXT SCORING: In this mode, relevance_score must prioritize correct speaker/actor attribution and a concrete link between target_text and the root post above generic fluency. A grounded, role-correct reply should outrank a poetic image reaction; penalize any reply that assigns the root author's action to the commenter, replaces a stated plan with media details, or invents a new action."
+       ? " OWN-POST COMMENT MODE: The root post belongs to the current user, but target_text is another person's comment. Write from the root author's point of view and reply to that comment's exact claim, joke, question or tone first. Use the root post to resolve who did what: an action, meal, experience or object described in the root post belongs to the current user unless the comment explicitly assigns it to someone else. A style that asks you to call the commenter ‘anh’ or ‘chị’ changes only address terms; it never changes who authored or shared the root post. Never write ‘cảm ơn anh/chị đã chia sẻ’, ‘cảm ơn bạn đã đăng khoảnh khắc này’ or similar when the commenter is reacting to the current user's own post, because A is the person who shared it. Thank the commenter only for a direct thank-you, congratulations, or a specific action the commenter actually did. If the comment says the commenter has not eaten something for a long time, treat that as the commenter's memory/reaction; do not write as if the commenter just ate the root author's food, and do not swap speakers with phrases like ‘chị ăn lại’ or ‘em cũng thèm’ without textual support. If the comment states a first-person plan or answer (‘mình sẽ…’, ‘tôi muốn…’, ‘dự định…’), respond to that plan as the commenter's hypothetical choice and preserve its named activity and objects; never let the attached image replace the plan with a sign, cat, flowers, furniture or other decorative detail. If the root praises, quotes or celebrates a third party's result, keep the achievement attributed to that third party: do not make the current user sound as if they received the money, earned the result, were praised or caused it, and do not invent causes such as ‘trộm vía’, ‘nhờ chăm chỉ/cày cuốc’, ‘may mắn’ or ‘được mọi người ủng hộ’. Prefer a direct bridge between both turns: acknowledge the commenter's reaction or joke, then confirm one concrete detail without taking credit. Do not generate a fresh reply to the root post, summarize the root caption, or let the root post drown out the comment. CONTEXT SCORING: In this mode, relevance_score must prioritize correct speaker/actor attribution and a concrete link between target_text and the root post above generic fluency. A grounded, role-correct reply should outrank a poetic image reaction; penalize any reply that assigns the root author's action to the commenter, replaces a stated plan with media details, or invents a new action."
       : message?.post?.reply_context === "reply_to_other_user_post"
         ? " OTHER-USER POST MODE: target_text is the other user's own post. Answer its main claim, request or story directly. Use attached media and any context only to support that answer, not to invent a separate topic."
         : message?.post?.reply_context === "reply_to_comment_on_other_post"
