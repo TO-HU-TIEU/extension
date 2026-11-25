@@ -1864,6 +1864,9 @@ function cleanPost(input) {
         .toLowerCase(),
     contextTurns = Array.isArray(contextData.turns) ? contextData.turns : [],
     viewerHandle = normalizeContextHandle(contextData.viewer_handle || input.viewerHandle),
+    targetAuthor = normalizeContextHandle(
+      contextData.target_author || contextData.target_turn?.author || input.targetAuthor || match[1],
+    ),
     rootAuthor = normalizeContextHandle(
       contextData.root_author || contextTurns[0]?.author || contextData.target_author || match[1],
     ),
@@ -1894,6 +1897,7 @@ function cleanPost(input) {
     post_id: match[2],
     author: match[1],
     viewer_handle: viewerHandle,
+    target_author: targetAuthor,
     root_author: rootAuthor,
     root_is_viewer: rootIsViewer,
     target_kind: targetKind,
@@ -3012,6 +3016,23 @@ const FAST_ADDRESSING_INSTRUCTIONS =
   " Keep direct address consistent within one reply: never call the same person ‘bạn’ and then ‘nàng’, or switch between anh/chị/em/cô/chú/bác; when unclear, omit direct address. Never use ‘nàng’ unless target_text, visible context or style establishes it.";
 const CONVERSATION_CHAIN_RULE =
   " CONVERSATION CHAIN RULE: Treat turns as an ordered dialogue (oldest_to_newest) and target_text as the latest speaker. Use the immediately preceding turn to resolve pronouns and references, then connect to the root only when needed. Review every supplied conversation_history/turn for points already said. Each suggestion must be a genuinely new next turn with a different angle and rhythm; never answer the root again, merge speakers, invent a missing action, or repeat an earlier sentence or reply. If a chain is long, preserve the latest speaker and the local exchange instead of collapsing everything into a generic greeting.";
+function conversationSpeakerRule(post = {}) {
+  const normalize = (value) =>
+    String(value || "")
+      .trim()
+      .replace(/^@/u, "")
+      .toLocaleLowerCase();
+  let target = normalize(post.target_author);
+  if (!target) {
+    try {
+      const parsed = JSON.parse(String(post.visible_context || ""));
+      target = normalize(parsed?.target_author || parsed?.target_turn?.author);
+    } catch {}
+  }
+  const viewer = normalize(post.viewer_handle);
+  if (!viewer || !target || viewer === target) return "";
+  return ` SPEAKER ATTRIBUTION LOCK: The current replying account is @${viewer} (A). The exact target_text was written by @${target} (B), and the generated text must be the next reply from A to B. Never speak as B, never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan, and never write “em sẽ...” as if A owns B's goal. The target's self-reference does not establish a relationship for A to use; if the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`;
+}
 const LANGUAGE_NATURALNESS_RULE =
   " VIETNAMESE NATURALNESS RULE: Do not mutate words into nonsense. Never write the malformed phrase ‘lành lợn’; for a morning wish use an ordinary phrase such as ‘buổi sáng vui vẻ’ or ‘lành mạnh’ only when it fits the target.";
 function fastThinking(model, fast) {
@@ -3036,6 +3057,7 @@ function replyInstructions(message) {
     : "";
   const addressingRule =
     personalAddressingRule(message?.post?.style ?? message?.post?.style_hint)?.instruction || "";
+  const speakerRule = conversationSpeakerRule(message?.post);
   const diversityRule = message.post?.fastMode
     ? " DIVERSITY: Keep every reply on the exact target but use a different angle, opening, rhythm and conclusion; do not paraphrase another option."
     : " DIVERSITY CONTRACT: Before writing, privately assign each reply a different supported angle and rhythm. Across the requested set, mix direct agreement or answer, one concrete detail, one emotional or social reaction, one nuance or contrast, and one light conversational extension when the target supports them. Do not force an angle the target does not support. No two replies may share the same opening, first three meaningful words, sentence skeleton, dominant detail, or conclusion. Vary sentence length and punctuation naturally; do not make every reply a compliment or a question. Compare every pair before returning JSON and silently rewrite any paraphrase until all replies are materially different while staying on the exact target.";
@@ -3049,6 +3071,7 @@ function replyInstructions(message) {
         RANK_INSTRUCTIONS) +
     exclusionRule +
     addressingRule +
+    speakerRule +
     diversityRule +
     (message.post?.fastMode
       ? " THREAD: target_text is the latest turn; use the immediate prior turn, avoid earlier speakers and do not repeat a prior reply."
