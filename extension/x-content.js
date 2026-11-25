@@ -371,8 +371,8 @@
         .filter((a) => !promotedArticle(a) && originalTextNode(a))
         .filter(Boolean),
       before =
-        beforeCandidates.length > 24
-          ? [beforeCandidates[0], ...beforeCandidates.slice(-23)]
+      beforeCandidates.length > 8
+        ? [beforeCandidates[0], ...beforeCandidates.slice(-7)]
           : beforeCandidates,
       urls = [...ownMedia.mediaUrls];
     const turns = before
@@ -387,7 +387,7 @@
         return {
           turn: index + 1,
           author: urlPath(link?.href).split("/")[1] || "",
-          text: postText(a),
+          text: postText(a).replace(/\s+/gu, " ").slice(0, 320),
           media_count: turnMedia.mediaCount,
           media_indexes: mediaIndexes,
         };
@@ -426,6 +426,8 @@
         target_kind: targetKind,
         reply_context: replyContext,
         target_turn: { author: targetAuthor, text },
+        conversation_depth: turns.length + 1,
+        immediate_parent_turn: turns.at(-1) || null,
         instruction: text
           ? "Reply directly to target_text, which is the exact latest comment/post being answered. If it is a comment, answer its claim or tone first; use the nearest ancestor/root post only as background to resolve references. Do not reply to the root post instead of the target comment, and do not repeat the root caption."
           : "The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview or visible ancestor/root posts as the context being reacted to.",
