@@ -1386,6 +1386,35 @@ function malformedVietnameseReply(text) {
 function repairMalformedVietnameseReply(text) {
   return String(text || "").replace(/\blành\s+lợn\b/iu, "thật vui vẻ");
 }
+const COMPACT_NUMBER_WORDS = Object.freeze({
+  một: "1",
+  mot: "1",
+  hai: "2",
+  ba: "3",
+  bốn: "4",
+  bon: "4",
+  năm: "5",
+  nam: "5",
+  sáu: "6",
+  sau: "6",
+  bảy: "7",
+  bay: "7",
+  tám: "8",
+  tam: "8",
+  chín: "9",
+  chin: "9",
+  mười: "10",
+  muoi: "10",
+});
+const COMPACT_NUMBER_UNITS =
+  "ngày|tuần|tháng|năm|giờ|phút|giây|lần|bài|người|lượt|mốc|tuổi|phần|câu|điểm|kỳ|đợt|nghìn|ngàn|triệu|tỷ|trăm";
+function normalizeCompactNumberWords(text) {
+  const pattern =
+    "\\b(" + Object.keys(COMPACT_NUMBER_WORDS).join("|") + ")\\s+(?=(?:" + COMPACT_NUMBER_UNITS + ")\\b)";
+  return String(text || "").replace(new RegExp(pattern, "giu"), (match, word) =>
+    `${COMPACT_NUMBER_WORDS[String(word).toLocaleLowerCase()] || word} `,
+  );
+}
 function conversationHistoryTexts(post = {}) {
   const context = threadQualityContext(post);
   if (!context) return [];
@@ -1528,6 +1557,8 @@ function stripGenericSentence(text) {
 function normalizeReplies(result, post) {
   if (!Array.isArray(result?.replies)) return result;
   for (const item of result.replies) {
+    const compact = normalizeCompactNumberWords(item.reply);
+    if (compact !== item.reply) item.reply = compact;
     const repaired = repairMalformedVietnameseReply(item.reply);
     if (repaired !== item.reply) {
       item.reply = repaired;
