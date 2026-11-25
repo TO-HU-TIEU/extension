@@ -1554,6 +1554,22 @@ function stripGenericSentence(text) {
     .trim();
   return value || original;
 }
+function stripUnnecessaryGratitude(text, post = {}) {
+  const original = String(text || "").trim();
+  if (!original || !unnecessaryGratitudeReply(original, post)) return original;
+  // A reply made entirely of a normal thank-you is still a valid visible
+  // suggestion. Only remove gratitude when it is an unnecessary preface to
+  // another sentence (for example, “Dạ em cảm ơn..., hy vọng...” ).
+  if (genericBotReply(original, post)) return original;
+  const cleaned = original
+    .replace(
+      /(^|[.!?…]\s*)(?:dạ\s*|ừ\s*|à\s*|vâng\s*|ok\s*|okay\s*)?(?:(?:em|mình|tôi|tui)\s+)?cảm\s*ơn\b(?:\s+(?:bạn|anh|chị|em|a|c|lời\s+chúc|chúc))?(?:\s+(?:nha|nhé|ạ))?\s*[,;:–-]?\s*/giu,
+      "$1",
+    )
+    .replace(/^\s*[,;:–-]\s*/u, "")
+    .trim();
+  return cleaned || original;
+}
 function normalizeReplies(result, post) {
   if (!Array.isArray(result?.replies)) return result;
   for (const item of result.replies) {
@@ -1568,6 +1584,8 @@ function normalizeReplies(result, post) {
       const score = Number(item.relevance_score);
       item.relevance_score = Number.isFinite(score) ? Math.min(score, 30) : 30;
     }
+    const gratitudeFree = stripUnnecessaryGratitude(item.reply, post);
+    if (gratitudeFree !== item.reply) item.reply = gratitudeFree;
     // Generic gratitude/reminder replies are intentionally surfaced and scored
     // low; do not rewrite them away before the UI can show the model output.
     if (genericBotReply(item.reply, post)) continue;
@@ -1669,13 +1687,16 @@ function validateTranslations(result, post, allowMissing = false) {
     result.topic = normalizeResultTopic(result, post);
     result.auto_skip_topics = extractAutoSkipTopics(post?.style ?? post?.style_hint);
   }
+  // Normalize recoverable wording before quality markers are attached. This
+  // lets an unnecessary leading “cảm ơn” be removed without leaving the
+  // cleaned reply stuck at the generic 30-point score.
+  normalizeReplies(result, post);
   const greetingTarget = simpleGreetingTarget(post);
   for (const item of result?.replies || []) {
     markGenericReplyLowQuality(item, post);
     markThreadReplyLowQuality(item, post);
     markConversationReplyLowQuality(item, post);
   }
-  normalizeReplies(result, post);
   const expected = primaryLanguage(
       globalThis.X_REPLY_LANGUAGE(post.target_text, post.language_hint),
     ),
@@ -1776,6 +1797,9 @@ function technicalValidationError(error) {
   );
 }
 function validateForDisplay(result, post, allowMissing = false) {
+  // Run recoverable wording repairs before the layered quality validators so
+  // an unnecessary leading gratitude phrase is not scored or shown again.
+  normalizeReplies(result, post);
   try {
     return validateTranslations(result, post, allowMissing);
   } catch (error) {
@@ -3033,11 +3057,11 @@ function conversationSpeakerRule(post = {}) {
   if (!target) return "";
   if (!viewer) {
     return post.reply_context === "reply_to_comment_on_other_post"
-      ? ` SPEAKER ATTRIBUTION LOCK: The exact target_text was written by @${target} (B). The generated text is the next reply from the currently logged-in account (A) to B, never a continuation written as B. Never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan. If B hopes to reach a goal, keep that goal attributed to B: A may encourage B, but must not write “em sẽ cố gắng”, “em sẽ đạt/chạm/hoàn thành”, or otherwise claim A owns B's target. If the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`
+      ? ` SPEAKER ATTRIBUTION LOCK: The exact target_text was written by @${target} (B). The generated text is the next reply from the currently logged-in account (A) to B, never a continuation written as B. Never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan. If B hopes to reach a goal, keep that goal attributed to B: A may encourage B, but must not write “em sẽ cố gắng”, “em sẽ đạt/chạm/hoàn thành”, or otherwise claim A owns B's target. A status update or hope from B is not a reason to thank B; do not start with “dạ cảm ơn” unless B directly thanked or congratulated A. If the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`
       : "";
   }
   if (viewer === target) return "";
-  return ` SPEAKER ATTRIBUTION LOCK: The current replying account is @${viewer} (A). The exact target_text was written by @${target} (B), and the generated text must be the next reply from A to B. Never speak as B, never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan, and never write “em sẽ...” as if A owns B's goal. If B hopes to reach a goal, keep that goal attributed to B: A may encourage B, but must not write “em sẽ cố gắng”, “em sẽ đạt/chạm/hoàn thành”, or otherwise claim A owns B's target. The target's self-reference does not establish a relationship for A to use; if the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`;
+  return ` SPEAKER ATTRIBUTION LOCK: The current replying account is @${viewer} (A). The exact target_text was written by @${target} (B), and the generated text must be the next reply from A to B. Never speak as B, never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan, and never write “em sẽ...” as if A owns B's goal. If B hopes to reach a goal, keep that goal attributed to B: A may encourage B, but must not write “em sẽ cố gắng”, “em sẽ đạt/chạm/hoàn thành”, or otherwise claim A owns B's target. A status update or hope from B is not a reason to thank B; do not start with “dạ cảm ơn” unless B directly thanked or congratulated A. The target's self-reference does not establish a relationship for A to use; if the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`;
 }
 const LANGUAGE_NATURALNESS_RULE =
   " VIETNAMESE NATURALNESS RULE: Do not mutate words into nonsense. Never write the malformed phrase ‘lành lợn’; for a morning wish use an ordinary phrase such as ‘buổi sáng vui vẻ’ or ‘lành mạnh’ only when it fits the target.";
@@ -4212,6 +4236,10 @@ function cannedFoodImagePhrase(text) {
 }
 const assistantValidateJudgment = validateTranslations;
 validateTranslations = function (result, post, allowMissing = false) {
+  // Apply recoverable wording repairs before any judgment/quality marker is
+  // attached. Otherwise a removable leading gratitude phrase can leave a
+  // stale low-score issue on the cleaned reply.
+  normalizeReplies(result, post);
   if ((result?.replies || []).some((item) => judgmentalReply(item?.reply)))
     throw new Error(
       "Gợi ý mang tính phán xét hoặc quy chụp. Hãy viết lại trung tính, chỉ nêu chi tiết quan sát được và để ngỏ khả năng giải thích.",
