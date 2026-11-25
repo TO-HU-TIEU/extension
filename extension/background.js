@@ -760,7 +760,7 @@ function providerApiError(error) {
     )
   );
 }
-const ASSISTANT_VERSION = globalThis.chrome?.runtime?.getManifest?.().version || "1.5.33";
+const ASSISTANT_VERSION = globalThis.chrome?.runtime?.getManifest?.().version || "1.5.34";
 function friendlyRuntimeError(error) {
   const detail = String(error?.message || error || "")
     .replace(/\s+/g, " ")
@@ -1271,11 +1271,12 @@ const CASUAL_GREETING_RULE =
 function repairGreetingOpening(reply, post) {
   if (typeof reply !== "string") return reply;
   const match = reply.match(
-    /^([\s\p{S}\p{P}\uFE0F]*)(?:dạ[\s,]+(?:em\s+)?|em\s+)chào\s+(?:anh|chị|a|c)(?![\p{L}\p{M}\p{N}])(?:\s+(?:ơi|nha|nhé|ạ)(?![\p{L}\p{M}]))?/iu,
+    /^([\s\p{S}\p{P}\uFE0F]*)(?:dạ[\s,]+em[\s,]+chào(?![\p{L}\p{M}])(?:\s+(?:anh|chị|bạn|mọi\s+người|cả\s+nhà|a|c)(?![\p{L}\p{M}\p{N}]))?|(?:dạ[\s,]+|em\s+)chào\s+(?:anh|chị|a|c)(?![\p{L}\p{M}\p{N}]))(?:\s+(?:ơi|nha|nhé|ạ)(?![\p{L}\p{M}]))?/iu,
   );
   if (!match) return reply;
   const [, lead] = match;
   const remainder = reply.slice(match[0].length);
+  if (/^\s+(?:đón|mừng)(?!\p{L})/iu.test(remainder)) return reply;
   if (/^\s+buổi\s+(?:sáng|trưa|chiều|tối)/iu.test(remainder))
     return lead + "Chào" + remainder;
   const content = remainder.replace(/^[\s,.!?…:;–—-]+/u, "");
@@ -3913,11 +3914,11 @@ function simpleEnglishGreetingResult(post = {}) {
 }
 function foodBreakTarget(post = {}) {
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC");
-  return /(?:giải\s+lao|nghỉ\s+giữa\s+giờ|ăn\s+nhẹ)/iu.test(target) &&
-    /(?:bánh|miếng|món|trà|cà\s+phê|đồ\s+ăn|đồ\s+uống)/iu.test(target);
+  return /(?:giải\s+lao|nghỉ\s+tay|nghỉ\s+giữa\s+giờ|ăn\s+nhẹ)/iu.test(target) &&
+    /(?<!\p{L})(?:bánh|miếng|món|trà|cà\s+phê|đồ\s+ăn|đồ\s+uống|cherry|trái\s+cây|hoa\s+quả)(?!\p{L})/iu.test(target);
 }
 const FOOD_BREAK_RULE =
-  " SNACK BREAK RULE: Answer the snack break and the named food in one natural thought. Do not invent work, productivity, a weekday, or time of day. Use timing only if the target makes it relevant, and distinguish when the post was written from now. An image does not establish flavor, mouthfeel or that you tasted it. Skip cutlery and packaging unless the target makes them relevant. Avoid slogans such as ‘cứu tinh’ and filler such as ‘cuốn quá’. Use neutral address unless the conversation or an explicit personal style establishes it.";
+  " SNACK BREAK RULE: Answer the snack break and the named food in one natural thought. Option 1 should respond to the break itself. A closing wish such as ‘Chiều mát mẻ nhé’ is secondary and does not call for an opening greeting. Avoid inventorying the image, including color, shine or arrangement, unless relevant to the text. Do not invent work, productivity, a weekday, or time of day. Use timing only if the target makes it relevant, and distinguish when the post was written from now. An image does not establish flavor, mouthfeel or that you tasted it. Skip cutlery and packaging unless the target makes them relevant. Avoid slogans such as ‘cứu tinh’ and filler such as ‘cuốn quá’. Use neutral address unless the conversation or an explicit personal style establishes it.";
 function foodBreakReplyDrift(reply, post) {
   if (!foodBreakTarget(post)) return false;
   const target = String(post.target_text ?? post.text ?? "");
@@ -3935,8 +3936,10 @@ function foodBreakReplyDrift(reply, post) {
     /đậm\s+đà/iu,
     /hợp\s+vị/iu,
     /(?:chiếc|cái)\s+thìa/iu,
+    /(?:đỏ\s+bóng|bóng\s+loáng|xếp\s+(?:ngay\s+)?(?:đều|gọn))/iu,
   ];
   return unsupportedDetails.some(addsUnsupportedDetail) ||
+    /^(?:dạ\s+)?(?:em\s+)?chào(?=$|[^\p{L}])/iu.test(value.trim()) ||
     /(?:cứu\s+tinh|cuốn\s+quá|cuốn\s+ghê)/iu.test(value) ||
     (/(?<!\p{L})(?:nha|nhé|ơi)\s+bà(?!\p{L})/iu.test(value) &&
       !/(?<!\p{L})bà(?!\p{L})/iu.test(target) &&
