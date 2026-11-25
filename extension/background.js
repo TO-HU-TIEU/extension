@@ -3030,8 +3030,14 @@ function conversationSpeakerRule(post = {}) {
     } catch {}
   }
   const viewer = normalize(post.viewer_handle);
-  if (!viewer || !target || viewer === target) return "";
-  return ` SPEAKER ATTRIBUTION LOCK: The current replying account is @${viewer} (A). The exact target_text was written by @${target} (B), and the generated text must be the next reply from A to B. Never speak as B, never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan, and never write “em sẽ...” as if A owns B's goal. The target's self-reference does not establish a relationship for A to use; if the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`;
+  if (!target) return "";
+  if (!viewer) {
+    return post.reply_context === "reply_to_comment_on_other_post"
+      ? ` SPEAKER ATTRIBUTION LOCK: The exact target_text was written by @${target} (B). The generated text is the next reply from the currently logged-in account (A) to B, never a continuation written as B. Never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan. If B hopes to reach a goal, keep that goal attributed to B: A may encourage B, but must not write “em sẽ cố gắng”, “em sẽ đạt/chạm/hoàn thành”, or otherwise claim A owns B's target. If the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`
+      : "";
+  }
+  if (viewer === target) return "";
+  return ` SPEAKER ATTRIBUTION LOCK: The current replying account is @${viewer} (A). The exact target_text was written by @${target} (B), and the generated text must be the next reply from A to B. Never speak as B, never turn B's first-person words such as “em”, “mình”, “hi vọng” or “sẽ” into A's action or plan, and never write “em sẽ...” as if A owns B's goal. If B hopes to reach a goal, keep that goal attributed to B: A may encourage B, but must not write “em sẽ cố gắng”, “em sẽ đạt/chạm/hoàn thành”, or otherwise claim A owns B's target. The target's self-reference does not establish a relationship for A to use; if the relationship is not explicit, omit anh/chị/em/a/ạ and use neutral wording.`;
 }
 const LANGUAGE_NATURALNESS_RULE =
   " VIETNAMESE NATURALNESS RULE: Do not mutate words into nonsense. Never write the malformed phrase ‘lành lợn’; for a morning wish use an ordinary phrase such as ‘buổi sáng vui vẻ’ or ‘lành mạnh’ only when it fits the target.";

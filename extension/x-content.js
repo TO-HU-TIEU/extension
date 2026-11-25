@@ -353,7 +353,16 @@
         const label = String(link.innerText || link.textContent || "").trim();
         return label === "Hồ sơ" || link.getAttribute("aria-label") === "Hồ sơ";
       });
-    const viewerHandle = normalizeHandle(profileNav?.getAttribute("href"));
+    const accountSwitcher = document.querySelector(
+      '[data-testid="SideNav_AccountSwitcher_Button"]',
+    );
+    const accountHandle = String(
+      accountSwitcher?.innerText ||
+        accountSwitcher?.textContent ||
+        accountSwitcher?.getAttribute("aria-label") ||
+        "",
+    ).match(/@[A-Za-z0-9_]{1,15}/u)?.[0];
+    const viewerHandle = normalizeHandle(profileNav?.getAttribute("href") || accountHandle);
     const ownMedia = mediaFor(article),
       embedded = embeddedContext(article).embedded,
       articles = [...document.querySelectorAll('main article[data-testid="tweet"]')],
