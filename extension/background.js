@@ -3155,6 +3155,14 @@ function replyInstructions(message) {
         : message?.post?.reply_context === "reply_to_comment_on_other_post"
           ? " OTHER-USER COMMENT MODE: target_text is a comment in someone else's thread. Answer that comment first and use the ancestor post only to resolve what the comment means."
           : "";
+  const ownPostShortPraiseRule =
+    message?.post?.reply_context === "reply_to_comment_on_own_post" &&
+    Array.from(String(message?.post?.target_text || "").trim()).length <= 80 &&
+    /(?:^|[^\p{L}])(?:đỉnh(?:\s+cao)?|xịn|quá\s+đã|cháy|đỉnh\s+thật|ghê\s+vậy|quá\s+hay|giỏi\s+vậy)(?=$|[^\p{L}])/iu.test(
+      String(message?.post?.target_text || ""),
+    )
+      ? " OWN-POST SHORT PRAISE RULE: The current user (A) is replying to a short compliment about A's current root post. Treat target_text as praise of the current post/result, not as a new task or as a request to revisit older posts. Reply as A with a natural humble or playful acknowledgment, then tie it to one concrete detail from the current root text such as the current view count, growth or next milestone when supported. Do not write ‘cũng bình thường’, ‘nhớ mấy bài trước’, ‘kéo lại nhiệt huyết’, or another unrelated meta-comment; do not invent effort, mood or a new action. Ignore quoted/embedded older posts and their metrics unless target_text explicitly mentions them. Do not answer the root post from scratch or let the quoted card replace the current root topic."
+      : "";
   const contextText = [
       message?.post?.target_text,
       message?.post?.caption,
@@ -3242,6 +3250,7 @@ function replyInstructions(message) {
     mediaActionRule +
     threadSubjectRule +
     ownershipRule +
+    ownPostShortPraiseRule +
     greetingRule +
     greetingTargetRule +
     draftRule +
