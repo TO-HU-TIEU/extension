@@ -40,49 +40,6 @@
     await chrome.storage.local.set({ autoReplyExcludedAuthors: next });
     return !excluded;
   };
-  function enablePersonDialogDrag(target, handle) {
-    if (!target || !handle) return;
-    handle.classList.add("xra-person-dialog-title");
-    handle.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || event.target.closest?.("button, input, select, textarea, a"))
-        return;
-      const rect = target.getBoundingClientRect();
-      target.style.position = "fixed";
-      target.style.margin = "0";
-      target.style.left = `${Math.round(rect.left)}px`;
-      target.style.top = `${Math.round(rect.top)}px`;
-      target.style.transform = "none";
-      const start = {
-        pointerId: event.pointerId,
-        x: event.clientX,
-        y: event.clientY,
-        left: rect.left,
-        top: rect.top,
-      };
-      const move = (moveEvent) => {
-        if (moveEvent.pointerId !== start.pointerId) return;
-        const current = target.getBoundingClientRect();
-        const maxLeft = Math.max(8, innerWidth - current.width - 8);
-        const maxTop = Math.max(8, innerHeight - current.height - 8);
-        const left = Math.min(maxLeft, Math.max(8, start.left + moveEvent.clientX - start.x));
-        const top = Math.min(maxTop, Math.max(8, start.top + moveEvent.clientY - start.y));
-        target.style.left = `${Math.round(left)}px`;
-        target.style.top = `${Math.round(top)}px`;
-      };
-      const stop = (stopEvent) => {
-        if (stopEvent.pointerId !== start.pointerId) return;
-        handle.releasePointerCapture?.(start.pointerId);
-        handle.removeEventListener("pointermove", move);
-        handle.removeEventListener("pointerup", stop);
-        handle.removeEventListener("pointercancel", stop);
-      };
-      handle.setPointerCapture?.(start.pointerId);
-      handle.addEventListener("pointermove", move);
-      handle.addEventListener("pointerup", stop);
-      handle.addEventListener("pointercancel", stop);
-      event.preventDefault();
-    });
-  }
   function account(target) {
     const a = target.closest?.("a[href]");
     if (!a && target.closest?.('[data-testid="UserName"]')) return P.handle(location.href);
@@ -113,7 +70,6 @@
     dialog = document.createElement("dialog");
     dialog.className = "xra-person-dialog";
     const title = document.createElement("h3");
-    title.className = "xra-person-dialog-title";
     title.textContent = `Phong cách trả lời @${handle}`;
     const select = document.createElement("select");
     select.setAttribute("aria-label", "Phong cách riêng");
@@ -203,7 +159,6 @@
     dialog.append(title, select, label, extra, presetWrap, error, row);
     document.body.append(dialog);
     dialog.showModal();
-    enablePersonDialogDrag(dialog, title);
     setTimeout(() => {
       extra.focus();
       extra.selectionStart = extra.selectionEnd = extra.value.length;

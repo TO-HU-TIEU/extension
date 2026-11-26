@@ -123,9 +123,6 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   // A standalone “gm!” is itself an English greeting. Do this after script
   // detection so mixed-language comments such as “Gm em nha” remain Vietnamese.
   if (standaloneGm) return "en";
-  const greeting = prose.replace(/[\p{P}\p{S}\uFE0F]/gu, " ").replace(/\s+/gu, " ").trim();
-  if (/^(?:good\s+)?(?:morning|afternoon|evening)(?:\s+(?:everyone|all|folks|friends))?$/iu.test(greeting))
-    return "en";
   if (
     latin &&
     (/[ăđơưảạằẳẵắặầẩẫấậẻẽẹềểễếệỉĩịỏọồổỗốộờởỡớợủụừửữứựỷỹỵ]/i.test(prose) ||

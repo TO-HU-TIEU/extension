@@ -192,12 +192,11 @@
       (article) => !article.querySelector('[data-testid="placementTracking"]') && textNode(article),
     )
     .filter(Boolean);
-  // Preserve the root and newest turns for long reply chains. Eight ancestor
-  // turns plus the target cover a five-level exchange while keeping the model
-  // focused on the immediate parent instead of unrelated older replies.
+  // Preserve the root and newest turns for long reply chains instead of the
+  // old six-turn window, so the model can keep speaker/turn attribution.
   const before =
-    beforeCandidates.length > 8
-      ? [beforeCandidates[0], ...beforeCandidates.slice(-7)]
+    beforeCandidates.length > 24
+      ? [beforeCandidates[0], ...beforeCandidates.slice(-23)]
       : beforeCandidates;
   for (const article of before) await restoreOriginal(article);
   const turns = before.map((article, index) => {
@@ -217,7 +216,7 @@
     return {
       turn: index + 1,
       author: urlPath(ownPermalink(article)?.href).split("/")[1] || "",
-      text: textNode(article).innerText.trim().replace(/\s+/gu, " ").slice(0, 320),
+      text: textNode(article).innerText.trim(),
       media_count: count,
     };
   });
@@ -226,8 +225,6 @@
     target_author: username,
     target_display_name: displayName,
     target_turn: { author: username, text },
-    conversation_depth: turns.length + 1,
-    immediate_parent_turn: turns.at(-1) || null,
     instruction: text
       ? "Reply directly to target_text, which is the exact latest comment/post being answered. If it is a comment, answer its claim or tone first; use the nearest ancestor/root post only as background to resolve references. Do not reply to the root post instead of the target comment, and do not repeat the root caption."
       : "The target post has no caption or only an icon. Use its own media first; if absent, use embedded quoted_post/link_preview as the context being reacted to.",
@@ -257,7 +254,6 @@
     lang: scriptLanguage(text, node?.getAttribute("lang") || ""),
     context,
     conversationHistory: turns,
-    conversationDepth: turns.length + 1,
     mediaCount,
     mediaUrls,
     previewMediaUrls,
