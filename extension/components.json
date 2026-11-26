@@ -1,14 +1,8 @@
 {
   "schemaVersion": 1,
-  "domains": ["core", "reply", "automation", "content", "follow", "update", "shell"],
+  "domains": ["core", "reply", "automation", "follow", "update", "shell"],
   "components": [
     { "id": "core.activation", "path": "activation.js", "domain": "core", "contexts": ["panel"] },
-    {
-      "id": "content.article-extract",
-      "path": "article-extract.js",
-      "domain": "content",
-      "contexts": ["dynamic"]
-    },
     {
       "id": "automation.auto-flow",
       "path": "auto-flow.js",
@@ -26,48 +20,6 @@
       "path": "background.js",
       "domain": "shell",
       "contexts": ["background"]
-    },
-    {
-      "id": "content.background",
-      "path": "content-background.js",
-      "domain": "content",
-      "contexts": ["background-import"]
-    },
-    {
-      "id": "content.core",
-      "path": "content-core.js",
-      "domain": "content",
-      "contexts": ["background-import", "panel", "dynamic"]
-    },
-    {
-      "id": "content.extractor",
-      "path": "content-extractor.js",
-      "domain": "content",
-      "contexts": ["dynamic"]
-    },
-    {
-      "id": "content.panel",
-      "path": "content-panel.js",
-      "domain": "content",
-      "contexts": ["panel"]
-    },
-    {
-      "id": "content.presets",
-      "path": "content-presets.js",
-      "domain": "content",
-      "contexts": ["background-import"]
-    },
-    {
-      "id": "content.reader",
-      "path": "content-reader.js",
-      "domain": "content",
-      "contexts": ["background-import", "panel", "dynamic"]
-    },
-    {
-      "id": "content.scanner",
-      "path": "content-scanner.js",
-      "domain": "content",
-      "contexts": ["dynamic"]
     },
     {
       "id": "update.core",
@@ -201,11 +153,7 @@
       "language.js",
       "reply-time.js",
       "reply-preferences.js",
-      "content-presets.js",
-      "remote-config.js",
-      "content-core.js",
-      "content-reader.js",
-      "content-background.js"
+      "remote-config.js"
     ],
     "content": [
       "lucide-icons.js",
@@ -232,11 +180,8 @@
       "reply-preferences.js",
       "remote-config.js",
       "language.js",
-      "content-core.js",
-      "content-reader.js",
       "panel.js",
       "tone-controls.js",
-      "content-panel.js",
       "reply-layout.js",
       "extension-updates.js",
       "updates-panel.js",

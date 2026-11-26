@@ -2,59 +2,27 @@
   if (globalThis.RemoteConfig) return;
   const BASE = "https://raw.githubusercontent.com/TO-HU-TIEU/configs/main/",
     PATHS = {
-      general: "settings/general.json",
-      limits: "settings/limits.json",
       endpoints: "settings/endpoints.json",
-      content: "prompts/content.json",
       reply: "prompts/reply.json",
       styles: "presets/reply-styles.json",
-      contentStyles: "presets/content-styles.json",
-      adapters: "sources/adapters.json",
     };
   let cache = null,
     inflight;
   const defaults = {
-    general: {
-      sourceLabels: {
-        "sosovalue.com": "SoSoValue",
-        "dantri.com.vn": "Dân trí",
-        "tuoitre.vn": "Tuổi trẻ",
-      },
-    },
-    limits: {
-      maxSources: 20,
-      maxArticles: 120,
-      maxQueue: 120,
-      maxSourceCharacters: 10000,
-      minSourceCharacters: 80,
-    },
     endpoints: { presets: BASE + PATHS.styles },
-    content: { supplement: "" },
     reply: { supplement: "" },
     styles: { version: 1, styles: [] },
-    contentStyles: globalThis.ContentPresets || { version: 1, styles: [] },
-    adapters: {},
   };
   function validate(key, value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error("Cấu hình không hợp lệ: " + key);
-    if (key === "limits")
-      for (const [k, min, max] of [
-        ["maxSources", 1, 20],
-        ["maxArticles", 20, 120],
-        ["maxQueue", 1, 120],
-        ["maxSourceCharacters", 1000, 10000],
-        ["minSourceCharacters", 40, 200],
-      ])
-        if (!Number.isInteger(value[k]) || value[k] < min || value[k] > max)
-          throw new Error("Giới hạn không hợp lệ");
     if (
-      ["content", "reply"].includes(key) &&
+      key === "reply" &&
       (!value.supplement || typeof value.supplement !== "string" || value.supplement.length > 12000)
     )
       throw new Error("Prompt không hợp lệ");
     if (
-      ["styles", "contentStyles"].includes(key) &&
+      key === "styles" &&
       (!Array.isArray(value.styles) ||
         !value.styles.length ||
         value.styles.length > 30 ||
@@ -69,39 +37,8 @@
         ))
     )
       throw new Error("Preset không hợp lệ");
-    if (
-      key === "contentStyles" &&
-      (value.styles.length !== 2 || value.styles.some((s) => !s.id || !s.prompt))
-    )
-      throw new Error("Content preset không hợp lệ");
     if (key === "endpoints" && value.presets !== BASE + PATHS.styles)
       throw new Error("Endpoint không được phép");
-    if (
-      key === "general" &&
-      (!value.sourceLabels ||
-        Object.values(value.sourceLabels).some(
-          (label) => typeof label !== "string" || label.length > 80,
-        ))
-    )
-      throw new Error("Tên nguồn không hợp lệ");
-    if (key === "adapters")
-      for (const [host, adapter] of Object.entries(value)) {
-        if (
-          !/^[a-z0-9.-]+$/.test(host) ||
-          !Array.isArray(adapter.body) ||
-          adapter.body.length > 12 ||
-          adapter.body.some((s) => typeof s !== "string" || s.length > 200) ||
-          (adapter.feed &&
-            (!Array.isArray(adapter.feed) ||
-              adapter.feed.length > 12 ||
-              adapter.feed.some((s) => typeof s !== "string" || s.length > 200))) ||
-          (adapter.published &&
-            (!Array.isArray(adapter.published) ||
-              adapter.published.length > 12 ||
-              adapter.published.some((s) => typeof s !== "string" || s.length > 200)))
-        )
-          throw new Error("Adapter không hợp lệ");
-      }
     return value;
   }
   function storage() {
@@ -116,9 +53,10 @@
     .then(({ sharedConfigCache }) => {
       try {
         if (sharedConfigCache?.data) {
-          for (const [key, value] of Object.entries(sharedConfigCache.data)) validate(key, value);
-          if (Object.keys(PATHS).every((key) => sharedConfigCache.data[key]))
-            cache = sharedConfigCache;
+          const data = Object.fromEntries(
+            Object.keys(PATHS).map((key) => [key, validate(key, sharedConfigCache.data[key])]),
+          );
+          cache = { ...sharedConfigCache, data };
         }
       } catch {}
       return cache;
@@ -202,7 +140,7 @@
     ready,
     refresh,
     start,
-    get: (key) => cache?.data?.[key] || defaults[key],
+    get: (key) => Object.hasOwn(PATHS, key) ? cache?.data?.[key] || defaults[key] : undefined,
     version: () => cache?.version || "bundled",
   };
 })();

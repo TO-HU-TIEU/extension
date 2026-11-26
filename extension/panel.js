@@ -598,21 +598,18 @@ function showModule(module) {
   $("settingsToggle").innerHTML = globalThis.AssistantIcons?.svg("setting") || ICON.setting;
   currentModule = module;
   document.body.dataset.module = module;
-  const content = module === "content",
-    follow = module === "follow",
+  const follow = module === "follow",
     feedback = module === "feedback";
-  $("replySettings").hidden = content || follow || feedback;
-  $("toneSettings")?.toggleAttribute("hidden", content || follow || feedback);
-  $("styleLengthSettings")?.toggleAttribute("hidden", content || follow || feedback);
-  $("replyModule").classList.toggle("active", !content && !follow && !feedback);
-  $("contentModule").classList.toggle("active", content);
+  $("replySettings").hidden = follow || feedback;
+  $("toneSettings")?.toggleAttribute("hidden", follow || feedback);
+  $("styleLengthSettings")?.toggleAttribute("hidden", follow || feedback);
+  $("replyModule").classList.toggle("active", !follow && !feedback);
   $("followModule").classList.toggle("active", follow);
   $("feedbackModule")?.classList.toggle("active", feedback);
-  $("contentWorkspace").hidden = !content;
   $("quoteWorkspace").hidden = true;
   $("followWorkspace").hidden = !follow;
   $("feedbackWorkspace")?.toggleAttribute("hidden", !feedback);
-  if (content || follow || feedback) {
+  if (follow || feedback) {
     $("workspace")?.toggleAttribute("hidden", true);
     $("xWorkspace").hidden = true;
   } else showMode("x");
@@ -1312,93 +1309,6 @@ function feedbackWire() {
     .catch(() => {});
 }
 feedbackWire();
-async function safelyContent(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    $("contentStatus").textContent = discreet(e.message);
-    $("contentStatus").classList.add("error");
-  }
-}
-async function readNews() {
-  const tab = await activeTab();
-  if (!tab?.id || !/^https:\/\//.test(tab.url || ""))
-    throw new Error("Hãy mở một bài viết trên trình duyệt hoặc dán nội dung gốc.");
-  const [value] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: [
-      "remote-config.js",
-      "language.js",
-      "content-core.js",
-      "content-reader.js",
-      "content-extractor.js",
-      "article-extract.js",
-    ],
-  });
-  if (!value?.result || value.result.error)
-    throw new Error(value?.result?.error || "Không đọc được bài viết.");
-  $("newsUrl").value = value.result.url;
-  $("newsSource").value = value.result.text.slice(0, 10000);
-  $("newsSource").dataset.publishedAt = value.result.publishedAt || "";
-  $("contentStatus").textContent = "";
-  return value.result;
-}
-let pendingNewsLoad = false,
-  pendingNewsTabId = null;
-async function loadNewsUrl() {
-  const raw = $("newsUrl").value.trim();
-  let url;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error("Liên kết bài viết không hợp lệ.");
-  }
-  if (url.protocol !== "https:") throw new Error("Chỉ hỗ trợ liên kết HTTPS.");
-  const origin = `${url.origin}/*`,
-    granted = await chrome.permissions.request({ origins: [origin] });
-  if (!granted) throw new Error("Cần cấp quyền đọc trang này để lấy nội dung bài viết.");
-  const tab = await activeTab();
-  pendingNewsLoad = true;
-  pendingNewsTabId = tab.id;
-  await chrome.tabs.update(tab.id, { url: url.href });
-  $("contentStatus").textContent = "Đang mở và đọc bài viết…";
-}
-async function composeNews() {
-  if (!$("newsSource").value.trim()) await readNews();
-  const s = await chrome.storage.local.get([
-    "provider",
-    "apiKey",
-    "apiModel",
-    "geminiKey",
-    "geminiKeys",
-    "geminiModel",
-    "deepseekKey",
-    "deepseekModel",
-  ]);
-  const provider = s.provider || "gemini",
-    model =
-      provider === "gemini"
-        ? s.geminiModel || "gemini-3.5-flash-lite"
-        : provider === "deepseek"
-          ? s.deepseekModel || "deepseek-flash"
-          : s.apiModel || "gpt-4.1-mini";
-  $("contentStatus").textContent = "Đang viết bản nháp…";
-  const r = await chrome.runtime.sendMessage({
-    type: "composeNews",
-    provider,
-    model,
-    apiKey: s.apiKey,
-    geminiKey: s.geminiKey,
-    geminiKeys: s.geminiKeys,
-    deepseekKey: s.deepseekKey,
-    source: $("newsSource").value,
-    angle: "",
-  });
-  if (!r?.ok) throw new Error(r?.error || "Không tạo được bản nháp.");
-  $("newsDraft").value = r.data.draft;
-  $("contentResult").hidden = false;
-  $("contentStatus").textContent = "";
-}
 async function readPost() {
   if (reading) return;
   reading = true;
@@ -1678,7 +1588,6 @@ function showSettings(value) {
     $("styleLengthSettings")?.setAttribute("hidden", "");
     $("workspace")?.toggleAttribute("hidden", true);
     $("xWorkspace").hidden = true;
-    $("contentWorkspace").hidden = true;
     $("quoteWorkspace").hidden = true;
     $("followWorkspace").hidden = true;
     $("feedbackWorkspace").hidden = true;
@@ -1941,14 +1850,12 @@ function setupModelPickers() {
 hydratePanelIcons();
 setupModelPickers();
 for (const [id, name] of [
-  ["clearNewsUrl", "remove"],
   ["clearQuotePost", "cancel"],
   ["cancelGeminiQueueKey", "cancel"],
   ["saveGeminiQueueKey", "save"],
   ["cancelStyle", "cancel"],
   ["clearStyleName", "cancel"],
   ["extensionReleaseLink", "source"],
-  ["readNews", "refresh"],
   ["newStyle", "plus"],
   ["addGeminiQueueKey", "plus"],
   ["reloadGeminiKeys", "refresh"],
@@ -1971,7 +1878,6 @@ for (const [id, name] of [
   if ($(id)) $(id).innerHTML = ICON[name];
 if ($("reloadQuoteDraft"))
   $("reloadQuoteDraft").innerHTML = globalThis.AssistantIcons?.svg("reload") || "";
-$("copyDraft").innerHTML = globalThis.AssistantIcons?.svg("copy") || ICON.copy;
 document
   .querySelectorAll(".config-summary button,.config-summary a")
   .forEach((node) => node.addEventListener("click", (event) => event.stopPropagation()));
@@ -2000,21 +1906,8 @@ $("directReplyToggle").onchange = () =>
 let quoteDraftEditing = false,
   quoteDraftEditingTimer;
 $("replyModule").onclick = () => showModule("reply");
-$("contentModule").onclick = () => showModule("content");
 $("feedbackModule").onclick = () => showModule("feedback");
 $("followModule").addEventListener("click", () => showModule("follow"));
-$("readNews").onclick = () => safelyContent(readNews);
-$("loadNewsUrl").onclick = () => safelyContent(loadNewsUrl);
-$("clearNewsUrl").onclick = () => {
-  $("newsUrl").value = "";
-  $("newsUrl").focus();
-};
-$("composeNews").onclick = () => safelyContent(composeNews);
-$("copyDraft").onclick = () =>
-  safelyContent(async () => {
-    await navigator.clipboard.writeText($("newsDraft").value);
-    $("contentStatus").textContent = "Đã sao chép bản nháp.";
-  });
 $("copyQuoteDraft").onclick = () =>
   safely(async () => {
     const text = $("quoteDraft").value.trim();
@@ -2412,17 +2305,6 @@ $("saveSettings").onclick = () =>
     lockConfig();
     status("Đã lưu phong cách.");
   });
-chrome.tabs.onUpdated.addListener((_id, change) => {
-  if (
-    currentModule === "content" &&
-    pendingNewsLoad &&
-    _id === pendingNewsTabId &&
-    change.status === "complete"
-  ) {
-    pendingNewsLoad = false;
-    setTimeout(() => safelyContent(readNews), 350);
-  }
-});
 function quoteChars(text) {
   return Array.from(String(text || "")).length;
 }

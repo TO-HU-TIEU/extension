@@ -902,6 +902,11 @@
   margin-top: 0;
   font-size: 20px;
 }
+.xra-person-dialog-title {
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
 .xra-person-dialog select,
 .xra-person-dialog textarea {
   background: transparent;

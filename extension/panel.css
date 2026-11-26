@@ -961,19 +961,6 @@ input#models {
   padding: 8px 10px;
   white-space: nowrap;
 }
-.content-card > label {
-  display: block;
-  margin-top: 11px;
-}
-.content-card .hint {
-  margin-bottom: 12px;
-}
-.content-card #newsSource {
-  line-height: 1.45;
-}
-.content-card #newsAngle {
-  line-height: 1.4;
-}
 .reply-layout-settings h3 {
   font-size: 14px;
   margin-bottom: 8px;
@@ -1507,17 +1494,11 @@ button {
 .module-settings > summary {
   padding: 9px 0;
 }
-.content-card > label {
-  margin-top: 8px;
-}
 .hint {
   font-size: 10.5px;
   margin: 6px 0;
 }
 .x-mode-card > .hint {
-  display: none;
-}
-.content-card .hint {
   display: none;
 }
 .key-queue .label-line {
@@ -2469,7 +2450,6 @@ header {
 section,
 .setup-card,
 .follow-card,
-.content-card,
 .result-card,
 .quote-card,
 .settings-card,
@@ -2550,7 +2530,6 @@ hr {
   color: var(--ui-text);
 }
 .follow-list,
-.content-list,
 .results-list {
   scrollbar-color: var(--ui-muted) transparent;
 }
@@ -2558,7 +2537,6 @@ hr {
   section,
   .setup-card,
   .follow-card,
-  .content-card,
   .result-card {
     border-radius: 12px;
   }
@@ -2618,8 +2596,6 @@ textarea {
 .follow-row,
 .follow-card,
 .follow-list,
-.content-card,
-.draft-card,
 .result-card,
 .setup-card {
   border-radius: 12px;
@@ -2673,7 +2649,6 @@ html[data-theme="light"] select {
 }
 html[data-theme="light"] .follow-row,
 html[data-theme="light"] .follow-list,
-html[data-theme="light"] .content-list,
 html[data-theme="light"] .results-list {
   background: #fff;
   border-color: #cfd9de;
@@ -3142,17 +3117,6 @@ html[data-theme="light"] .follow-sort {
   width: 16px;
   height: 16px;
 }
-.content-toolbar > .icon {
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-}
-.content-clear {
-  width: 30px !important;
-  height: 30px !important;
-  min-width: 30px !important;
-  padding: 5px !important;
-}
 .follow-help {
   display: grid;
   place-items: center;
@@ -3255,7 +3219,6 @@ html[data-theme="light"] .assistant-mark {
 
 /* Side-panel icon controls: quiet by default, brighter on interaction. */
 button.icon,
-button.content-icon,
 button.follow-help,
 button.recent-remove,
 button.key-remove,
@@ -3271,9 +3234,6 @@ button.release-icon {
 button.icon:hover,
 button.icon:active,
 button.icon:focus-visible,
-button.content-icon:hover,
-button.content-icon:active,
-button.content-icon:focus-visible,
 button.follow-help:hover,
 button.follow-help:active,
 button.follow-help:focus-visible,
@@ -3299,7 +3259,6 @@ a.release-icon:focus-visible {
   color: var(--ui-text, #e7e9ea);
 }
 html[data-theme="light"] button.icon,
-html[data-theme="light"] button.content-icon,
 html[data-theme="light"] button.follow-help,
 html[data-theme="light"] button.recent-remove,
 html[data-theme="light"] button.key-remove,
@@ -3312,9 +3271,6 @@ html[data-theme="light"] button.release-icon {
 html[data-theme="light"] button.icon:hover,
 html[data-theme="light"] button.icon:active,
 html[data-theme="light"] button.icon:focus-visible,
-html[data-theme="light"] button.content-icon:hover,
-html[data-theme="light"] button.content-icon:active,
-html[data-theme="light"] button.content-icon:focus-visible,
 html[data-theme="light"] button.follow-help:hover,
 html[data-theme="light"] button.follow-help:active,
 html[data-theme="light"] button.follow-help:focus-visible,
@@ -3330,7 +3286,6 @@ a.release-icon:focus-visible {
   color: var(--ui-text, #0f1419);
 }
 .icon svg,
-.content-icon .ui-icon,
 .follow-head-actions .ui-icon,
 .follow-help .ui-icon,
 .recent-remove .ui-icon,
@@ -3369,19 +3324,6 @@ a.release-icon:focus-visible {
 .recent-remove {
   width: 32px !important;
   height: 32px !important;
-}
-.content-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.content-toolbar #contentOpenSources {
-  order: 2;
-  margin-left: auto;
-}
-.content-toolbar #contentClear {
-  order: 3;
-  margin-left: 0;
 }
 /* The shared icon catalog owns each SVG's fill and stroke. Do not override
    those attributes here: stroke-only icons would otherwise become filled or
@@ -3462,67 +3404,6 @@ header h1 {
   display: flex;
   align-items: baseline;
   gap: 5px;
-}
-.content-source-toggle {
-  padding: 4px 0 !important;
-  border: 0 !important;
-  border-radius: 8px !important;
-  background: transparent !important;
-  color: var(--ui-text) !important;
-  font-size: 12px !important;
-  font-weight: 700;
-}
-.content-source-toggle:hover,
-.content-source-toggle:focus-visible {
-  color: var(--ui-accent) !important;
-  background: transparent !important;
-}
-.content-tabs {
-  align-items: center;
-}
-.content-tabs #contentClear {
-  flex: 0 0 36px;
-  width: 36px !important;
-  min-width: 36px !important;
-  height: 36px !important;
-  margin-left: auto;
-  padding: 5px !important;
-}
-.content-tabs #contentClear .ui-icon {
-  width: 22px !important;
-  height: 22px !important;
-}
-.content-hint-row,
-.content-gesture-hint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 7px;
-}
-.content-hint-row .hint {
-  flex: 1;
-  margin: 6px 0;
-}
-.content-help {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--ui-muted);
-}
-.content-help:hover,
-.content-help:focus-visible {
-  color: var(--ui-text);
-  background: color-mix(in srgb, var(--ui-text) 9%, transparent);
-}
-.content-help .ui-icon {
-  width: 18px;
-  height: 18px;
 }
 .panel-loading-label {
   width: auto !important;
@@ -3773,15 +3654,8 @@ html[data-theme="dark"] .post-preview {
   color: #e7e9ea;
   border-color: #2f3336;
 }
-html[data-theme="dark"] .content-feed-card,
-html[data-theme="dark"] .content-draft {
-  background: #11151a;
-  color: #e7e9ea;
-  border-color: #2f3336;
-}
 html[data-theme="dark"] .follow-row,
 html[data-theme="dark"] .follow-list,
-html[data-theme="dark"] .content-list,
 html[data-theme="dark"] .results-list {
   background: #000;
   border-color: #2f3336;
@@ -3791,14 +3665,12 @@ html[data-theme="dark"] .reply-translation {
 }
 
 /* Clear/delete affordances use one restrained warning red in every module. */
-.content-clear,
 .ui-icon-clear,
 .ui-icon-remove,
 .recent-remove,
 .key-remove {
   color: #e05257 !important;
 }
-html[data-theme="light"] .content-clear,
 html[data-theme="light"] .ui-icon-clear,
 html[data-theme="light"] .ui-icon-remove,
 html[data-theme="light"] .recent-remove,
@@ -3917,7 +3789,6 @@ html[data-theme="light"] .key-remove {
 /* Keep every module on the same top-bar spacing scale. */
 #workspace,
 #xWorkspace,
-#contentWorkspace,
 #quoteWorkspace,
 #followWorkspace,
 #settingsArea {
@@ -3930,9 +3801,6 @@ html[data-theme="light"] .key-remove {
 #xWorkspace input,
 #xWorkspace select,
 #xWorkspace textarea,
-#contentWorkspace input,
-#contentWorkspace select,
-#contentWorkspace textarea,
 #quoteWorkspace input,
 #quoteWorkspace select,
 #quoteWorkspace textarea,
@@ -3946,29 +3814,24 @@ html[data-theme="light"] .key-remove {
 }
 #workspace .section-head,
 #xWorkspace .section-head,
-#contentWorkspace .section-head,
 #quoteWorkspace .section-head,
 #settingsArea .section-head {
   min-height: 32px;
 }
 #workspace > section,
 #xWorkspace > section,
-#contentWorkspace > section,
 #quoteWorkspace > section,
 #settingsArea > section {
   margin: 8px 0;
 }
 #workspace button:not(.icon),
 #xWorkspace button:not(.icon),
-#contentWorkspace button:not(.icon),
 #quoteWorkspace button:not(.icon),
 #settingsArea button:not(.icon) {
   min-height: 36px;
 }
 .follow-help,
-.follow-head-actions .icon,
-.content-toolbar > .icon,
-.content-clear {
+.follow-head-actions .icon {
   width: 36px !important;
   height: 36px !important;
 }
@@ -4102,7 +3965,6 @@ html[data-theme="dark"] body,
 html[data-theme="dark"] #settingsArea,
 html[data-theme="dark"] #workspace,
 html[data-theme="dark"] #xWorkspace,
-html[data-theme="dark"] #contentWorkspace,
 html[data-theme="dark"] #quoteWorkspace,
 html[data-theme="dark"] #followWorkspace {
   background: #101419 !important;
@@ -4113,9 +3975,6 @@ html[data-theme="dark"] .setup-card,
 html[data-theme="dark"] .post-card,
 html[data-theme="dark"] .quote-card,
 html[data-theme="dark"] .follow-card,
-html[data-theme="dark"] .content-card,
-html[data-theme="dark"] .content-feed-card,
-html[data-theme="dark"] .content-draft,
 html[data-theme="dark"] .x-mode-card {
   background: #171b21 !important;
   border-color: #303842 !important;
@@ -4132,12 +3991,6 @@ html[data-theme="dark"] .provider > button.active,
 html[data-theme="dark"] .style-options button.active {
   background: #243044 !important;
   border-color: #4c9cff !important;
-}
-html[data-theme="dark"] .content-selection,
-html[data-theme="dark"] .content-toolbar,
-html[data-theme="dark"] .content-tabs {
-  background: #101419 !important;
-  border-color: #303842 !important;
 }
 
 header.settings-open {
@@ -4162,16 +4015,11 @@ html[data-theme="dark"] body {
   background: #101419 !important;
 }
 html[data-theme="dark"] .follow-list,
-html[data-theme="dark"] .content-list,
 html[data-theme="dark"] .results-list,
 html[data-theme="dark"] .reply-surface,
 html[data-theme="dark"] .xra-box {
   background: #171b21 !important;
   border-color: #303842 !important;
-}
-html[data-theme="dark"] .content-card-head,
-html[data-theme="dark"] .content-card-meta {
-  color: #9aa4af;
 }
 
 header.settings-open + .module-nav {
@@ -4193,7 +4041,6 @@ html[data-theme="light"] body,
 html[data-theme="light"] #settingsArea,
 html[data-theme="light"] #workspace,
 html[data-theme="light"] #xWorkspace,
-html[data-theme="light"] #contentWorkspace,
 html[data-theme="light"] #quoteWorkspace,
 html[data-theme="light"] #followWorkspace {
   background: #f7f9fb !important;
@@ -4203,8 +4050,6 @@ html[data-theme="light"] section,
 html[data-theme="light"] .setup-card,
 html[data-theme="light"] .follow-card,
 html[data-theme="light"] .config-card,
-html[data-theme="light"] .content-feed-card,
-html[data-theme="light"] .content-draft,
 html[data-theme="light"] .x-mode-card {
   background: #fff !important;
   border-color: #aeb8c2 !important;
@@ -4584,7 +4429,6 @@ html[data-theme="light"] #settingsArea .toggle-row.compact-row b {
 
 /* Shared module surface: Reply tab is the visual source of truth. */
 .module-surface,
-.content-card,
 .quote-card,
 .follow-card,
 .config-card,
@@ -4596,7 +4440,6 @@ html[data-theme="light"] #settingsArea .toggle-row.compact-row b {
   box-shadow: none;
 }
 .module-surface .section-head,
-.content-card .section-head,
 .quote-card .section-head,
 .follow-card .section-head,
 .config-card .section-head {
@@ -4609,7 +4452,6 @@ html[data-theme="light"] #settingsArea .toggle-row.compact-row b {
   border-bottom: 1px solid color-mix(in srgb, var(--ui-border, #2f3336) 72%, transparent);
 }
 .module-surface h2,
-.content-card h2,
 .quote-card h2,
 .follow-card h2,
 .config-card h2 {
@@ -4620,7 +4462,6 @@ html[data-theme="light"] #settingsArea .toggle-row.compact-row b {
   color: var(--ui-text, #e7e9ea);
 }
 .module-surface label,
-.content-card label,
 .quote-card label,
 .follow-card label,
 .config-card label {
@@ -4629,9 +4470,6 @@ html[data-theme="light"] #settingsArea .toggle-row.compact-row b {
 .module-surface input,
 .module-surface textarea,
 .module-surface select,
-.content-card input,
-.content-card textarea,
-.content-card select,
 .quote-card input,
 .quote-card textarea,
 .quote-card select,
@@ -4644,14 +4482,12 @@ html[data-theme="light"] #settingsArea .toggle-row.compact-row b {
   color: var(--ui-text, #e7e9ea);
 }
 .module-surface button,
-.content-card button,
 .quote-card button,
 .follow-card button,
 .config-card button {
   font: inherit;
 }
 .module-surface .icon,
-.content-card .icon,
 .quote-card .icon,
 .follow-card .icon,
 .config-card .icon {
@@ -4660,7 +4496,6 @@ html[data-theme="light"] #settingsArea .toggle-row.compact-row b {
   border: 1px solid transparent;
 }
 .module-surface .icon:hover,
-.content-card .icon:hover,
 .quote-card .icon:hover,
 .follow-card .icon:hover,
 .config-card .icon:hover {
@@ -4668,26 +4503,21 @@ html[data-theme="light"] #settingsArea .toggle-row.compact-row b {
   color: var(--ui-text, #e7e9ea);
   border-color: var(--ui-border, #2f3336);
 }
-.content-toolbar,
-.content-tabs,
 .follow-tabs {
   background: var(--ui-surface, #000);
   border-color: var(--ui-border, #2f3336);
 }
-.content-tabs button,
 .follow-tabs button {
   color: var(--ui-muted, #71767b);
   background: transparent;
   border-color: transparent;
 }
-.content-tabs button[aria-selected="true"],
 .follow-tabs button.active {
   color: var(--ui-text, #e7e9ea);
   background: var(--ui-surface-raised, #16181c);
   border-color: var(--ui-border, #2f3336);
 }
 html[data-theme="light"] .module-surface,
-html[data-theme="light"] .content-card,
 html[data-theme="light"] .quote-card,
 html[data-theme="light"] .follow-card,
 html[data-theme="light"] .config-card,
@@ -4699,9 +4529,6 @@ html[data-theme="light"] .setup-card {
 html[data-theme="light"] .module-surface input,
 html[data-theme="light"] .module-surface textarea,
 html[data-theme="light"] .module-surface select,
-html[data-theme="light"] .content-card input,
-html[data-theme="light"] .content-card textarea,
-html[data-theme="light"] .content-card select,
 html[data-theme="light"] .quote-card input,
 html[data-theme="light"] .quote-card textarea,
 html[data-theme="light"] .quote-card select,
@@ -5118,7 +4945,6 @@ html[data-theme="light"] .reply-layout-settings > .reply-layout-title {
 .module-nav {
   position: relative;
 }
-#contentWorkspace,
 #quoteWorkspace,
 #followWorkspace {
   min-height: calc(100vh - 125px);
@@ -5126,20 +4952,6 @@ html[data-theme="light"] .reply-layout-settings > .reply-layout-title {
 #followWorkspace .follow-list {
   max-height: none;
   min-height: calc(100vh - 285px);
-}
-.content-tabs {
-  display: flex !important;
-  align-items: center;
-  gap: 6px;
-}
-.content-tabs button {
-  display: inline-flex !important;
-  flex: 1 1 0 !important;
-  min-width: 0;
-  justify-content: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .xra-quote-top-wrap,
 .xra-quote-floating {
@@ -5154,7 +4966,6 @@ html[data-theme="light"] .reply-layout-settings .reply-preview-button,
 html[data-theme="light"] .reply-layout-settings .reply-preview-button:hover {
   background: transparent !important;
 }
-.content-clear .ui-icon,
 #clearFollowList .ui-icon {
   fill: currentColor !important;
   stroke: none !important;
@@ -5590,7 +5401,6 @@ html[data-theme="light"] .module-nav button.active {
 body.settings-open #replySettings {
   display: none !important;
 }
-body[data-module="content"] #replySettings,
 body[data-module="follow"] #replySettings,
 body.settings-open #replySettings {
   display: none !important;
@@ -5771,7 +5581,6 @@ section,
 .module-settings,
 .config-card,
 .tone-settings,
-.content-card,
 .post-card,
 .quote-card,
 .follow-card,
@@ -5798,7 +5607,6 @@ html[data-theme="light"] .setup-card,
 html[data-theme="light"] .module-settings,
 html[data-theme="light"] .config-card,
 html[data-theme="light"] .tone-settings,
-html[data-theme="light"] .content-card,
 html[data-theme="light"] .post-card,
 html[data-theme="light"] .quote-card,
 html[data-theme="light"] .follow-card,
@@ -5899,7 +5707,6 @@ html[data-theme] .setup-card,
 html[data-theme] .module-settings,
 html[data-theme] .config-card,
 html[data-theme] .tone-settings,
-html[data-theme] .content-card,
 html[data-theme] .post-card,
 html[data-theme] .quote-card,
 html[data-theme] .follow-card,
@@ -5928,8 +5735,6 @@ html[data-theme] .follow-tabs button.active {
 }
 .module-nav,
 .panel-quick,
-.content-toolbar,
-.content-tabs,
 .follow-tabs,
 .post-preview,
 #postUrl,
@@ -6657,4 +6462,8 @@ html[data-theme="light"] .key-actions a {
   padding-left: 18px;
   color: var(--muted);
   font-size: var(--panel-font-small, 12px);
+}
+
+.theme-button + .settings-button {
+  margin-left: -6px !important;
 }

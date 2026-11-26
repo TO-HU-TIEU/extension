@@ -215,7 +215,6 @@ header button.settings-button {
 
 #workspace,
 #xWorkspace,
-#contentWorkspace,
 #quoteWorkspace,
 #followWorkspace,
 #feedbackWorkspace,
@@ -228,7 +227,6 @@ header button.settings-button {
 #workspace > section,
 #workspace > details,
 #xWorkspace > section,
-#contentWorkspace > section,
 #quoteWorkspace > section,
 #followWorkspace > section,
 #feedbackWorkspace > section,
@@ -265,7 +263,6 @@ header button.settings-button {
 .results-compact,
 .x-mode-card,
 .config-card,
-.content-card,
 .quote-card,
 .follow-card,
 .settings-card,
@@ -277,7 +274,6 @@ header button.settings-button {
 
 .section-head,
 .config-card .section-head,
-.content-card .section-head,
 .quote-card .section-head,
 .follow-card .section-head {
   min-height: var(--panel-row-height);
@@ -285,7 +281,6 @@ header button.settings-button {
 }
 
 .config-card > .section-head,
-.content-card > .section-head,
 .quote-card > .section-head,
 .follow-card > .section-head {
   margin: 0 0 var(--panel-space-3);
@@ -297,14 +292,12 @@ h2,
 h3,
 .section-head h2,
 .config-card h2,
-.content-card h2,
 .quote-card h2,
 .follow-card h2 {
   line-height: 20px;
 }
 
 .config-card h2,
-.content-card h2,
 .quote-card h2,
 .follow-card h2,
 .section-head h2,
@@ -315,7 +308,6 @@ h3,
 }
 
 .config-card h3,
-.content-card h3,
 .quote-card h3,
 .follow-card h3,
 .feedback-methods h3,
@@ -329,7 +321,6 @@ h3,
 .config-card .label-line,
 .config-card #stylePickerField > label,
 .config-card .inline-tone-field > label,
-.content-card > label,
 .quote-card > label,
 .follow-card > label,
 .field-label,
@@ -344,9 +335,6 @@ h3,
 #xWorkspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 #xWorkspace select,
 #xWorkspace textarea,
-#contentWorkspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-#contentWorkspace select,
-#contentWorkspace textarea,
 #quoteWorkspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 #quoteWorkspace select,
 #quoteWorkspace textarea,
@@ -370,7 +358,6 @@ h3,
 
 #workspace textarea,
 #xWorkspace textarea,
-#contentWorkspace textarea,
 #quoteWorkspace textarea,
 #followWorkspace textarea,
 #feedbackWorkspace textarea,
@@ -383,7 +370,6 @@ h3,
   button:not(.icon):not(.switch):not(.auto-exclusion-toggle):not(.auto-exclusion-chip button),
 #xWorkspace
   button:not(.icon):not(.switch):not(.auto-exclusion-toggle):not(.auto-exclusion-chip button),
-#contentWorkspace button:not(.icon):not(.switch),
 #quoteWorkspace button:not(.icon):not(.switch),
 #followWorkspace button:not(.icon):not(.switch),
 #feedbackWorkspace button:not(.icon):not(.switch),
@@ -396,7 +382,6 @@ h3,
 }
 
 button.icon,
-button.content-icon,
 button.follow-help,
 button.recent-remove,
 button.key-remove,
@@ -435,7 +420,6 @@ label.switch {
 .help,
 .setup-body small,
 .config-card small,
-.content-card small,
 .quote-card small,
 .follow-card small {
   font-size: var(--panel-font-xs);
@@ -946,7 +930,6 @@ body.settings-open > .panel-chrome {
   .results-compact,
   .x-mode-card,
   .config-card,
-  .content-card,
   .quote-card,
   .follow-card,
   .settings-card,
@@ -955,17 +938,12 @@ body.settings-open > .panel-chrome {
   }
 }
 
-/* Content and Follow use the same typography and control rhythm as Reply and
-   Feedback. Keep module-specific layouts, but remove the older oversized
-   headings and full-bleed card treatment. */
-#contentWorkspace,
+/* Follow matches the typography of Reply and Feedback. */
 #followWorkspace {
   font-size: var(--panel-font-body);
   line-height: var(--panel-line-body);
   color: var(--ui-text, #e7e9ea);
 }
-#contentWorkspace h2,
-#contentWorkspace h3,
 #followWorkspace h2,
 #followWorkspace h3 {
   margin: 0;
@@ -973,38 +951,18 @@ body.settings-open > .panel-chrome {
   line-height: 20px;
   font-weight: 700;
 }
-#contentWorkspace label,
 #followWorkspace label,
-#contentWorkspace summary,
 #followWorkspace summary {
   font-size: var(--panel-font-sm);
   line-height: var(--panel-line-tight);
   font-weight: 700;
 }
-#contentWorkspace small,
 #followWorkspace small,
-#contentWorkspace .hint,
 #followWorkspace .hint,
-#contentWorkspace [role="status"],
 #followWorkspace [role="status"] {
   font-size: var(--panel-font-xs);
   line-height: var(--panel-line-tight);
 }
-#contentWorkspace .content-toolbar {
-  min-height: var(--panel-row-height);
-  margin: 0 0 var(--panel-space-2);
-  color: var(--ui-muted, #71767b);
-}
-#contentWorkspace .content-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--panel-space-2);
-  margin: 0 0 var(--panel-space-3);
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-#contentWorkspace .content-tabs button,
 #followWorkspace .follow-tabs button {
   min-height: var(--panel-control-height);
   padding: var(--panel-space-2) 10px;
@@ -1020,53 +978,32 @@ body.settings-open > .panel-chrome {
   font-size: var(--panel-font-body);
   line-height: var(--panel-line-body);
 }
-#contentWorkspace .content-tabs button[aria-selected="true"],
 #followWorkspace .follow-tabs button.active {
   border-color: var(--blue, #1d9bf0);
   background: transparent;
   color: var(--ui-text, #e7e9ea);
 }
-#contentWorkspace details,
-#contentWorkspace .content-card,
-#contentWorkspace #contentResult,
 #followWorkspace .follow-card {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: transparent;
   box-shadow: none;
 }
-#contentWorkspace details > summary {
-  min-height: var(--panel-row-height);
-  padding: var(--panel-space-2) var(--panel-card-padding);
-  color: var(--ui-text, #e7e9ea);
-}
-#contentWorkspace details[open] > summary {
-  border-bottom: 1px solid var(--line);
-}
-#contentWorkspace .content-card,
-#contentWorkspace #contentResult,
 #followWorkspace .follow-card {
   padding: var(--panel-card-padding) !important;
 }
-#contentWorkspace .content-card > .section-head,
-#contentWorkspace #contentResult > .section-head,
 #followWorkspace .follow-card > .section-head {
   min-height: var(--panel-row-height);
   margin: 0 0 var(--panel-space-3);
   padding: 0 0 var(--panel-space-2);
   border-bottom: 1px solid var(--line);
 }
-#contentWorkspace input,
-#contentWorkspace textarea,
-#contentWorkspace select,
 #followWorkspace input,
 #followWorkspace textarea,
 #followWorkspace select {
   font-size: var(--panel-font-body);
   line-height: var(--panel-line-body);
 }
-#contentWorkspace .content-card > label,
-#contentWorkspace .content-card .prompt-label,
 #followWorkspace .follow-filter-label {
   display: block;
   margin: 0 0 var(--panel-space-1);

@@ -839,6 +839,41 @@
       String(value || "")
         .replace(/\s+/gu, " ")
         .trim();
+    const normalizeReplyButtonLabel = (value) =>
+      normalize(value)
+        .normalize("NFKC")
+        .replace(/[.…:]+$/gu, "")
+        .trim()
+        .toLowerCase();
+    const replyButtonLabels = new Set([
+      "trả lời",
+      "reply",
+      "répondre",
+      "responder",
+      "rispondi",
+      "antworten",
+      "antwoorden",
+      "svara",
+      "odpowiedz",
+      "ответить",
+      "відповісти",
+      "返信",
+      "回复",
+      "回覆",
+      "답글",
+      "yanıtla",
+      "balas",
+      "ตอบกลับ",
+      "رد",
+      "जवाब दें",
+      "răspunde",
+      "odpovědět",
+      "svar",
+      "vastaa",
+      "válasz",
+      "απάντηση",
+      "השב",
+    ]);
     const expected = normalize(expectedText);
     const visible = (node) => {
       if (!node || !node.isConnected) return false;
@@ -848,12 +883,18 @@
       return style.display !== "none" && style.visibility !== "hidden";
     };
     const buttonLabels = (node) =>
-      [node?.getAttribute?.("aria-label"), node?.innerText, node?.textContent]
-        .map((value) => normalize(value))
+      [
+        node?.getAttribute?.("aria-label"),
+        node?.getAttribute?.("title"),
+        node?.innerText,
+        node?.textContent,
+      ]
+        .map((value) => normalizeReplyButtonLabel(value))
         .filter(Boolean);
     // Never click a generic submit button. At least one native label must be
-    // exactly the Vietnamese reply action text.
-    const isReplyButton = (node) => buttonLabels(node).includes("Trả lời");
+    // exactly a localized reply action; labels such as “Post/Đăng” are absent.
+    const isReplyButton = (node) =>
+      buttonLabels(node).some((label) => replyButtonLabels.has(label));
     let targetBox = assistantBoxForTarget(targetId);
     const onTargetStatus = () =>
       location.pathname.match(/\/status\/(\d+)(?:\/|$)/)?.[1] === String(targetId || "");
@@ -902,7 +943,7 @@
       if (matched) return matched;
       // During an X DOM refresh the button can briefly sit beside, rather
       // than inside, the subtree used to resolve the editor. If this
-      // composer scope has exactly one visible native “Trả lời” button, it
+      // composer scope has exactly one visible native reply button, it
       // is safe to use that exact-labelled button as the fallback.
       const nearby = enabledReplyButtons.filter(
         (node) => host?.contains(node) || host?.parentElement?.contains(node),

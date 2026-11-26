@@ -123,6 +123,9 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   // A standalone “gm!” is itself an English greeting. Do this after script
   // detection so mixed-language comments such as “Gm em nha” remain Vietnamese.
   if (standaloneGm) return "en";
+  const greeting = prose.replace(/[\p{P}\p{S}\uFE0F]/gu, " ").replace(/\s+/gu, " ").trim();
+  if (/^(?:good\s+)?(?:morning|afternoon|evening)(?:\s+(?:everyone|all|folks|friends))?$/iu.test(greeting))
+    return "en";
   if (
     latin &&
     (/[ăđơưảạằẳẵắặầẩẫấậẻẽẹềểễếệỉĩịỏọồổỗốộờởỡớợủụừửữứựỷỹỵ]/i.test(prose) ||
@@ -134,4 +137,33 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   // Let the model distinguish Latin languages when X supplied a conflicting script.
   if (latin && /^(?:zh|ja|ko|ru|ar)(?:-|$)/i.test(declared)) return "";
   return declared;
+};
+
+const replyWordSegmenters = new Map();
+const replyWordSegmentationLanguages = new Set(["ja", "zh", "th", "lo", "km", "my"]);
+
+globalThis.X_REPLY_WORD_COUNT = (text, language) => {
+  const value = String(text || "").normalize("NFC");
+  if (!replyWordSegmentationLanguages.has(language)) {
+    return (value.match(/\S+/gu) || []).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+  }
+  if (!replyWordSegmenters.has(language)) {
+    replyWordSegmenters.set(language, new Intl.Segmenter(language, { granularity: "word" }));
+  }
+  let words = 0;
+  for (const { isWordLike } of replyWordSegmenters.get(language).segment(value)) {
+    if (isWordLike) words++;
+  }
+  return words;
+};
+
+globalThis.X_REPLY_WORD_RANGE_INSTRUCTION = ({ min, max }, language) => {
+  if (replyWordSegmentationLanguages.has(language)) {
+    return min + "-" + max +
+      " words inclusive, counted with Intl.Segmenter word boundaries for " + language +
+      ". Count word-like segments only, including particles when separately segmented. " +
+      "Keep normal spelling without adding artificial spaces. Aim for the middle of the range. ";
+  }
+  return min + "-" + max +
+    " whitespace-separated words inclusive. Count only tokens containing a letter or number. ";
 };

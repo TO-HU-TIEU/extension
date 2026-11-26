@@ -35,7 +35,6 @@
       "feedbackStateV1",
       "feedbackExtraContext",
       "personalReplyStyles",
-      "contentConfig",
     ],
     persistentPageKeys = [
       "assistantAutoMinGapEnabled",

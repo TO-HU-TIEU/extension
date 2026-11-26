@@ -171,12 +171,11 @@
     if (result?.state) renderAutoFollowState(result.state, result.state.enabled ? "Đang chạy…" : "Đang tắt");
   };
   const active = () => {
-    for (const id of ["replyModule", "contentModule", "quoteModule", "followModule"])
+    for (const id of ["replyModule", "quoteModule", "followModule"])
       $(id)?.classList.toggle("active", id === "followModule");
     for (const id of [
       "workspace",
       "xWorkspace",
-      "contentWorkspace",
       "quoteWorkspace",
       "followWorkspace",
     ]) {

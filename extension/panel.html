@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Assistant</title>
     <link rel="stylesheet" href="panel.css" />
-    <link rel="stylesheet" href="content-panel.css" />
     <link rel="stylesheet" href="reply-ui.css" />
     <link rel="stylesheet" href="panel-rhythm.css" />
   </head>
@@ -14,7 +13,7 @@
       <header>
         <img class="logo assistant-mark" src="assets/logo.svg" alt="Assistant" />
         <hgroup class="panel-copy">
-          <h1>Assistant <small class="app-version">1.5.35</small></h1>
+          <h1>Assistant <small class="app-version">1.5.32</small></h1>
           <p id="connection"></p>
         </hgroup>
         <button
@@ -38,9 +37,6 @@
         <button id="replyModule" class="active">
           <span class="panel-nav-icon" data-icon="reply" aria-hidden="true"></span
           ><span class="panel-nav-label">Trả lời</span></button
-        ><button id="contentModule">
-          <span class="panel-nav-icon" data-icon="post" aria-hidden="true"></span
-          ><span class="panel-nav-label">Content</span></button
         ><button id="followModule">
           <span class="panel-nav-icon" data-icon="follow" aria-hidden="true"></span
           ><span class="panel-nav-label">Follow</span></button
@@ -228,79 +224,6 @@
         <div id="styleOptions" class="style-options"></div>
       </section>
     </div>
-    <main id="contentWorkspace" hidden>
-      <div class="content-toolbar panel-row"><small id="contentScanInfo">Chưa bật quét</small></div>
-      <details id="contentSettings" class="module-settings">
-        <summary>Nguồn content</summary>
-        <section class="panel-card config-card">
-          <div class="section-head">
-            <h2>Nguồn tự động quét</h2>
-          </div>
-          <div class="toggle-row compact-row">
-            <div class="panel-copy"><b>Tự động quét content</b></div>
-            <label class="switch"
-              ><input id="contentScanEnabled" type="checkbox" /><span></span
-            ></label>
-          </div>
-          <label for="contentSources">Nguồn nội dung · mỗi dòng một địa chỉ</label
-          ><textarea
-            id="contentSources"
-            rows="4"
-            placeholder="https://sosovalue.com/research"
-          ></textarea>
-          <p id="contentSourcesFeedback" role="status"></p>
-        </section>
-      </details>
-
-      <div class="content-tabs" role="tablist" aria-label="Danh sách Content">
-        <button id="contentInboxTab" role="tab" aria-selected="true">Quét nội dung (0)</button
-        ><button id="contentQueueTab" role="tab" aria-selected="false">Content (0)</button>
-      </div>
-      <p id="contentCapacity" hidden>
-        Đã lưu 120 bài. Bỏ qua các bài không cần trong Quét nội dung để tiếp tục thu thập.
-      </p>
-      <p id="contentStatus" role="status" aria-live="polite"></p>
-      <div id="contentFeed"></div>
-      <p id="contentEmpty" class="content-empty"></p>
-      <details class="content-manual">
-        <summary>Thêm thủ công</summary>
-        <section class="panel-card content-card">
-          <div class="section-head">
-            <div class="panel-copy">
-              <span class="eyebrow">CONTENT</span>
-              <h2>Tạo bài</h2>
-            </div>
-            <button id="readNews" class="icon" title="Đọc trang đang mở"></button>
-          </div>
-          <label for="newsUrl">Link</label>
-          <div class="url-row panel-row">
-            <input id="newsUrl" type="url" placeholder="https://…" /><button
-              id="loadNewsUrl"
-              class="secondary compact"
-            >
-              Đọc</button
-            ><button id="clearNewsUrl" class="clear-url" title="Xoá liên kết"></button>
-          </div>
-          <label for="newsSource">Nội dung</label
-          ><textarea
-            id="newsSource"
-            rows="8"
-            maxlength="10000"
-            placeholder="Dán nội dung gốc…"
-          ></textarea
-          ><button id="composeNews" class="primary connect-full">
-            <span class="ai-icon" aria-hidden="true"></span>Tạo content
-          </button>
-        </section>
-      </details>
-      <section id="contentResult" class="panel-card" hidden>
-        <div class="section-head">
-          <h2>Bản nháp</h2>
-          <button id="copyDraft" class="icon" title="Sao chép"></button>
-        </div>
-        <textarea id="newsDraft" rows="12"></textarea>
-      </section>
-    </main>
     <main id="quoteWorkspace" hidden>
       <section class="panel-card quote-card">
         <div class="section-head">
@@ -807,11 +730,8 @@
     <script src="reply-preferences.js"></script>
     <script src="remote-config.js"></script>
     <script src="language.js"></script>
-    <script src="content-core.js"></script>
-    <script src="content-reader.js"></script>
     <script src="panel.js"></script>
     <script src="tone-controls.js"></script>
-    <script src="content-panel.js"></script>
     <script src="reply-layout.js"></script>
     <script src="extension-updates.js"></script>
     <script src="updates-panel.js"></script>
