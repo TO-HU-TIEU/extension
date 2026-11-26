@@ -260,6 +260,8 @@ function ownPostAcknowledgement(post = {}) {
   if (replyContextFor(post) !== "reply_to_comment_on_own_post") return "";
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
   if (target.length > 150 || /[?？]|(?<!\p{L})(?:tại sao|vì sao|bao nhiêu|nhưng)(?!\p{L})/iu.test(target)) return "";
+  if (/^(?:gấp|hơn|kém)\s+(?:(?:gần|hơn|khoảng)\s+)?(?:đôi|hai|ba|bốn|\d+(?:[.,]\d+)?)\s*(?:lần\s+)?(?:view|viu|lượt\s+xem)\s+(?:của\s+)?(?:mình|tui|tôi|em|anh|chị)(?![\p{L}\p{M}])/iu.test(target))
+    return "view_comparison";
   if (/(?<!\p{L})nhờ\s+(?:ae|anh em|mọi người|cả nhà|các bạn)(?!\p{L})[^.!?]{0,40}(?:cùng|giúp|đỡ|ủng hộ)/iu.test(target))
     return "shared_credit";
   if (/^c[ảá]m ơn(?:\s+[\p{L}]+){0,3}\s+đã\s+chia sẻ(?=$|[^\p{L}])/iu.test(target))
@@ -269,6 +271,7 @@ function ownPostAcknowledgement(post = {}) {
   return "";
 }
 const OWN_POST_ACKNOWLEDGEMENT_INSTRUCTIONS = {
+  view_comparison: "Acknowledge the commenter’s comparison in the root author’s voice. The root number belongs to the current user, and the lower number in ‘Gấp đôi view mình’ belongs to the commenter. Reply lightly to the comparison without computing or repeating figures, praising the commenter as if they reached the root result, addressing them by a guessed title, or inventing week targets, payouts, or future outcomes.",
   shared_credit: "Acknowledge the shared effort that the commenter mentioned. Refer to the group as contributors, while speaking to this one commenter. Keep the outcome with its actual owner and avoid giving advice or promising what happens next.",
   reader_appreciation: "The commenter is thanking the current user for sharing. Reply to them as the author with a brief acknowledgment for reading or taking something from the post. Do not thank them for sharing or claim they have followed the account.",
   praise: "Accept the praise from the person who gave it. For example, ‘Quá đều tay luôn. Hihi’ praises the root author's consistency. A brief everyday thank-you fits, and one concrete detail is optional when directly supported. Never send the advice back to the commenter, assign the result to them, recycle the chart as commentary, or turn unlabelled numbers into prices. A term the commenter uses to address the current user is not evidence about the commenter.",
@@ -412,7 +415,7 @@ export function buildRequest(model, post, mode) {
         : post.fast_mode ? "Prefer 10–18 words per reply. " : "Prefer 5–18 words per reply. ") +
       (post.fast_mode ? FAST_INSTRUCTIONS : INSTRUCTIONS) +
       (directFoodWishTarget(post)
-        ? " For a simple meal wish or compliment such as ‘Cơm trưa ngon nhé’ or ‘Bát canh nóng đúng điệu’, briefly acknowledge the wish or compliment in everyday language. If the comment adds a timely afternoon wish, a short return wish is fine. Vary the sentence structure and avoid formal filler such as ‘vì đã gửi lời chúc’. Do not invent feelings, reactions, plans or meal details." + SIMPLE_ACKNOWLEDGEMENT_RULE
+        ? " For a simple meal wish or compliment such as ‘Cơm trưa ngon nhé’ or ‘Bát canh nóng đúng điệu’, briefly acknowledge the wish or compliment in everyday language. For bare praise like ‘Ngon quá nha’ on the current user’s meal post, acknowledge it as the person who shared the meal. Avoid describing the picture, speaking like a hungry viewer, or inventing what you tasted. If the comment adds a timely afternoon wish, a short return wish is fine. Vary the sentence structure and avoid formal filler such as ‘vì đã gửi lời chúc’. Do not invent feelings, reactions, plans or meal details." + SIMPLE_ACKNOWLEDGEMENT_RULE
         : "") +
       " Never use ‘giòn rụm’ in a suggestion or its Vietnamese translation. Keep verified texture descriptions plain." +
       CASUAL_GREETING_RULE +
@@ -708,6 +711,9 @@ const directFoodWishTarget = (temporal = {}) => {
   const isCommentTarget =
     temporal?.target_kind === "comment" ||
     /^reply_to_comment(?:_on_own_post|_on_other_post)$/u.test(String(temporal?.reply_context || ""));
+  if (replyContextFor(temporal) === "reply_to_comment_on_own_post" &&
+      /^(?:(?:nhìn|trông)\s+)?ngon(?:\s+(?:quá|ghê|thiệt|thật|lắm))?(?:\s+(?:nha|nhé|nè|ha|ạ))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(target) &&
+      !/[?？]/u.test(target)) return true;
   return (
     isCommentTarget &&
     /(?:bát|tô|ly|cơm|canh|món|bữa)[^.!?…]{0,45}(?:ngon|thơm|nóng|đúng\s+điệu|hợp\s+vị)|(?:ngon|thơm|nóng|đúng\s+điệu|hợp\s+vị)[^.!?…]{0,45}(?:bát|tô|ly|cơm|canh|món|bữa)/iu.test(

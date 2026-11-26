@@ -1433,6 +1433,8 @@ function ownPostAcknowledgement(post = {}) {
   if (replyContextFor(post) !== "reply_to_comment_on_own_post") return "";
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
   if (target.length > 150 || /[?？]|(?<!\p{L})(?:tại sao|vì sao|bao nhiêu|nhưng)(?!\p{L})/iu.test(target)) return "";
+  if (/^(?:gấp|hơn|kém)\s+(?:(?:gần|hơn|khoảng)\s+)?(?:đôi|hai|ba|bốn|\d+(?:[.,]\d+)?)\s*(?:lần\s+)?(?:view|viu|lượt\s+xem)\s+(?:của\s+)?(?:mình|tui|tôi|em|anh|chị)(?![\p{L}\p{M}])/iu.test(target))
+    return "view_comparison";
   if (/(?<!\p{L})nhờ\s+(?:ae|anh em|mọi người|cả nhà|các bạn)(?!\p{L})[^.!?]{0,40}(?:cùng|giúp|đỡ|ủng hộ)/iu.test(target))
     return "shared_credit";
   if (/^c[ảá]m ơn(?:\s+[\p{L}]+){0,3}\s+đã\s+chia sẻ(?=$|[^\p{L}])/iu.test(target))
@@ -1442,6 +1444,7 @@ function ownPostAcknowledgement(post = {}) {
   return "";
 }
 const OWN_POST_ACKNOWLEDGEMENT_INSTRUCTIONS = {
+  view_comparison: "Acknowledge the commenter’s comparison in the root author’s voice. The root number belongs to the current user, and the lower number in ‘Gấp đôi view mình’ belongs to the commenter. Reply lightly to the comparison without computing or repeating figures, praising the commenter as if they reached the root result, addressing them by a guessed title, or inventing week targets, payouts, or future outcomes.",
   shared_credit: "Acknowledge the shared effort that the commenter mentioned. Refer to the group as contributors, while speaking to this one commenter. Keep the outcome with its actual owner and avoid giving advice or promising what happens next.",
   reader_appreciation: "The commenter is thanking the current user for sharing. Reply to them as the author with a brief acknowledgment for reading or taking something from the post. Do not thank them for sharing or claim they have followed the account.",
   praise: "Accept the praise from the person who gave it. For example, ‘Quá đều tay luôn. Hihi’ praises the root author's consistency. A brief everyday thank-you fits, and one concrete detail is optional when directly supported. Never send the advice back to the commenter, assign the result to them, recycle the chart as commentary, or turn unlabelled numbers into prices. A term the commenter uses to address the current user is not evidence about the commenter.",
@@ -1513,6 +1516,11 @@ function encouragementRecipient(post = {}) {
 }
 function ownPostAcknowledgementFits(reply, intent, post) {
   const value = String(reply || "").normalize("NFC").trim();
+  if (intent === "view_comparison") {
+    return Boolean(value) && !simpleAcknowledgementDrift(value) &&
+      !personalAddressingMismatch(value, post) &&
+      !/(?:chị|anh|bạn|nàng)\s+(?:đã\s+)?(?:kiếm|chạm|đạt|vượt)|số\s+liệu\s+của\s+(?:chị|anh|bạn|nàng)|tài\s+khoản\s+bay|chỉ\s+tiêu|\p{N}/iu.test(value);
+  }
   const sharedCredit = intent === "shared_credit";
   if (!value || simpleAcknowledgementDrift(value, sharedCredit)) return false;
   const unsupported = /(?:^|[,.!]\s*)(?:nhiều nha|và chúc|cứ\s+(?:giữ|duy trì|tiếp tục)|giữ vững|phát huy)|(?<!\p{L})(?:mức giá|giá này|dự tính|vui (?:cả ngày|ghê|lắm)|tâm huyết|bất ngờ|học hỏi (?:anh|chị)|có động lực|động viên tinh thần|vui lây|mừng thay|chắc chắn|sắp về đích|chẳng mấy chốc|tín hiệu khả quan|làm việc|công việc|nhịp tăng trưởng|chặng đường phía trước|từ mọi người)(?!\p{L})/iu;
@@ -1673,6 +1681,9 @@ function directFoodWishTarget(post = {}) {
   const isCommentTarget =
     post?.target_kind === "comment" ||
     /^reply_to_comment(?:_on_own_post|_on_other_post)$/u.test(String(post?.reply_context || ""));
+  if (replyContextFor(post) === "reply_to_comment_on_own_post" &&
+      /^(?:(?:nhìn|trông)\s+)?ngon(?:\s+(?:quá|ghê|thiệt|thật|lắm))?(?:\s+(?:nha|nhé|nè|ha|ạ))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(target) &&
+      !/[?？]/u.test(target)) return true;
   return (
     isCommentTarget &&
     /(?:bát|tô|ly|cơm|canh|món|bữa)[^.!?…]{0,45}(?:ngon|thơm|nóng|đúng\s+điệu|hợp\s+vị)|(?:ngon|thơm|nóng|đúng\s+điệu|hợp\s+vị)[^.!?…]{0,45}(?:bát|tô|ly|cơm|canh|món|bữa)/iu.test(
@@ -3635,7 +3646,7 @@ function replyInstructions(message) {
       ? " SHORT GREETING TARGET RULE: target_text is itself a short greeting or good-wish comment. Reply only with a concise greeting, return wish or warm acknowledgment. Do not import the ancestor/root post's food, drink, image, work or other topic; never describe a glass, dish, flavor, meal, eating or drinking just because those details appear above the comment. Do not reject a natural return wish merely for containing ngày mới, vui vẻ, chúc, good morning or the equivalent. Keep it concise and do not invent a separate event or topic."
       : "",
     foodWishTargetRule = directFoodWishTarget(message?.post)
-      ? " DIRECT FOOD-WISH COMMENT RULE: target_text is a short comment such as ‘Ngon quá, chúc bác ăn ngon miệng’, ‘Cơm trưa ngon miệng em ơi’ or ‘Chúc ngon miệng nha’. Treat the latest wish/compliment as the whole conversational turn. Every option must directly acknowledge it with cảm ơn or a natural return wish about ăn ngon/dùng bữa; do not turn it into a work/productivity wish. A simple thank-you is enough. If the target adds a timely afternoon wish, one natural option is to return it briefly after thanking once. Across the options, vary the wording and structure. Avoid formal filler like ‘vì đã gửi lời chúc’ and never thank twice in one reply. Never invent feelings or reactions such as being happy all afternoon, laughing, or being thrilled. Respect the configured word range. Do not replace the reply with a description of the root meal such as ‘món mặn đậm đà’, or invent that the current user prepared food from the morning, is going to work, is eating lunch/dinner, is changing dishes, is carrying a meal, or is inviting the commenter to eat together. Do not import a separate dish detail or action from the ancestor post/media merely because the root post contains food." + SIMPLE_ACKNOWLEDGEMENT_RULE
+      ? " DIRECT FOOD-WISH COMMENT RULE: target_text is a short comment such as ‘Ngon quá, chúc bác ăn ngon miệng’, ‘Cơm trưa ngon miệng em ơi’ or ‘Chúc ngon miệng nha’. Treat the latest wish/compliment as the whole conversational turn. Every option must directly acknowledge it with cảm ơn or a natural return wish about ăn ngon/dùng bữa; do not turn it into a work/productivity wish. A simple thank-you is enough. For bare praise like ‘Ngon quá nha’ under the current user’s meal post, reply as the person who shared the meal. Acknowledge the praise naturally, without describing the picture, speaking like a hungry viewer, or inventing what you tasted. If the target adds a timely afternoon wish, one natural option is to return it briefly after thanking once. Across the options, vary the wording and structure. Avoid formal filler like ‘vì đã gửi lời chúc’ and never thank twice in one reply. Never invent feelings or reactions such as being happy all afternoon, laughing, or being thrilled. Respect the configured word range. Do not replace the reply with a description of the root meal such as ‘món mặn đậm đà’, or invent that the current user prepared food from the morning, is going to work, is eating lunch/dinner, is changing dishes, is carrying a meal, or is inviting the commenter to eat together. Do not import a separate dish detail or action from the ancestor post/media merely because the root post contains food." + SIMPLE_ACKNOWLEDGEMENT_RULE
       : "",
     visualClicheRule =
       " NATURAL WORDING RULE: Do not use the canned Vietnamese food/image adjectives ‘vàng ươm’ or ‘giòn rụm’. Prefer plain spoken wording such as ‘lên màu đẹp’, ‘hơi xém cạnh’, ‘vỏ ngoài giòn’, or ‘cắn nghe rôm rốp’ only when the visible detail supports it.",
