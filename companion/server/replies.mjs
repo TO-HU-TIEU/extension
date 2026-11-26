@@ -257,11 +257,23 @@ function ownResultPraiseTarget(post = {}) {
   return replyContextFor(post) === "reply_to_comment_on_own_post";
 }
 function ownPostAcknowledgement(post = {}) {
-  if (replyContextFor(post) !== "reply_to_comment_on_own_post") return "";
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
-  if (target.length > 150 || /[?？]|(?<!\p{L})(?:tại sao|vì sao|bao nhiêu|nhưng)(?!\p{L})/iu.test(target)) return "";
   if (/^(?:gấp|hơn|kém)\s+(?:(?:gần|hơn|khoảng)\s+)?(?:đôi|hai|ba|bốn|\d+(?:[.,]\d+)?)\s*(?:lần\s+)?(?:view|viu|lượt\s+xem)\s+(?:của\s+)?(?:mình|tui|tôi|em|anh|chị)(?![\p{L}\p{M}])/iu.test(target))
     return "view_comparison";
+  if (/^(?:xinh(?:,?\s+dễ\s+thương)?|dễ\s+thương)(?:\s+(?:quá|ghê|lắm|thiệt))?(?:\s+(?:nha|nhé|nè))?(?:\s+(?:em|chị|anh|bạn)(?:\s+ơi)?)?[\s\p{P}\p{S}\uFE0F]*$/iu.test(target) &&
+      !/[?？]/u.test(target) &&
+      (replyContextFor(post) === "reply_to_comment_on_own_post" || /\s(?:em|chị|anh|bạn)(?:\s+ơi)?[\s\p{P}\p{S}\uFE0F]*$/iu.test(target)))
+    return "personal_praise";
+  if (/^dạ[\s,]+(?:anh|chị|cô|chú|bác|em)\s+\p{Lu}[\p{Ll}\p{M}]*(?:\s+\p{Lu}[\p{Ll}\p{M}]*){0,2}[\s\p{P}\p{S}\uFE0F]*$/u.test(target.replace(/^Dạ/u, "dạ")) &&
+      !/[?？]/u.test(target) &&
+      replyContextFor(post) !== "reply_to_comment_on_other_post")
+    return "named_acknowledgement";
+  if (replyContextFor(post) === "reply_to_comment_on_own_post" &&
+      /^(?:dạ|vâng|ừ|ừm)(?:\s+(?:nha|nhé|ạ|nè|(?:anh|chị|em|bác)(?:\s+ơi)?))?[\s\p{P}\p{S}\uFE0F]*$/iu.test(target) &&
+      !/[?？]/u.test(target))
+    return "named_acknowledgement";
+  if (replyContextFor(post) !== "reply_to_comment_on_own_post") return "";
+  if (target.length > 150 || /[?？]|(?<!\p{L})(?:tại sao|vì sao|bao nhiêu|nhưng)(?!\p{L})/iu.test(target)) return "";
   if (/(?<!\p{L})nhờ\s+(?:ae|anh em|mọi người|cả nhà|các bạn)(?!\p{L})[^.!?]{0,40}(?:cùng|giúp|đỡ|ủng hộ)/iu.test(target))
     return "shared_credit";
   if (/^c[ảá]m ơn(?:\s+[\p{L}]+){0,3}\s+đã\s+chia sẻ(?=$|[^\p{L}])/iu.test(target))
@@ -271,7 +283,9 @@ function ownPostAcknowledgement(post = {}) {
   return "";
 }
 const OWN_POST_ACKNOWLEDGEMENT_INSTRUCTIONS = {
-  view_comparison: "Acknowledge the commenter’s comparison in the root author’s voice. The root number belongs to the current user, and the lower number in ‘Gấp đôi view mình’ belongs to the commenter. Reply lightly to the comparison without computing or repeating figures, praising the commenter as if they reached the root result, addressing them by a guessed title, or inventing week targets, payouts, or future outcomes.",
+  named_acknowledgement: "The commenter is briefly acknowledging the person they address. In ‘Dạ chị Ngọc’, the commenter is speaking to Ngọc. Write as the signed-in user answering the commenter. When the user is Ngọc, do not call the commenter chị Ngọc, thank Ngọc for sharing, or write as a reader listening to Ngọc. Answer only the brief social acknowledgment. Never turn it into a summary, comment on the article, advice, or a new claim about learning, following, or listening. If a warm emoji is present, a natural response may mirror its warmth, e.g. ‘Ừ nè, gửi lại một cái ôm nha’. Follow the saved account style for what to call the commenter and how to refer to yourself. The title in the incoming turn describes the addressee, so never copy it as a title for the commenter. If the saved style leaves the address unclear, omit it. Meet the configured word range with a complete conversational line and no filler.",
+  personal_praise: "The commenter gave the current user a personal compliment, such as ‘Xinh dễ thương em’. Each suggestion should accept it in a brief, everyday thank-you addressed to the commenter. The word ‘em’ refers to the current user and does not establish what to call the commenter. Use the account’s configured address if appropriate. Avoid describing the photo or location, inventing actions or emotions such as embarrassment, and thanking the person for visiting the post.",
+  view_comparison: "Answer the comparison from the current user’s point of view. In the standalone reply ‘Gấp đôi view mình 😅’, the omitted subject is the person being replied to and ‘mình’ means the commenter. Resolve the sentence as “Your views are twice mine.” This still holds when the UI omits the root post or labels the visible comment as a standalone post. For Ngọc replying to Doona, it is Ngọc’s views that are double Doona’s. Write as Ngọc, acknowledging her own higher count lightly, without pitying her own count or praising Doona as the owner of the higher count. In longer exchanges, explicit subject or recipient evidence overrides the omitted-subject reading. Reply lightly to the comparison without computing or repeating figures, praising the commenter as if they reached the root result, addressing them by a guessed title, or inventing week targets, payouts, or future outcomes.",
   shared_credit: "Acknowledge the shared effort that the commenter mentioned. Refer to the group as contributors, while speaking to this one commenter. Keep the outcome with its actual owner and avoid giving advice or promising what happens next.",
   reader_appreciation: "The commenter is thanking the current user for sharing. Reply to them as the author with a brief acknowledgment for reading or taking something from the post. Do not thank them for sharing or claim they have followed the account.",
   praise: "Accept the praise from the person who gave it. For example, ‘Quá đều tay luôn. Hihi’ praises the root author's consistency. A brief everyday thank-you fits, and one concrete detail is optional when directly supported. Never send the advice back to the commenter, assign the result to them, recycle the chart as commentary, or turn unlabelled numbers into prices. A term the commenter uses to address the current user is not evidence about the commenter.",
@@ -280,7 +294,7 @@ function ownPostAcknowledgementInstructions(post) {
   const intent = ownPostAcknowledgement(post);
   if (!intent) return "";
   const recipient = encouragementRecipient(post);
-  return " OWN-POST ACKNOWLEDGMENT: Answer the latest comment as the current user who wrote the root post. " +
+  return " OWN-POST ACKNOWLEDGMENT: Answer the latest comment as the current user. Preserve the ownership established by the conversation. " +
     OWN_POST_ACKNOWLEDGEMENT_INSTRUCTIONS[intent] +
     " Use distinct short, conversational lines. Avoid formal filler about receiving a compliment, rating the wording, invented reactions or support, guesses about the future, and thanking a crowd. Do not stretch a simple social reply into an explanation." +
     (recipient ? " If using forms of address, call the commenter ‘" + recipient + "’ and refer to yourself as ‘em’ as configured." : "");
@@ -379,12 +393,21 @@ function shortGreetingStyleTarget(post = {}) {
     .replace(/https?:\/\/\S+|[#＃@][\p{L}\p{M}\p{N}_]+/gu, " ")
     .replace(/[\p{P}\p{S}\uFE0F]/gu, " ")
     .replace(/\s+/gu, " ").trim();
-  return /^(?:(?:good\s+)?(?:morning|afternoon|evening)|good\s+day|gm)(?:\s+(?:everyone|all|folks|friends))?$/iu.test(target) ||
+  return /^(?:hello|hi|chào)\s+(?:cô\s+gái(?:\s+trẻ)?|chàng\s+trai(?:\s+trẻ)?)(?:\s+(?:ơi|nha|nhé))?$/iu.test(target) ||
+    /^(?:(?:good\s+)?(?:morning|afternoon|evening)|good\s+day|gm)(?:\s+(?:everyone|all|folks|friends))?$/iu.test(target) ||
     /^(?:chào\s+(?:buổi\s+)?(?:sáng|trưa|chiều|tối)|(?:buổi\s+)?(?:sáng|trưa|chiều|tối)\s+vui\s+vẻ)(?:\s+(?:nha|nhé|ạ|cả\s+nhà|mọi\s+người))*$/iu.test(target);
 }
 const CASUAL_GREETING_RULE =
   " Use conversational greetings. Never routinely open replies with stacked politeness and guessed kinship such as ‘Dạ em chào anh’ or ‘Dạ em chào chị’. A brief greeting or return wish in the target language is enough for a greeting-only target. For example, ‘Good afternoon!’ or ‘Hope your afternoon’s going well!’ in English, or ‘Chào buổi chiều nha!’ in Vietnamese. If the greeting introduces a substantive post, respond to the actual topic. A custom voice does not require a salutation or a form of address.";
 function repairGreetingOpening(reply, post) {
+  if (typeof reply === "string" && shortGreetingStyleTarget(post)) {
+    // The full vocative and its shorthand are alternatives, never a pair.
+    reply = reply.replace(/^([\s\p{P}\p{S}]*(?:(?:dạ|em)\s+){0,2}(?:chào|hello|hi)[\s,]+)(anh|chị)[\s,]+([ac])(?=$|[^\p{L}\p{M}\p{N}])/iu,
+      (match, opening, address, shorthand) =>
+        address[0].toLowerCase() === shorthand.toLowerCase()
+          ? opening + address
+          : match);
+  }
   if (typeof reply !== "string") return reply;
   const match = reply.match(
     /^([\s\p{S}\p{P}\uFE0F]*)(?:dạ[\s,]+em[\s,]+chào(?![\p{L}\p{M}])(?:\s+(?:anh|chị|bạn|mọi\s+người|cả\s+nhà|a|c)(?![\p{L}\p{M}\p{N}]))?|(?:dạ[\s,]+|em\s+)chào\s+(?:anh|chị|a|c)(?![\p{L}\p{M}\p{N}]))(?:\s+(?:ơi|nha|nhé|ạ)(?![\p{L}\p{M}]))?/iu,
@@ -396,9 +419,9 @@ function repairGreetingOpening(reply, post) {
   if (/^\s+buổi\s+(?:sáng|trưa|chiều|tối)/iu.test(remainder))
     return lead + "Chào" + remainder;
   const content = remainder.replace(/^[\s,.!?…:;–—-]+/u, "");
-  if (!shortGreetingStyleTarget(post) && /\p{L}/u.test(content))
+  if (/\p{L}/u.test(content))
     return lead + content.replace(/^\p{L}/u, (letter) => letter.toLocaleUpperCase());
-  return lead + (/^\s+\p{L}/u.test(remainder) ? "Chào nha," : "Chào nha") + remainder;
+  return lead + "Chào" + (/^[.!?…]/u.test(remainder) ? remainder : "!");
 }
 export function buildRequest(model, post, mode) {
   const language = String(globalThis.X_REPLY_LANGUAGE(

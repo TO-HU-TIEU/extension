@@ -50,6 +50,7 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
     "nè",
     "mọi",
     "rất",
+    "quá",
     "nay",
     "à",
     "e",
@@ -124,6 +125,7 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
   // detection so mixed-language comments such as “Gm em nha” remain Vietnamese.
   if (standaloneGm) return "en";
   const greeting = prose.replace(/[\p{P}\p{S}\uFE0F]/gu, " ").replace(/\s+/gu, " ").trim();
+  if (/^(?:hello|hi|chào)\s+(?:cô\s+gái(?:\s+trẻ)?|chàng\s+trai(?:\s+trẻ)?)(?:\s+(?:ơi|nha|nhé))?$/iu.test(greeting)) return "vi";
   if (/^(?:good\s+)?(?:morning|afternoon|evening)(?:\s+(?:everyone|all|folks|friends))?$/iu.test(greeting))
     return "en";
   if (
@@ -133,6 +135,9 @@ globalThis.X_REPLY_LANGUAGE = (text, declared = "") => {
       (scored >= 2 && viScore / scored >= 0.6))
   )
     return "vi";
+  // A short English compliment can end in a name and Japanese honorific.
+  if (/^(?:cute|lovely|great|nice|beautiful)\s+(?:video|clip|photo|picture)(?:\s+(?:\p{Script=Latin}+\s+){1,3}(?:chan|san|kun))?$/iu.test(greeting))
+    return "en";
   if (latin && scored >= 2 && enScore / scored >= 0.6) return "en";
   // Let the model distinguish Latin languages when X supplied a conflicting script.
   if (latin && /^(?:zh|ja|ko|ru|ar)(?:-|$)/i.test(declared)) return "";
