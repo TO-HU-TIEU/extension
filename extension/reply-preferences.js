@@ -49,6 +49,7 @@
       "assistantAutoDailyReplyLimit",
       "assistantAutoSpeed",
       "assistantAutoRestEnabled",
+      "assistantAutoRestDurationMinutes",
       "assistantAutoRestEveryMinutes",
       "assistantAutoConsecutiveFailureLimit",
       "assistantAutoSkipOldPostsEnabled",

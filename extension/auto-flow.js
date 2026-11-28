@@ -150,7 +150,8 @@
       activeRunElapsedMs = intervalMs;
       activeRunSegmentStartedAt = 0;
       memory.isAutoResting = true;
-      const restDurationMs = Math.round(intervalMs / 5),
+      const restMinutes = Math.max(1, Number(memory.autoRestDurationMinutes) || 5),
+        restDurationMs = restMinutes * 60_000,
         restDuration =
           restDurationMs % 60_000 === 0
             ? `${restDurationMs / 60_000} phút`
@@ -1608,6 +1609,21 @@
       enabled.type = "checkbox";
       enabled.dataset.autoRest = "";
       enabled.checked = localStorage.getItem("assistantAutoRestEnabled") === "true";
+      const duration = document.createElement("input");
+      duration.type = "number";
+      duration.min = "1";
+      duration.max = "1440";
+      duration.step = "1";
+      duration.dataset.autoRestDuration = "";
+      duration.value = String(
+        Math.max(
+          1,
+          Math.min(1440, Number(localStorage.getItem("assistantAutoRestDurationMinutes")) || 5),
+        ),
+      );
+      duration.setAttribute("aria-label", "Số phút tạm nghỉ");
+      duration.style.cssText =
+        "width:60px;min-width:60px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
       const interval = document.createElement("input");
       interval.type = "number";
       interval.min = "1";
@@ -1623,17 +1639,23 @@
       interval.setAttribute("aria-label", "Số phút giữa các lần nghỉ");
       interval.style.cssText =
         "width:60px;min-width:60px;box-sizing:border-box;padding:5px 7px;border:1px solid var(--xra-border,#303842);border-radius:7px;background:var(--xra-bg,#000);color:var(--xra-text,#e7e9ea);font:inherit";
-      restRow.append(enabled, document.createTextNode("Tạm nghỉ sau mỗi "), interval);
-      restRow.append(document.createTextNode(" phút"));
+      restRow.append(enabled, document.createTextNode("Tạm nghỉ "), duration);
+      restRow.append(document.createTextNode(" phút sau mỗi "), interval);
+      restRow.append(document.createTextNode(" phút chạy"));
       vietnameseFilter.before(restRow);
       const syncRestSettings = () => {
+        const durationMinutes = Math.max(1, Math.min(1440, Number(duration.value) || 5));
+        duration.value = String(durationMinutes);
         const everyMinutes = Math.max(1, Math.min(1440, Number(interval.value) || 30));
         interval.value = String(everyMinutes);
         memory.autoRestEnabled = enabled.checked;
+        memory.autoRestDurationMinutes = durationMinutes;
         memory.autoRestEveryMinutes = everyMinutes;
         persistPageSetting("assistantAutoRestEnabled", enabled.checked);
+        persistPageSetting("assistantAutoRestDurationMinutes", durationMinutes);
         persistPageSetting("assistantAutoRestEveryMinutes", everyMinutes);
         restRow.style.opacity = enabled.checked ? "1" : "0.55";
+        duration.disabled = !enabled.checked;
         interval.disabled = !enabled.checked;
         if (!enabled.checked && memory.isAutoResting) {
           memory.isAutoResting = false;
@@ -1645,8 +1667,10 @@
         }
       };
       memory.autoRestEnabled = enabled.checked;
+      memory.autoRestDurationMinutes = Number(duration.value);
       memory.autoRestEveryMinutes = Number(interval.value);
       enabled.addEventListener("change", syncRestSettings);
+      duration.addEventListener("change", syncRestSettings);
       interval.addEventListener("change", syncRestSettings);
       syncRestSettings();
       const syncVietnameseFilter = () => {
@@ -2678,6 +2702,10 @@
             const restoredPaused = m.restore === true && m.paused === true;
             sessionStart = Date.now();
             memory.autoRestEnabled = localStorage.getItem("assistantAutoRestEnabled") === "true";
+            memory.autoRestDurationMinutes = Math.max(
+              1,
+              Math.min(1440, Number(localStorage.getItem("assistantAutoRestDurationMinutes")) || 5),
+            );
             memory.autoRestEveryMinutes = Math.max(
               1,
               Math.min(1440, Number(localStorage.getItem("assistantAutoRestEveryMinutes")) || 30),

@@ -5215,6 +5215,24 @@ const engagementAuthenticityInstructions =
   " ENGAGEMENT AUTHENTICITY RULE: Do not write or repeat calls to artificial engagement exchange or boosting. Avoid terms and phrases such as ‘tương tác’, ‘tương tác chéo’, ‘like chéo’, ‘fl chéo’, ‘follow chéo’, ‘F4F’, ‘follow for follow’, ‘xin like’, ‘xin follow’, ‘xin RT’, ‘xin view’, ‘thả tim’, ‘thả like’, ‘thả tim và follow’, ‘follow lấy động lực’, ‘like lấy động lực’, ‘buff tương tác’, ‘kích tương tác’, ‘chéo nhóm’ or ‘group chéo’. If the source discusses this subject, answer neutrally without reproducing those calls; prefer ‘phản hồi tự nhiên’, ‘trò chuyện thật’ or ‘người theo dõi phù hợp’ when that meaning is needed. Do not add a thank-you unless the target explicitly thanks, congratulates, or gives a specific reason to thank the author; a casual greeting or ordinary update does not require ‘cảm ơn’.";
 const engagementAuthenticityInstructionsFast =
   " AVOID ENGAGEMENT MANIPULATION: Do not repeat tương tác chéo, like/fl/follow chéo, F4F, follow for follow, xin like/follow/RT/view, thả tim/like, thả tim và follow, follow lấy động lực, buff/kích tương tác, chéo nhóm or group chéo. Do not add cảm ơn unless the target explicitly thanks or congratulates.";
+function quotedCongratulationContext(post = {}) {
+  const target = String(post.target_text || post.text || post.caption || ""),
+    context = (() => {
+      try {
+        return JSON.parse(String(post.visible_context || post.context || ""));
+      } catch {
+        return {};
+      }
+    })(),
+    hasQuote = Array.isArray(context?.embedded) && context.embedded.some((item) => item?.type === "quoted_post"),
+    viewer = String(post.viewerHandle || post.viewer_handle || "")
+      .replace(/^@/u, "")
+      .toLocaleLowerCase(),
+    addressesViewer = viewer && new RegExp(`@${viewer.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\b`, "iu").test(target);
+  return hasQuote && /(?:chúc\s*mừng|congratulations?|congrats|lời\s+chúc)/iu.test(target) && !addressesViewer;
+}
+const quotedCongratulationInstructions =
+  " QUOTE-POST RECIPIENT RULE: In a quote-post, the caption is written by the quoting author and usually comments on the quoted post/person. A generic ‘bạn/you’ in ‘chúc mừng bạn’ refers to that quoted subject unless the caption explicitly identifies the current reply author by handle or unmistakable name. Never assume the congratulation or wish is addressed to the person replying; do not write ‘cảm ơn lời chúc’ or accept it on their behalf. Reply to the quoting author's observation, or refer neutrally to the person being congratulated. If the recipient is unclear, avoid assigning the wish to anyone.";
 replyInstructions = function (message) {
   return (
     (postStyleLengthRule(message.post) ||
@@ -5229,6 +5247,7 @@ replyInstructions = function (message) {
     (casualMealShareTarget(message.post) ? CASUAL_MEAL_SHARE_RULE : "") +
     " For English replies, avoid stock reactions such as “Absolutely!”, “Great insights!”, and “This is a game changer”; do not replace them with equally generic praise." +
     targetLanguageLock(message.post) +
+    (quotedCongratulationContext(message.post) ? quotedCongratulationInstructions : "") +
     autoSkipTopicInstructions(message.post) +
     xinViaMilestoneRule(message) +
     readerFeedbackRule(message) +
@@ -5241,6 +5260,12 @@ replyInstructions = function (message) {
     ownPostAcknowledgementInstructions(message.post)
   );
 };
+function misattributedQuoteCongratulationReply(text, post = {}) {
+  if (!quotedCongratulationContext(post)) return false;
+  return /(?:cảm\s*ơn|thanks|thank\s+you).{0,70}(?:lời\s+chúc|chúc\s*mừng|congrat(?:ulation|ulations)?|congrats)|(?:lời\s+chúc|chúc\s*mừng|congrat(?:ulation|ulations)?|congrats).{0,70}(?:cảm\s*ơn|thanks|thank\s+you)/iu.test(
+    String(text || ""),
+  );
+}
 function botStyleReply(text) {
   const value = String(text || "").trim();
   return (
@@ -5549,6 +5574,17 @@ validateTranslations = function (result, post, allowMissing = false) {
       ...new Set([
         ...(Array.isArray(item.quality_issues) ? item.quality_issues : []),
         "cụm kêu gọi tương tác",
+      ]),
+    ];
+    const score = Number(item.relevance_score);
+    item.relevance_score = Number.isFinite(score) ? Math.min(score, 30) : 30;
+  }
+  for (const item of result?.replies || []) {
+    if (!misattributedQuoteCongratulationReply(item?.reply, post)) continue;
+    item.quality_issues = [
+      ...new Set([
+        ...(Array.isArray(item.quality_issues) ? item.quality_issues : []),
+        "nhận nhầm lời chúc trong bài quote",
       ]),
     ];
     const score = Number(item.relevance_score);
