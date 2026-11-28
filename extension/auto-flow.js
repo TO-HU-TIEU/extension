@@ -572,6 +572,23 @@
   if (!memory.runId) memory.runId = createRunId();
   let processedKey = runStorageKey(memory.runId, "processed");
   let skippedKey = runStorageKey(memory.runId, "skipped");
+  let interactionCountsKey = runStorageKey(memory.runId, "interactionCounts");
+  const readAutoInteractionCounts = () => {
+    const counts = read(interactionCountsKey);
+    return {
+      repost: Array.isArray(counts?.repost) ? counts.repost : [],
+      like: Array.isArray(counts?.like) ? counts.like : [],
+      reply: Array.isArray(counts?.reply) ? counts.reply : [],
+    };
+  };
+  const recordAutoInteraction = (kind, id) => {
+    const counts = readAutoInteractionCounts(),
+      postIdValue = String(id || "");
+    if (!counts[kind] || !postIdValue || counts[kind].includes(postIdValue)) return;
+    counts[kind].push(postIdValue);
+    save(interactionCountsKey, counts);
+    dashboard();
+  };
   const notifyPanel = (enabled) =>
     sendRuntimeMessage({ type: "autoFlowState", enabled, runId: memory.runId });
   const coordinate = (action, item) =>
@@ -1275,6 +1292,16 @@
       if (skippedNode) skippedNode.textContent = String(s.length);
       return;
     }
+    const actionCounts = readAutoInteractionCounts();
+    box
+      .querySelector("[data-auto-repost-total]")
+      ?.replaceChildren(document.createTextNode(String(actionCounts.repost.length)));
+    box
+      .querySelector("[data-auto-like-total]")
+      ?.replaceChildren(document.createTextNode(String(actionCounts.like.length)));
+    box
+      .querySelector("[data-auto-reply-total]")
+      ?.replaceChildren(document.createTextNode(String(actionCounts.reply.length)));
     const formatCompletedAt = (value) => {
       if (!value) return "";
       const date = new Date(value);
@@ -1500,6 +1527,18 @@
     }
     const iconMarkup = (name) => globalThis.AssistantIcons?.svg(name) || "";
     box.innerHTML = `<div data-auto-drag-handle style="display:flex;align-items:center;gap:8px;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--xra-border,#303842);cursor:move;touch-action:none"><span style="display:flex;align-items:center;gap:8px"><img src="${runtimeAssetUrl("assets/logo.svg")}" alt="Assistant" style="width:28px;height:28px"><strong style="font-size:17px;color:var(--xra-text,#edf1f5)">Tự động</strong></span><span style="display:flex;gap:6px"><button data-auto-pause aria-label="Tạm dừng" title="Tạm dừng" style="width:36px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:0;border:1px solid var(--xra-border,#303842);border-radius:8px;background:#d64555;color:#fff;cursor:pointer;font:700 13px system-ui">${iconMarkup("pause")}</button><button data-auto-minimize aria-label="Thu nhỏ" title="Thu nhỏ" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">${iconMarkup("minus")}</button><button data-auto-close aria-label="Đóng dashboard" title="Đóng dashboard" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--xra-border,#303842);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:20px">${iconMarkup("close")}</button></span></div><h3 style="margin:12px 0 5px;font-size:17px">Thiết lập</h3><div style="padding:8px 0 4px"><div style="display:flex;justify-content:space-between;font-size:15px"><b>Tốc độ xử lý</b><output data-auto-speed-value>0</output></div><input data-auto-speed type="range" min="-3" max="3" step="0.5" value="0" style="width:100%;accent-color:var(--xra-accent,#1d9bf0)"><div style="display:flex;justify-content:space-between;color:var(--xra-muted,#9aa4af);font-size:11px"><span>-3</span><span>-1.5</span><span>0</span><span>1.5</span><span>3</span></div></div><label style="display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--xra-text,#edf1f5);font-size:15px"><input data-auto-vietnamese type="checkbox" checked> Chỉ xử lý bài có nội dung tiếng Việt</label><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 5px"><h3 style="margin:0;font-size:17px">Thông tin phiên</h3><span data-auto-session-status style="color:#20c997;font-size:12px;white-space:nowrap">Đang chạy (0 phút)</span></div><div data-auto-stats style="font-size:16px;margin:6px 0 10px;color:var(--xra-muted,#9aa4af);padding:4px 0"></div><div style="padding:12px;border:1px solid var(--xra-border,#303842);border-radius:10px;margin-bottom:10px;font-size:14px"><b style="display:flex;align-items:center"><span style="color:#20c997;font-size:10px;margin-right:4px">●</span> Đang xử lý <span data-auto-current-toggle data-auto-dropdown style="margin-left:auto;font-size:16px;line-height:1"></span></b><div data-auto-log-list style="margin-top:7px;max-height:none;overflow:visible;white-space:pre-wrap;font:13px/1.5 system-ui;color:var(--xra-muted,#9aa4af)">Đang chờ bài tiếp theo</div></div><details style="margin-top:12px"><summary style="font-size:14px;font-weight:700;list-style:none;display:flex;justify-content:flex-start;align-items:center;gap:4px;padding:8px 0;border-bottom:1px solid var(--xra-border,#303842);cursor:pointer">Đã xử lý <span data-auto-processed-count></span><span data-auto-dropdown style="margin-left:auto;font-size:16px;line-height:1"></span></summary><div data-auto-list style="max-height:none;overflow:visible;padding:4px 0;background:transparent;font-size:13px"></div></details><button data-auto-reset style="width:100%;margin-top:12px;padding:9px;border:1px solid var(--xra-border,#303842);border-radius:9px;background:transparent;color:inherit;cursor:pointer;font:600 14px system-ui">Reset số liệu</button>`;
+    const sessionHeading = [...box.querySelectorAll("h3")].find(
+      (node) => node.textContent.trim() === "Thông tin phiên",
+    );
+    if (sessionHeading && !box.querySelector("[data-auto-action-totals]")) {
+      const totals = document.createElement("div");
+      totals.dataset.autoActionTotals = "";
+      totals.style.cssText =
+        "display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:6px 0 4px;color:var(--xra-muted,#9aa4af);font-size:12px";
+      totals.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;min-width:0;gap:4px;padding:6px 7px;border:1px solid var(--xra-border,#303842);border-radius:8px"><span>Repost</span><b data-auto-repost-total>0</b></div><div style="display:flex;align-items:center;justify-content:space-between;min-width:0;gap:4px;padding:6px 7px;border:1px solid var(--xra-border,#303842);border-radius:8px"><span>Like</span><b data-auto-like-total>0</b></div><div style="display:flex;align-items:center;justify-content:space-between;min-width:0;gap:4px;padding:6px 7px;border:1px solid var(--xra-border,#303842);border-radius:8px"><span>Reply</span><b data-auto-reply-total>0</b></div>';
+      sessionHeading.parentElement?.after(totals);
+    }
     const dashboardFont = "Roboto, Segoe UI, Arial, sans-serif";
     box.style.setProperty("font-family", dashboardFont, "important");
     box.querySelectorAll("*").forEach((node) => {
@@ -2137,8 +2176,10 @@
               : "chưa"),
       );
       const likeAction = await likeCurrentPostIfEnabled(id);
-      if (likeAction === "clicked") log("Đã thả like theo cài đặt");
-      else if (likeAction === "already") log("Đã like từ trước · không thao tác lại");
+      if (likeAction === "clicked") {
+        recordAutoInteraction("like", id);
+        log("Đã thả like theo cài đặt");
+      } else if (likeAction === "already") log("Đã like từ trước · không thao tác lại");
       // The assistant toolbar is mounted near the reply composer. Do not
       // advance the whole X page while waiting for it; that can run to the
       // bottom of a long conversation when the toolbar is unavailable.
@@ -2418,6 +2459,7 @@
           // action so an in-progress run honors the current side-panel state.
           repostSettings = await readAutoRepostSettings();
           const repostResult = await repostCurrentPostIfEligible(id, detectedTopic, repostSettings);
+          if (repostResult === "reposted") recordAutoInteraction("repost", id);
           if (repostResult !== "disabled" && repostResult !== "reposted")
             log("Tự repost chưa thực hiện · " + repostResult);
           const matchedAutoSkipRule = matchingAutoTopicRule(detectedTopic, autoSkipRules);
@@ -2505,6 +2547,7 @@
           }
           await coordinate("sent", item);
           await coordinate("release", item);
+          recordAutoInteraction("reply", id);
           memory.consecutiveFailures = 0;
           const dailyCount = recordDailyReply();
           p.push({ ...item, completedAt: Date.now() });
@@ -2548,6 +2591,7 @@
     sessionStart = Number(memory.runStartedAt) || Date.now();
     processedKey = runStorageKey(memory.runId, "processed");
     skippedKey = runStorageKey(memory.runId, "skipped");
+    interactionCountsKey = runStorageKey(memory.runId, "interactionCounts");
     memory.processed = read(processedKey);
     memory.skipped = read(skippedKey);
     activeRunSegmentStartedAt = memory.isAutoResting ? 0 : Date.now();
@@ -2648,6 +2692,7 @@
             activeRunSegmentStartedAt = restoredPaused ? 0 : sessionStart;
             processedKey = runStorageKey(memory.runId, "processed");
             skippedKey = runStorageKey(memory.runId, "skipped");
+            interactionCountsKey = runStorageKey(memory.runId, "interactionCounts");
             memory.sessionFailures = 0;
             memory.consecutiveFailures = 0;
             memory.autoBlockNotice = "";
@@ -2657,6 +2702,7 @@
             memory.logs = [];
             save(processedKey, []);
             save(skippedKey, []);
+            save(interactionCountsKey, { repost: [], like: [], reply: [] });
             running = true;
             globalThis.__assistantAutoFlowRunning = true;
             markXUsageMode();
