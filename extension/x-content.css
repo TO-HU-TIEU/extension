@@ -554,13 +554,13 @@
   padding: 4px 0 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--xra-color, #e7e9ea) 18%, transparent);
 }
-.xra-auto-panel .xra-repost-age {
+.xra-auto-panel .xra-repost-limit {
   justify-content: flex-start;
   gap: 7px;
   padding: 6px 0;
   font-size: 11px;
 }
-.xra-auto-panel .xra-repost-age input {
+.xra-auto-panel .xra-repost-limit input {
   box-sizing: border-box;
   width: 58px;
   min-width: 58px;
@@ -626,6 +626,28 @@
 }
 .xra-repost-topic-area small {
   white-space: normal;
+}
+.xra-repost-quick-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+.xra-repost-quick-topic {
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, #1d9bf0 45%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--xra-color, #e7e9ea);
+  font: 10px/1.3 var(--xra-font, system-ui, sans-serif);
+  cursor: pointer;
+}
+.xra-repost-quick-topic:hover:not(:disabled) {
+  background: color-mix(in srgb, #1d9bf0 12%, transparent);
+}
+.xra-repost-quick-topic:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 /* Keep the Assistant card full-width without taking ownership of X's
    composer flex/sticky rows. X's native image/GIF/emoji/location controls

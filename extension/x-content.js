@@ -1390,7 +1390,8 @@
     if (globalThis.__assistantAutoFlowRunning === true || !topic) return;
     const settings = await safeGet([
       "autoRepost",
-      "autoRepostMaxAgeHours",
+      "autoRepostMaxPerHour",
+      "autoRepostHistory",
       "autoRepostTopics",
       "autoRepostAllowedAuthors",
     ]);
@@ -1451,11 +1452,12 @@
         repostState?.getAttribute("aria-label") || "",
       );
     if (alreadyReposted) return;
-    const datetime = article.querySelector("time[datetime]")?.getAttribute("datetime"),
-      publishedAt = Date.parse(String(datetime || "")),
-      maxAgeHours = Math.max(1, Math.min(8760, Number(settings.autoRepostMaxAgeHours) || 10));
-    if (!Number.isFinite(publishedAt) || (Date.now() - publishedAt) / 3_600_000 > maxAgeHours)
-      return;
+    const maxPerHour = Math.max(1, Math.min(100, Number(settings.autoRepostMaxPerHour) || 10)),
+      now = Date.now(),
+      history = (Array.isArray(settings.autoRepostHistory) ? settings.autoRepostHistory : [])
+        .map(Number)
+        .filter((timestamp) => Number.isFinite(timestamp) && timestamp > now - 3_600_000);
+    if (history.length >= maxPerHour) return;
     const repostButton = article.querySelector('[data-testid="retweet"],[data-testid="repost"]');
     if (!repostButton) return;
     repostButton.click();
@@ -1487,7 +1489,11 @@
     for (let attempt = 0; attempt < 10; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 150));
       const current = article.querySelector('[data-testid="unretweet"],[data-testid="unrepost"]');
-      if (current) break;
+      if (current) {
+        history.push(now);
+        await chrome.storage.local.set({ autoRepostHistory: history.slice(-100) }).catch(() => {});
+        break;
+      }
     }
     // The interaction panel refreshes this state whenever it opens.
   }
@@ -1604,7 +1610,7 @@
       "autoSuggest",
       "autoLike",
       "autoRepost",
-      "autoRepostMaxAgeHours",
+      "autoRepostMaxPerHour",
       "autoRepostTopics",
       "replyEnterToSend",
       "usageMode",
@@ -1806,7 +1812,7 @@
       '<label><span><b>Tự động tạo gợi ý khi mở bài đăng</b></span><input type="checkbox" data-key="autoSuggest"></label>' +
       '<label><span><b>Tự thả like</b></span><input type="checkbox" data-key="autoLike"></label>' +
       '<label><span><b>Tự repost</b></span><input type="checkbox" data-key="autoRepost"></label>' +
-      '<div class="xra-repost-options"><label class="xra-repost-age"><span>Chỉ xử lý bài đăng trong vòng</span><input type="number" min="1" max="8760" step="1" data-auto-repost-age aria-label="Giới hạn tuổi bài đăng để tự repost"> <span>giờ</span></label><div class="xra-repost-topic-area"><b>Chủ đề cần repost</b><div class="xra-repost-token-box"><div class="xra-repost-tokens"></div><input type="text" data-auto-repost-topic-input placeholder="Nhập chủ đề rồi nhấn Enter" aria-label="Nhập chủ đề repost"></div><small>Mô hình chỉ repost khi xác định bài thuộc một chủ đề trong danh sách.</small></div></div>' +
+      '<div class="xra-repost-options"><label class="xra-repost-limit"><span>Giới hạn repost:</span><input type="number" min="1" max="100" step="1" data-auto-repost-limit aria-label="Số repost tối đa mỗi giờ"> <span>repost/giờ</span></label><div class="xra-repost-topic-area"><b>Chủ đề cần repost</b><div class="xra-repost-token-box"><div class="xra-repost-tokens"></div><input type="text" data-auto-repost-topic-input placeholder="Nhập chủ đề rồi nhấn Enter" aria-label="Nhập chủ đề repost"></div><div class="xra-repost-quick-topics" aria-label="Chủ đề thêm nhanh"></div></div></div>' +
       '<label><span><b>Tự bấm trả lời sau khi chọn gợi ý</b></span><input type="checkbox" data-key="autoReply"></label>' +
       '<label><span><b>Nhấn Enter để trả lời</b></span><input type="checkbox" data-key="replyEnterToSend"></label>' +
       '<label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
@@ -1938,9 +1944,10 @@
           run(false);
       };
     }
-    const repostAgeInput = autoPanel.querySelector("[data-auto-repost-age]"),
+    const repostLimitInput = autoPanel.querySelector("[data-auto-repost-limit]"),
       repostTopicInput = autoPanel.querySelector("[data-auto-repost-topic-input]"),
-      repostTokenList = autoPanel.querySelector(".xra-repost-tokens");
+      repostTokenList = autoPanel.querySelector(".xra-repost-tokens"),
+      repostQuickTopics = autoPanel.querySelector(".xra-repost-quick-topics");
     const normalizedRepostTopics = (values) => {
       const seen = new Set();
       return (Array.isArray(values) ? values : [])
@@ -1962,8 +1969,8 @@
         ? saved.autoRepostTopics
         : ["Ăn uống", "Đồ ăn", "Kinh tế", "Đời sống thường ngày"],
     );
-    repostAgeInput.value = String(
-      Math.max(1, Math.min(8_760, Number(saved.autoRepostMaxAgeHours) || 10)),
+    repostLimitInput.value = String(
+      Math.max(1, Math.min(100, Number(saved.autoRepostMaxPerHour) || 10)),
     );
     const renderRepostTopics = () => {
       repostTokenList.replaceChildren();
@@ -1980,16 +1987,55 @@
           repostTopics = repostTopics.filter((value) => value !== topic);
           chrome.storage.local.set({ autoRepostTopics: repostTopics }).catch(() => {});
           renderRepostTopics();
+          renderQuickTopics();
         };
         chip.append(remove);
         repostTokenList.append(chip);
       }
     };
+    const quickTopicLabels = [
+      "Ẩm thực/Ăn uống",
+      "Đời sống",
+      "Kinh tế",
+      "Crypto",
+      "Công nghệ",
+      "Du lịch",
+      "Giải trí",
+      "Thú cưng",
+    ];
+    const renderQuickTopics = () => {
+      repostQuickTopics.replaceChildren();
+      for (const topic of quickTopicLabels) {
+        const button = document.createElement("button"),
+          exists = repostTopics.some((value) => {
+            const normalized = normalizeRepostTopic(value),
+              quick = normalizeRepostTopic(topic);
+            if (normalized === quick) return true;
+            if (quick.includes("am thuc") || quick.includes("an uong"))
+              return /(?:am thuc|an uong|do an|mon an|thuc an)/u.test(normalized);
+            if (quick === "doi song") return /doi song/u.test(normalized);
+            return false;
+          });
+        button.type = "button";
+        button.className = "xra-repost-quick-topic";
+        button.textContent = topic;
+        button.setAttribute("aria-pressed", String(exists));
+        button.disabled = exists;
+        button.onclick = () => {
+          repostTopics = normalizedRepostTopics([...repostTopics, topic]);
+          chrome.storage.local.set({ autoRepostTopics: repostTopics }).catch(() => {});
+          renderRepostTopics();
+          renderQuickTopics();
+        };
+        repostQuickTopics.append(button);
+      }
+    };
     renderRepostTopics();
-    repostAgeInput.addEventListener("change", () => {
-      const hours = Math.max(1, Math.min(8_760, Math.trunc(Number(repostAgeInput.value) || 10)));
-      repostAgeInput.value = String(hours);
-      chrome.storage.local.set({ autoRepostMaxAgeHours: hours }).catch(() => {});
+    renderQuickTopics();
+    repostLimitInput.addEventListener("change", () => {
+      const limit = Math.max(1, Math.min(100, Math.trunc(Number(repostLimitInput.value) || 10)));
+      repostLimitInput.value = String(limit);
+      chrome.storage.local.set({ autoRepostMaxPerHour: limit }).catch(() => {});
     });
     repostTopicInput.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
@@ -2000,6 +2046,7 @@
       repostTopicInput.value = "";
       chrome.storage.local.set({ autoRepostTopics: repostTopics }).catch(() => {});
       renderRepostTopics();
+      renderQuickTopics();
     });
     gear.onclick = () => {
       autoPanel.hidden = !autoPanel.hidden;

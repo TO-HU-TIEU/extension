@@ -447,13 +447,15 @@
     try {
       const stored = await chrome.storage.local.get([
         "autoRepost",
-        "autoRepostMaxAgeHours",
+        "autoRepostMaxPerHour",
+        "autoRepostHistory",
         "autoRepostTopics",
         "autoRepostAllowedAuthors",
       ]);
       return {
         enabled: stored.autoRepost === true,
-        maxAgeHours: Math.max(1, Math.min(8760, Number(stored.autoRepostMaxAgeHours) || 10)),
+        maxPerHour: Math.max(1, Math.min(100, Number(stored.autoRepostMaxPerHour) || 10)),
+        history: Array.isArray(stored.autoRepostHistory) ? stored.autoRepostHistory : [],
         topics: Array.isArray(stored.autoRepostTopics)
           ? stored.autoRepostTopics.map((topic) => String(topic || "").trim()).filter(Boolean)
           : ["Ăn uống", "Đồ ăn", "Kinh tế", "Đời sống thường ngày"],
@@ -469,7 +471,7 @@
           : [],
       };
     } catch {
-      return { enabled: false, maxAgeHours: 10, topics: [] };
+      return { enabled: false, maxPerHour: 10, history: [], topics: [] };
     }
   };
   const repostCurrentPostIfEligible = async (postIdValue, topic, settings) => {
@@ -505,14 +507,14 @@
       log("Đã repost từ trước · không thao tác lại");
       return "already";
     }
-    const ageHours = postAgeHours(article);
-    if (ageHours === null || ageHours > settings.maxAgeHours) {
-      log(
-        ageHours === null
-          ? "Không xác định được tuổi bài · bỏ repost"
-          : "Không repost: bài đã quá " + settings.maxAgeHours + " giờ",
-      );
-      return "too-old";
+    const now = Date.now(),
+      history = settings.history.filter((value) => {
+        const timestamp = Number(value);
+        return Number.isFinite(timestamp) && timestamp > now - 3_600_000;
+      });
+    if (history.length >= settings.maxPerHour) {
+      log("Đã đạt giới hạn " + settings.maxPerHour + " repost/giờ · bỏ repost bài này");
+      return "hourly-limit";
     }
     const repostButton = article.querySelector('[data-testid="retweet"],[data-testid="repost"]');
     if (!repostButton) {
@@ -560,6 +562,8 @@
       log("Đã chọn Repost nhưng chưa xác nhận được trạng thái");
       return "unconfirmed";
     }
+    history.push(now);
+    await chrome.storage.local.set({ autoRepostHistory: history.slice(-100) }).catch(() => {});
     log("Đã repost · chủ đề: " + matchedTopic);
     return "reposted";
   };
