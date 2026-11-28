@@ -1884,11 +1884,13 @@
           .split(/[.;!?。！？|]/u)[0]
           .trim()
           .slice(0, 42),
-        displayTopic = /(?:am thuc|an uong|do an|mon an|thuc an|food|meal|restaurant)/u.test(
-          normalizeRepostTopic(matchingConfiguredTopic || shortTopic),
-        )
-          ? "Ẩm thực/Ăn uống"
-          : shortTopic,
+        normalizedDisplayTopic = normalizeRepostTopic(matchingConfiguredTopic || shortTopic),
+        displayTopic =
+          /(?:^| )(?:am thuc|an uong|do an|mon an|thuc an|food|meal|restaurant|cooking|bap|ngo|bun|pho|banh|com|mi|chao|xoi|lau|nuong|ca phe|tra sua|an vat|hai san)(?: |$)/u.test(
+            normalizedDisplayTopic,
+          )
+            ? "Ẩm thực/Ăn uống"
+            : shortTopic,
         topicLabel = displayTopic ? `Chủ đề: ${displayTopic}` : "";
       topicNode.textContent = topicLabel;
       topicNode.title = topicLabel;

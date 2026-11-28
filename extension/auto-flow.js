@@ -324,6 +324,32 @@
       .replace(/\s+/gu, " ")
       .trim();
   const autoTopicAliases = {
+    food: [
+      "am thuc",
+      "an uong",
+      "do an",
+      "mon an",
+      "thuc an",
+      "food",
+      "meal",
+      "restaurant",
+      "cooking",
+      "bap",
+      "ngo",
+      "bun",
+      "pho",
+      "banh",
+      "com",
+      "mi",
+      "chao",
+      "xoi",
+      "lau",
+      "nuong",
+      "ca phe",
+      "tra sua",
+      "an vat",
+      "hai san",
+    ],
     crypto: [
       "crypto",
       "tien ma hoa",
@@ -339,14 +365,21 @@
     ],
     "nhay cam": ["nhay cam", "tinh duc", "bao luc", "tu hai", "ma tuy", "thu ghet", "18+"],
   };
+  const topicHasAlias = (value, alias) =>
+    alias.includes(" ")
+      ? ` ${value} `.includes(` ${normalizeAutoTopic(alias)} `)
+      : value.split(" ").includes(normalizeAutoTopic(alias));
+  const isFoodTopic = (value) =>
+    autoTopicAliases.food.some((alias) => topicHasAlias(normalizeAutoTopic(value), alias));
   const matchingAutoTopicRule = (topic, rules) => {
     const value = normalizeAutoTopic(topic);
     if (!value) return "";
     for (const rule of Array.isArray(rules) ? rules : []) {
       const normalized = normalizeAutoTopic(rule);
       if (!normalized) continue;
+      if (isFoodTopic(value) && isFoodTopic(normalized)) return rule;
       const aliases = autoTopicAliases[normalized] || [normalized];
-      if (aliases.some((alias) => value.includes(normalizeAutoTopic(alias)))) return rule;
+      if (aliases.some((alias) => topicHasAlias(value, alias))) return rule;
     }
     return "";
   };

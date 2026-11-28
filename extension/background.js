@@ -5173,7 +5173,7 @@ function autoSkipTopicInstructions(post = {}) {
   const selectedTopicRule = topics.length
     ? ` Compare only against these selected labels: ${JSON.stringify(topics)}. Return exact matching labels or “không khớp”; never force a match.`
     : " Return a concise topic label grounded in the post, conversation and verified media.";
-  return ` TOPIC CLASSIFICATION FOR AUTOMATION: ${selectedTopicRule} The topic field must contain only a short category label (at most 5 words), never a description or sentence. Treat any style_hint rule to skip topics during automation as a policy for the runner, not as a writing instruction; still create the normal reply suggestions and return the topic label.`;
+  return ` TOPIC CLASSIFICATION FOR AUTOMATION: ${selectedTopicRule} Classify the main subject into a broad, reusable category, never name a specific food, activity, object, time, or scene as the category. For example, “ăn bắp chiều” is “Ẩm thực/Ăn uống”, not “Ăn bắp chiều”. The topic field must contain only one short category label (at most 5 words), never a description or sentence. When selected labels are supplied, return the exact configured label that best matches the broad category; return “không khớp” if none apply. Treat any style_hint rule to skip topics during automation as a policy for the runner, not as a writing instruction; still create the normal reply suggestions and return the topic label.`;
 }
 function asksForVia(post = {}) {
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC");
