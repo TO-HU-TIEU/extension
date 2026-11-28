@@ -1429,7 +1429,12 @@
     if (!article) return;
     const allowedAuthors = Array.isArray(settings.autoRepostAllowedAuthors)
       ? settings.autoRepostAllowedAuthors
-          .map((value) => String(value || "").trim().replace(/^@/u, "").toLowerCase())
+          .map((value) =>
+            String(value || "")
+              .trim()
+              .replace(/^@/u, "")
+              .toLowerCase(),
+          )
           .filter((handle) => /^[a-z0-9_]{1,15}$/u.test(handle))
       : [];
     if (allowedAuthors.length) {
@@ -1798,7 +1803,6 @@
     autoPanel.className = "xra-auto-panel";
     autoPanel.hidden = true;
     autoPanel.innerHTML =
-      '<div class="xra-interaction-status" role="status" aria-live="polite"><span data-interaction-repost>Repost: đang kiểm tra</span><span data-interaction-reply>Trả lời: đang kiểm tra</span><span data-interaction-like>Like: đang kiểm tra</span></div>' +
       '<label><span><b>Tự động tạo gợi ý khi mở bài đăng</b></span><input type="checkbox" data-key="autoSuggest"></label>' +
       '<label><span><b>Tự thả like</b></span><input type="checkbox" data-key="autoLike"></label>' +
       '<label><span><b>Tự repost</b></span><input type="checkbox" data-key="autoRepost"></label>' +
@@ -1807,7 +1811,13 @@
       '<label><span><b>Nhấn Enter để trả lời</b></span><input type="checkbox" data-key="replyEnterToSend"></label>' +
       '<label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
     box.querySelector(".xra-results").before(autoPanel);
-    const interactionStatus = autoPanel.querySelector(".xra-interaction-status");
+    const interactionStatus = document.createElement("div");
+    interactionStatus.className = "xra-interaction-status";
+    interactionStatus.setAttribute("role", "status");
+    interactionStatus.setAttribute("aria-live", "polite");
+    interactionStatus.innerHTML =
+      "<span data-interaction-repost>Repost: đang kiểm tra</span><span data-interaction-reply>Trả lời: đang kiểm tra</span><span data-interaction-like>Like: đang kiểm tra</span>";
+    box.insertBefore(interactionStatus, tools);
     const updateInteractionStatus = () => {
       const id = String(box.dataset.postId || ""),
         article = articleFor(id),
@@ -1862,6 +1872,22 @@
       setStatus("[data-interaction-like]", "Like", article ? liked : null);
     };
     updateInteractionStatus();
+    const interactionArticle = articleFor(String(box.dataset.postId || ""));
+    if (interactionArticle && typeof MutationObserver === "function") {
+      const interactionObserver = new MutationObserver(updateInteractionStatus);
+      interactionObserver.observe(interactionArticle, {
+        attributes: true,
+        attributeFilter: ["aria-label", "aria-pressed", "data-testid"],
+        childList: true,
+        subtree: true,
+      });
+      const disconnectInteractionObserver = () => {
+        if (box.isConnected) return;
+        interactionObserver.disconnect();
+        document.removeEventListener("assistant-auto-flow-state", disconnectInteractionObserver);
+      };
+      document.addEventListener("assistant-auto-flow-state", disconnectInteractionObserver);
+    }
     for (const input of autoPanel.querySelectorAll('input[type="checkbox"][data-key]')) {
       input.dataset.savedEnabled = String(!!saved[input.dataset.key]);
       input.checked = !!saved[input.dataset.key] && !autoFlowMutedSetting(input.dataset.key);

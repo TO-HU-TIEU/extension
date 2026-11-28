@@ -207,7 +207,11 @@
   };
   const compactCurrentLog = (expanded = true) => {
     const entries = (memory.logs || [])
-      .map((value) => String(value).replace(/^\d{2}:\d{2}:\d{2}\s+/u, "").trim())
+      .map((value) =>
+        String(value)
+          .replace(/^\d{2}:\d{2}:\d{2}\s+/u, "")
+          .trim(),
+      )
       .filter(Boolean);
     const compact = [];
     for (let index = 0; index < entries.length; index++) {
@@ -234,7 +238,9 @@
           return { link, url: null, parts: [], id: "" };
         }
       })
-      .filter(({ parts }) => parts.length === 3 && parts[1] === "status" && /^\d+$/u.test(parts[2] || ""));
+      .filter(
+        ({ parts }) => parts.length === 3 && parts[1] === "status" && /^\d+$/u.test(parts[2] || ""),
+      );
     // A card that only exposes a views/analytics/photo link is not safe to open.
     // Skipping it is preferable to clicking a secondary X action by accident.
     if (!parsed.length) return null;
@@ -262,8 +268,7 @@
     }
   }),
     (save = (k, v) => localStorage.setItem(k, JSON.stringify(v))),
-    (postId = (a) =>
-      statusLinkForArticle(a)?.href.match(/\/status\/(\d+)(?:$|[?#/])/u)?.[1] || ""),
+    (postId = (a) => statusLinkForArticle(a)?.href.match(/\/status\/(\d+)(?:$|[?#/])/u)?.[1] || ""),
     (own = () =>
       document
         .querySelector('[data-testid^="UserAvatar-Container-"]')
@@ -332,15 +337,7 @@
       "web3",
       "nft",
     ],
-    "nhay cam": [
-      "nhay cam",
-      "tinh duc",
-      "bao luc",
-      "tu hai",
-      "ma tuy",
-      "thu ghet",
-      "18+",
-    ],
+    "nhay cam": ["nhay cam", "tinh duc", "bao luc", "tu hai", "ma tuy", "thu ghet", "18+"],
   };
   const matchingAutoTopicRule = (topic, rules) => {
     const value = normalizeAutoTopic(topic);
@@ -429,7 +426,12 @@
           : ["Ăn uống", "Đồ ăn", "Kinh tế", "Đời sống thường ngày"],
         allowedAuthors: Array.isArray(stored.autoRepostAllowedAuthors)
           ? stored.autoRepostAllowedAuthors
-              .map((value) => String(value || "").trim().replace(/^@/u, "").toLowerCase())
+              .map((value) =>
+                String(value || "")
+                  .trim()
+                  .replace(/^@/u, "")
+                  .toLowerCase(),
+              )
               .filter((handle) => /^[a-z0-9_]{1,15}$/u.test(handle))
           : [],
       };
@@ -445,7 +447,12 @@
     }
     const matchedTopic = matchingAutoTopicRule(topic, settings.topics);
     if (!matchedTopic) {
-      log("Không repost: chủ đề mô hình trả về không khớp danh sách" + (topic ? " · " + topic : ""));
+      log(
+        "Không repost: chủ đề mô hình không khớp danh sách [" +
+          settings.topics.join(", ") +
+          "]" +
+          (topic ? " · Mô hình: " + topic : " · Mô hình chưa trả chủ đề"),
+      );
       return "topic-miss";
     }
     const article = articleForInteraction(postIdValue);
@@ -454,7 +461,10 @@
       const permalink = statusLinkForArticle(article, postIdValue)?.href || "",
         author = permalink.match(/\/([^/]+)\/status\//u)?.[1]?.toLowerCase();
       if (!author || !settings.allowedAuthors.includes(author)) {
-        log("Không repost: tài khoản không có trong danh sách được phép" + (author ? " · @" + author : ""));
+        log(
+          "Không repost: tài khoản không có trong danh sách được phép" +
+            (author ? " · @" + author : ""),
+        );
         return "author-not-allowed";
       }
     }
@@ -464,7 +474,11 @@
     }
     const ageHours = postAgeHours(article);
     if (ageHours === null || ageHours > settings.maxAgeHours) {
-      log(ageHours === null ? "Không xác định được tuổi bài · bỏ repost" : "Không repost: bài đã quá " + settings.maxAgeHours + " giờ");
+      log(
+        ageHours === null
+          ? "Không xác định được tuổi bài · bỏ repost"
+          : "Không repost: bài đã quá " + settings.maxAgeHours + " giờ",
+      );
       return "too-old";
     }
     const repostButton = article.querySelector('[data-testid="retweet"],[data-testid="repost"]');
@@ -478,11 +492,20 @@
       if (!(await waitIfPaused())) return "paused";
       confirmButton =
         document.querySelector('[data-testid="retweetConfirm"],[data-testid="repostConfirm"]') ||
-        [...document.querySelectorAll('[role="menuitem"],[role="dialog"] button')].find((candidate) => {
-          const label = String(candidate.innerText || candidate.textContent || candidate.getAttribute("aria-label") || "")
-            .replace(/\s+/gu, " ").trim().toLocaleLowerCase();
-          return /^(?:repost|retweet|đăng lại)$/u.test(label);
-        });
+        [...document.querySelectorAll('[role="menuitem"],[role="dialog"] button')].find(
+          (candidate) => {
+            const label = String(
+              candidate.innerText ||
+                candidate.textContent ||
+                candidate.getAttribute("aria-label") ||
+                "",
+            )
+              .replace(/\s+/gu, " ")
+              .trim()
+              .toLocaleLowerCase();
+            return /^(?:repost|retweet|đăng lại)$/u.test(label);
+          },
+        );
       if (confirmButton) break;
       await pauseSleep(150);
     }
@@ -492,8 +515,15 @@
       return "confirm-missing";
     }
     confirmButton.click();
-    await pauseSleep(500);
-    if (!readInteractionState(postIdValue).reposted) {
+    let confirmed = false;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await pauseSleep(250);
+      if (readInteractionState(postIdValue).reposted) {
+        confirmed = true;
+        break;
+      }
+    }
+    if (!confirmed) {
       log("Đã chọn Repost nhưng chưa xác nhận được trạng thái");
       return "unconfirmed";
     }
@@ -710,7 +740,11 @@
     };
     input.value = String(readIdleRefreshPostsSetting());
     input.addEventListener("change", sync);
-    setting.append(document.createTextNode("Làm mới sau"), input, document.createTextNode("bài không có thao tác"));
+    setting.append(
+      document.createTextNode("Làm mới sau"),
+      input,
+      document.createTextNode("bài không có thao tác"),
+    );
     (skipOldRow || vietnameseFilter).after(setting);
     sync();
   };
@@ -1020,7 +1054,11 @@
       if (!candidate || !targetBox?.isConnected) return null;
       const selector = '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]';
       const editorForButton = (button) => {
-        for (let root = button; root && root !== document.documentElement; root = root.parentElement) {
+        for (
+          let root = button;
+          root && root !== document.documentElement;
+          root = root.parentElement
+        ) {
           if (root.matches?.('[data-testid^="tweetTextarea_"][contenteditable="true"]'))
             return root === candidate ? candidate : null;
           const editors = [
@@ -1441,19 +1479,17 @@
     box.querySelector("[data-auto-drag-handle] strong")?.style.setProperty("font-size", "15px");
     box.querySelectorAll("h3").forEach((node) => node.style.setProperty("font-size", "15px"));
     box.querySelectorAll("label").forEach((node) => node.style.setProperty("font-size", "13px"));
-    box
-      .querySelectorAll("[data-auto-log-list],[data-auto-list]")
-      .forEach((node) => {
-        node.style.setProperty("font-size", "12px");
-        if (node.matches("[data-auto-log-list]")) {
-          node.style.setProperty("margin-top", "4px");
-          node.style.setProperty("max-height", "18px");
-          node.style.setProperty("overflow", "hidden");
-          node.style.setProperty("white-space", "nowrap");
-          node.style.setProperty("text-overflow", "ellipsis");
-          node.style.setProperty("line-height", "1.35");
-        }
-      });
+    box.querySelectorAll("[data-auto-log-list],[data-auto-list]").forEach((node) => {
+      node.style.setProperty("font-size", "12px");
+      if (node.matches("[data-auto-log-list]")) {
+        node.style.setProperty("margin-top", "4px");
+        node.style.setProperty("max-height", "18px");
+        node.style.setProperty("overflow", "hidden");
+        node.style.setProperty("white-space", "nowrap");
+        node.style.setProperty("text-overflow", "ellipsis");
+        node.style.setProperty("line-height", "1.35");
+      }
+    });
     const speedLabel = box
       .querySelector("[data-auto-speed]")
       ?.previousElementSibling?.querySelector("b");
@@ -1740,7 +1776,10 @@
         currentLog.style.maxHeight = next ? "56px" : "18px";
         currentLog.style.whiteSpace = next ? "pre-line" : "nowrap";
         currentToggle.setAttribute("aria-expanded", String(next));
-        currentToggle.setAttribute("aria-label", next ? "Thu gọn đang xử lý" : "Mở rộng đang xử lý");
+        currentToggle.setAttribute(
+          "aria-label",
+          next ? "Thu gọn đang xử lý" : "Mở rộng đang xử lý",
+        );
         currentToggle.title = next ? "Thu gọn đang xử lý" : "Mở rộng đang xử lý";
         currentToggle.innerHTML = iconMarkup(next ? "up" : "down");
         currentLog.textContent = compactCurrentLog(next);
@@ -2042,8 +2081,8 @@
         dashboard();
         break;
       }
-      const repostSettings = await readAutoRepostSettings(),
-        initialInteractionState = readInteractionState(id, own());
+      let repostSettings = await readAutoRepostSettings();
+      const initialInteractionState = readInteractionState(id, own());
       log(
         "Trạng thái bài: Repost " +
           (initialInteractionState.reposted === null
@@ -2126,6 +2165,10 @@
         dashboard();
         break;
       }
+      // Read again immediately before deciding whether an existing reply
+      // should suppress this post. The user can enable repost while a run is
+      // already in progress.
+      repostSettings = await readAutoRepostSettings();
       const currentDone = new Set(
         [...read(processedKey), ...read(skippedKey)].map((entry) => entry.id),
       );
@@ -2135,7 +2178,10 @@
           repostSettings.enabled &&
           repostSettings.topics.length > 0 &&
           currentInteractionState.reposted !== true;
-      if (currentDone.has(id) || (currentInteractionState.replied && !needsTopicForRepost)) {
+      if (
+        (currentDone.has(id) && !needsTopicForRepost) ||
+        (currentInteractionState.replied && !needsTopicForRepost)
+      ) {
         log("Trạng thái: Đã trả lời -> Skip");
         s.push({ ...item, reason: "Đã có reply hoặc đã xử lý", skippedAt: Date.now() });
         save(skippedKey, s);
@@ -2219,9 +2265,7 @@
             suggestion = targetBox?.querySelector(
               ".xra-results .xra-suggestion-wrap .xra-chip-main",
             );
-            const errorNode = targetBox?.querySelector(
-              ".xra-error,[role=alert],.xra-status-error",
-            );
+            const errorNode = targetBox?.querySelector(".xra-error,[role=alert],.xra-status-error");
             providerError = errorNode?.textContent?.trim() || "";
             if (providerError) break;
           }
@@ -2336,8 +2380,14 @@
             autoSkipRules = String(targetBox?.dataset.autoSkipTopics || "")
               .split(/\n+/u)
               .map((value) => value.trim())
-              .filter(Boolean),
-            matchedAutoSkipRule = matchingAutoTopicRule(detectedTopic, autoSkipRules);
+              .filter(Boolean);
+          // Re-read the toggle and topic/author settings at the point of
+          // action so an in-progress run honors the current side-panel state.
+          repostSettings = await readAutoRepostSettings();
+          const repostResult = await repostCurrentPostIfEligible(id, detectedTopic, repostSettings);
+          if (repostResult !== "disabled" && repostResult !== "reposted")
+            log("Tự repost chưa thực hiện · " + repostResult);
+          const matchedAutoSkipRule = matchingAutoTopicRule(detectedTopic, autoSkipRules);
           if (matchedAutoSkipRule) {
             const reason = `Chủ đề “${matchedAutoSkipRule}” nằm trong quy tắc bỏ qua tự động`;
             s.push({
@@ -2355,7 +2405,6 @@
             dashboard();
             break;
           }
-          await repostCurrentPostIfEligible(id, detectedTopic, repostSettings);
           if (currentInteractionState.replied) {
             log("Đã có phản hồi của bạn · repost đã được kiểm tra, không bình luận lần hai");
             s.push({

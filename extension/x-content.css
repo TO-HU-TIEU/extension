@@ -512,11 +512,18 @@
 }
 .xra-interaction-status {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
   gap: 5px 12px;
-  padding: 4px 0 8px;
+  width: 100%;
+  margin: -3px auto 3px 0;
+  padding: 0;
   color: var(--xra-muted, #9aa4af);
   font-size: 11px;
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
 }
 .xra-interaction-status [data-complete="true"] {
   color: #20c997;
