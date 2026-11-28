@@ -1864,7 +1864,7 @@
           });
       const setStatus = (selector, label, value) => {
         const node = interactionStatus.querySelector(selector);
-        node.textContent = `${label}: ${value === null ? "chưa xác định" : value ? "đã" : "chưa"}`;
+        node.textContent = value === null ? `${label}: đang kiểm tra` : label;
         node.dataset.complete = value === null ? "unknown" : String(value);
       };
       setStatus("[data-interaction-repost]", "Repost", article ? reposted : null);
