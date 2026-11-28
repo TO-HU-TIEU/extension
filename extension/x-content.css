@@ -528,8 +528,20 @@
 .xra-interaction-status [data-complete="true"] {
   color: #20c997;
 }
+.xra-interaction-status [data-complete="true"]::before,
+.xra-interaction-status [data-complete="false"]::before {
+  content: "✓";
+  display: inline-block;
+  margin-right: 4px;
+}
+.xra-interaction-status [data-complete="true"]::before {
+  color: #20c997;
+}
 .xra-interaction-status [data-complete="false"] {
   color: var(--xra-muted, #9aa4af);
+}
+.xra-interaction-status [data-complete="false"]::before {
+  color: #8b98a5;
 }
 .xra-repost-options {
   padding: 4px 0 8px;
