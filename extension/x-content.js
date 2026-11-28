@@ -2178,7 +2178,7 @@
                   ? "The reply author is female. Use a natural feminine voice while preserving the post's original language; do not mention gender."
                   : ""),
             ...(localWordRangeEnabled ? { styleWordRange: localWordRange } : {}),
-            autoRepostTopics: s.autoRepost ? normalizedRepostTopics(s.autoRepostTopics) : [],
+            classifyTopic: !!s.autoRepost,
             replyCount,
             fastMode: !!s.fastReplyMode,
             excludeReplies: force ? state.replyHistory : [],

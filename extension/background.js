@@ -2643,21 +2643,11 @@ function cleanPost(input) {
           max: Math.min(100, Number(rawStyleWordRange.max)),
         }
       : null;
-  const autoRepostTopics = (
-    Array.isArray(input.autoRepostTopics)
-      ? input.autoRepostTopics
-      : Array.isArray(input.auto_repost_topics)
-        ? input.auto_repost_topics
-        : []
-  )
-    .map((value) =>
-      String(value || "")
-        .replace(/\s+/gu, " ")
-        .trim()
-        .slice(0, 60),
-    )
-    .filter(Boolean)
-    .slice(0, 30);
+  const classifyTopic =
+    input.classifyTopic === true ||
+    input.classify_topic === true ||
+    (Array.isArray(input.autoRepostTopics) && input.autoRepostTopics.length > 0) ||
+    (Array.isArray(input.auto_repost_topics) && input.auto_repost_topics.length > 0);
   return {
     post_id: match[2],
     author: match[1],
@@ -2708,7 +2698,7 @@ function cleanPost(input) {
     style_hint: style,
     styleWordRange:
       styleWordRange && styleWordRange.max >= styleWordRange.min ? styleWordRange : undefined,
-    auto_repost_topics: autoRepostTopics,
+    classify_topic: classifyTopic,
     reply_count: Math.min(10, Math.max(1, Number(input.replyCount) || 3)),
     quick_greeting_used: input.quickGreetingUsed === true,
     short_reply_retry_used:
@@ -5165,15 +5155,11 @@ function targetLanguageLock(post = {}) {
   return ` TARGET LANGUAGE LOCK: The dominant language of the exact target_text is ${name} (${language}). This is a hard constraint that overrides style wording and account tone. Write every reply in ${name} and set source_language to ${language}; never switch to Vietnamese just because the style instructions are Vietnamese. For a short greeting such as “good morning”, answer naturally in the same language.${shorthandHint}`;
 }
 function autoSkipTopicInstructions(post = {}) {
-  const topics = Array.isArray(post.auto_repost_topics) ? post.auto_repost_topics : [];
   const style = String(post.style || post.style_hint || "");
   const hasSkipRule =
     /(?:bỏ\s+qua|skip)\s+(?:(?:các|những|the)\s+)?(?:(?:chủ\s*đề|topics?)\s*)?/iu.test(style);
-  if (!topics.length && !hasSkipRule) return "";
-  const selectedTopicRule = topics.length
-    ? ` Compare only against these selected labels: ${JSON.stringify(topics)}. Return exact matching labels or “không khớp”; never force a match.`
-    : " Return a concise topic label grounded in the post, conversation and verified media.";
-  return ` TOPIC CLASSIFICATION FOR AUTOMATION: ${selectedTopicRule} Classify the main subject into a broad, reusable category, never name a specific food, activity, object, time, or scene as the category. For example, “ăn bắp chiều” is “Ẩm thực/Ăn uống”, not “Ăn bắp chiều”. The topic field must contain only one short category label (at most 5 words), never a description or sentence. When selected labels are supplied, return the exact configured label that best matches the broad category; return “không khớp” if none apply. Treat any style_hint rule to skip topics during automation as a policy for the runner, not as a writing instruction; still create the normal reply suggestions and return the topic label.`;
+  if (post.classify_topic !== true && !hasSkipRule) return "";
+  return ` TOPIC CLASSIFICATION FOR AUTOMATION: Classify the post's main subject into one broad, reusable category independent of the user's repost settings. Do not choose from, repeat, or compare against configured repost labels; the UI will match this category to the saved list. Never use a specific food, activity, object, time, or scene as the category. For example, “ăn bắp chiều” is “Ẩm thực/Ăn uống”, not “Ăn bắp chiều”; a post showing a meal with text about food also maps to “Ẩm thực/Ăn uống”. Return only one short category label (at most 5 words), never a description or sentence. Treat any style_hint rule to skip topics during automation as a policy for the runner, not as a writing instruction; still create the normal reply suggestions and return the generic topic label.`;
 }
 function asksForVia(post = {}) {
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC");
