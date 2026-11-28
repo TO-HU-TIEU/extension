@@ -313,10 +313,14 @@
     const quoted = [...article.querySelectorAll('[data-testid="quoteTweet"]')]
         .filter((q) => q.closest("article") === article)
         .slice(0, 2)
-        .map((q) => ({
-          type: "quoted_post",
-          text: (q.innerText || q.textContent || "").trim().replace(/\s+/g, " ").slice(0, 1200),
-        }))
+        .map((q) => {
+          const authorLink = q.querySelector('[data-testid="User-Name"] a[href^="/"]');
+          return {
+            type: "quoted_post",
+            author: urlPath(authorLink?.getAttribute("href") || "").split("/")[1] || "",
+            text: (q.innerText || q.textContent || "").trim().replace(/\s+/g, " ").slice(0, 1200),
+          };
+        })
         .filter((x) => x.text),
       cards = [
         ...article.querySelectorAll(

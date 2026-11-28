@@ -5224,15 +5224,20 @@ function quotedCongratulationContext(post = {}) {
         return {};
       }
     })(),
-    hasQuote = Array.isArray(context?.embedded) && context.embedded.some((item) => item?.type === "quoted_post"),
-    viewer = String(post.viewerHandle || post.viewer_handle || "")
+    quote = Array.isArray(context?.embedded)
+      ? context.embedded.find((item) => item?.type === "quoted_post")
+      : null,
+    viewer = String(post.viewerHandle || post.viewer_handle || context?.viewer_handle || "")
       .replace(/^@/u, "")
       .toLocaleLowerCase(),
-    addressesViewer = viewer && new RegExp(`@${viewer.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\b`, "iu").test(target);
-  return hasQuote && /(?:chúc\s*mừng|congratulations?|congrats|lời\s+chúc)/iu.test(target) && !addressesViewer;
+    quoteAuthor = String(quote?.author || "")
+      .replace(/^@/u, "")
+      .toLocaleLowerCase();
+  return !!quote && /(?:chúc\s*mừng|congratulations?|congrats|lời\s+chúc)/iu.test(target) &&
+    (!viewer || !quoteAuthor || quoteAuthor !== viewer);
 }
 const quotedCongratulationInstructions =
-  " QUOTE-POST RECIPIENT RULE: In a quote-post, the caption is written by the quoting author and usually comments on the quoted post/person. A generic ‘bạn/you’ in ‘chúc mừng bạn’ refers to that quoted subject unless the caption explicitly identifies the current reply author by handle or unmistakable name. Never assume the congratulation or wish is addressed to the person replying; do not write ‘cảm ơn lời chúc’ or accept it on their behalf. Reply to the quoting author's observation, or refer neutrally to the person being congratulated. If the recipient is unclear, avoid assigning the wish to anyone.";
+  " QUOTE-POST RECIPIENT RULE: The caption is written by the quoting author; a generic ‘bạn/you’ in ‘chúc mừng bạn’ refers to the quoted post's author/subject, not the person replying. Thank for congratulations in a quote-post only when the quoted post is verified to belong to the current user. If it quotes anyone else, or its author cannot be verified as the current user, do not thank or accept the wish; react to the quote-post without taking it personally.";
 replyInstructions = function (message) {
   return (
     (postStyleLengthRule(message.post) ||
