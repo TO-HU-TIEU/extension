@@ -1873,9 +1873,25 @@
       const topic = String(box.dataset.replyTopic || "")
           .replace(/\s+/gu, " ")
           .trim(),
-        topicNode = interactionStatus.querySelector("[data-interaction-topic]");
-      topicNode.textContent = topic ? `Chủ đề: ${topic}` : "";
-      topicNode.title = topic ? `Chủ đề: ${topic}` : "";
+        topicNode = interactionStatus.querySelector("[data-interaction-topic]"),
+        normalizedTopic = normalizeRepostTopic(topic),
+        configuredTopics = Array.isArray(saved.autoRepostTopics) ? saved.autoRepostTopics : [],
+        matchingConfiguredTopic = configuredTopics.find((value) => {
+          const normalizedValue = normalizeRepostTopic(value);
+          return normalizedValue && normalizedTopic.includes(normalizedValue);
+        }),
+        shortTopic = String(matchingConfiguredTopic || topic)
+          .split(/[.;!?。！？|]/u)[0]
+          .trim()
+          .slice(0, 42),
+        displayTopic = /(?:am thuc|an uong|do an|mon an|thuc an|food|meal|restaurant)/u.test(
+          normalizeRepostTopic(matchingConfiguredTopic || shortTopic),
+        )
+          ? "Ẩm thực/Ăn uống"
+          : shortTopic,
+        topicLabel = displayTopic ? `Chủ đề: ${displayTopic}` : "";
+      topicNode.textContent = topicLabel;
+      topicNode.title = topicLabel;
     };
     updateInteractionStatus();
     const interactionArticle = articleFor(String(box.dataset.postId || ""));

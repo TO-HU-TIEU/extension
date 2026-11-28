@@ -1,9 +1,4 @@
-importScripts(
-  "language.js",
-  "reply-time.js",
-  "reply-preferences.js",
-  "remote-config.js",
-);
+importScripts("language.js", "reply-time.js", "reply-preferences.js", "remote-config.js");
 // config.local.js is optional and intentionally excluded from public releases.
 // Keep the service worker loadable on a fresh browser profile.
 try {
@@ -14,7 +9,8 @@ try {
 globalThis.X_REPLY_CONFIG ||= Object.freeze({ serverUrl: "http://127.0.0.1:8791", localToken: "" });
 globalThis.RemoteConfig?.start();
 chrome.runtime.onInstalled?.addListener(() =>
-  chrome.scripting?.unregisterContentScripts?.({ ids: ["assistant-content-scan"] })
+  chrome.scripting
+    ?.unregisterContentScripts?.({ ids: ["assistant-content-scan"] })
     ?.catch(() => {}),
 );
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
@@ -818,18 +814,20 @@ function postStyleWordRange(post = {}) {
   return selectedStyleWordRange(post?.style ?? post?.style_hint);
 }
 function postReplyLanguage(post = {}, fallback = "") {
-  const language = primaryLanguage(globalThis.X_REPLY_LANGUAGE(
-    post.target_text ?? post.text ?? "",
-    post.language_hint || post.lang || "",
-  ));
+  const language = primaryLanguage(
+    globalThis.X_REPLY_LANGUAGE(
+      post.target_text ?? post.text ?? "",
+      post.language_hint || post.lang || "",
+    ),
+  );
   return language && language !== "und" ? language : primaryLanguage(fallback);
 }
 function postStyleLengthRule(post = {}) {
   const range = postStyleWordRange(post);
   return range
     ? "Selected style hard length constraint: every reply must contain " +
-      globalThis.X_REPLY_WORD_RANGE_INSTRUCTION(range, postReplyLanguage(post)) +
-      "Before returning JSON, check the length of each reply and rewrite any candidate outside the range. This range takes precedence over all other length guidance. "
+        globalThis.X_REPLY_WORD_RANGE_INSTRUCTION(range, postReplyLanguage(post)) +
+        "Before returning JSON, check the length of each reply and rewrite any candidate outside the range. This range takes precedence over all other length guidance. "
     : "";
 }
 function postStyleLengthMismatch(reply, post = {}, language = postReplyLanguage(post)) {
@@ -852,15 +850,7 @@ const autoSkipTopicAliases = {
     "web3",
     "nft",
   ],
-  "nhay cam": [
-    "nhạy cảm",
-    "tình dục",
-    "bạo lực",
-    "tự hại",
-    "ma túy",
-    "thù ghét",
-    "18+",
-  ],
+  "nhay cam": ["nhạy cảm", "tình dục", "bạo lực", "tự hại", "ma túy", "thù ghét", "18+"],
 };
 function normalizeAutoSkipTopic(value) {
   return String(value || "")
@@ -876,10 +866,14 @@ function extractAutoSkipTopics(style) {
   const value = String(style || "");
   if (!value) return [];
   const topics = [];
-  const pattern = /(?:bỏ\s+qua|skip)\s+(?:(?:các|những|the)\s+)?(?:(?:chủ\s*đề|topics?)\s*)?(?::|-)?\s*([^.;\n]+)/giu;
+  const pattern =
+    /(?:bỏ\s+qua|skip)\s+(?:(?:các|những|the)\s+)?(?:(?:chủ\s*đề|topics?)\s*)?(?::|-)?\s*([^.;\n]+)/giu;
   for (const match of value.matchAll(pattern)) {
     const list = String(match[1] || "")
-      .replace(/\s+(?:khi\s+tự\s+động|trong\s+chế\s+độ\s+tự\s+động|when\s+automatic(?:ally)?)\b.*$/iu, "")
+      .replace(
+        /\s+(?:khi\s+tự\s+động|trong\s+chế\s+độ\s+tự\s+động|when\s+automatic(?:ally)?)\b.*$/iu,
+        "",
+      )
       .split(/[,|/]|\s+và\s+|\s+and\s+/iu)
       .map((item) => item.trim().replace(/^(?:chủ\s*đề|topic)\s+/iu, ""))
       .filter((item) => item.length >= 2);
@@ -899,7 +893,9 @@ function autoSkipTopicMatches(topic, rules = []) {
   return null;
 }
 function normalizeResultTopic(result, post = {}) {
-  const direct = String(result?.topic || "").replace(/\s+/gu, " ").trim();
+  const direct = String(result?.topic || "")
+    .replace(/\s+/gu, " ")
+    .trim();
   if (direct) return direct.slice(0, 180);
   const grounding = String(result?.grounding?.combined_context || "")
     .replace(/\s+/gu, " ")
@@ -915,12 +911,8 @@ function personalAddressingRule(style) {
   if (!/(?:xưng\s*hô|gọi\s+['"`]?)/iu.test(value)) return null;
   // Use Unicode-letter boundaries: ASCII \b treats the first “c” in
   // Vietnamese words such as “cảnh” as a standalone pronoun.
-  const callsFemale = /gọi[\s\S]{0,120}(?:[^\p{L}]chị(?=$|[^\p{L}])|['"`]c['"`])/iu.test(
-    value,
-  );
-  const callsMale = /gọi[\s\S]{0,120}(?:[^\p{L}]anh(?=$|[^\p{L}])|['"`]a['"`])/iu.test(
-    value,
-  );
+  const callsFemale = /gọi[\s\S]{0,120}(?:[^\p{L}]chị(?=$|[^\p{L}])|['"`]c['"`])/iu.test(value);
+  const callsMale = /gọi[\s\S]{0,120}(?:[^\p{L}]anh(?=$|[^\p{L}])|['"`]a['"`])/iu.test(value);
   if (callsFemale && !callsMale)
     return {
       forbidden: /(?<![\p{L}\p{M}])(?:anh|a)(?![\p{L}\p{M}])/iu,
@@ -942,14 +934,12 @@ function personalAddressingRule(style) {
   if (customCall || customSelf)
     return {
       forbidden: /\b\B/u,
-      instruction:
-        ` ACCOUNT-SPECIFIC ADDRESSING RULE: This account has a custom addressing style${customCall ? ` (call the other person “${customCall}”)` : ""}${customSelf ? ` (self-reference may use “${customSelf}”)` : ""}. Use those words only when a direct address is natural and the target/conversation establishes that relationship; otherwise omit the custom vocative instead of forcing “bà”, “ông” or another label into the reply. Never infer gender or relationship and do not substitute anh/chị/em unless the target conversation explicitly establishes it.`,
+      instruction: ` ACCOUNT-SPECIFIC ADDRESSING RULE: This account has a custom addressing style${customCall ? ` (call the other person “${customCall}”)` : ""}${customSelf ? ` (self-reference may use “${customSelf}”)` : ""}. Use those words only when a direct address is natural and the target/conversation establishes that relationship; otherwise omit the custom vocative instead of forcing “bà”, “ông” or another label into the reply. Never infer gender or relationship and do not substitute anh/chị/em unless the target conversation explicitly establishes it.`,
     };
   if (/xưng\s*hô/iu.test(value))
     return {
       forbidden: /\b\B/u,
-      instruction:
-        ` ACCOUNT-SPECIFIC ADDRESSING RULE: Follow this custom addressing style when a direct address is natural: ${value.slice(0, 600)}. Do not force a name into every reply, infer gender or relationship, or substitute anh/chị/em without explicit conversation evidence.`,
+      instruction: ` ACCOUNT-SPECIFIC ADDRESSING RULE: Follow this custom addressing style when a direct address is natural: ${value.slice(0, 600)}. Do not force a name into every reply, infer gender or relationship, or substitute anh/chị/em without explicit conversation evidence.`,
     };
   return null;
 }
@@ -1005,7 +995,7 @@ function schema(count, language = "") {
     additionalProperties: false,
     properties: {
       source_language: { type: "string" },
-      topic: { type: "string", minLength: 1, maxLength: 180 },
+      topic: { type: "string", minLength: 1, maxLength: 60 },
       grounding: {
         type: "object",
         additionalProperties: false,
@@ -1099,14 +1089,16 @@ function shortFragmentReply(text, post = {}) {
   const value = String(text || "").trim();
   if (!value || simpleGreetingTarget(post) || briefEncouragementThanks(value, post)) return false;
   const language = postReplyLanguage(post) || primaryLanguage(globalThis.X_REPLY_LANGUAGE(value));
-  if (globalThis.X_REPLY_WORD_COUNT(value, language) > 3 || /[.!?…。！？]$/u.test(value)) return false;
+  if (globalThis.X_REPLY_WORD_COUNT(value, language) > 3 || /[.!?…。！？]$/u.test(value))
+    return false;
   // Keep genuinely complete, common short reactions. The retry is for a
   // truncated/empty-feeling fragment, not every concise X reply.
   return !/^(?:đúng\s+(?:rồi|đó)|hay\s+quá|đỉnh\s+quá|ổn\s+(?:rồi|đó)|tuyệt\s+quá|cố\s+lên(?:\s+(?:nha|nhé|ạ))?|cảm\s*ơn(?:\s+(?:bạn|anh|chị|em|a|c))?|chúc\s+mừng(?:\s+(?:bạn|anh|chị|em|a|c))?|xin\s+vía|nhả\s+vía|gửi\s+vía|yên\s+bình\s+quá|ngon\s+quá|vui\s+quá|được\s+đó|ok(?:ay)?|yes|no|nice|great|good\s+morning|good\s+night|gm|morning)$/iu.test(
     value,
   );
 }
-const MALFORMED_OPENING = /^(?:(?:nhiều|ít)\s+(?:nha|nhé|ạ)(?![\p{L}\p{N}\p{M}])[\s,.!?…:;–—-]*|(?:vui|ổn|hay|đúng|tuyệt|đẹp)\s+(?:nha|nhé|ạ)\s*[,!…]\s*)/iu;
+const MALFORMED_OPENING =
+  /^(?:(?:nhiều|ít)\s+(?:nha|nhé|ạ)(?![\p{L}\p{N}\p{M}])[\s,.!?…:;–—-]*|(?:vui|ổn|hay|đúng|tuyệt|đẹp)\s+(?:nha|nhé|ạ)\s*[,!…]\s*)/iu;
 function malformedOpeningReply(text) {
   return MALFORMED_OPENING.test(String(text || "").trim());
 }
@@ -1255,32 +1247,47 @@ function woodenTemplateReply(text) {
   );
 }
 function vietnameseMorningGreetingTarget(post = {}) {
-  const target = String(post.target_text ?? post.text ?? post.caption ?? "").normalize("NFC").trim();
-  return /^(?:[Cc]hào\s+(?:buổi\s+)?sáng(?:\s+(?:(?:anh|chị|em|bạn|nàng|nha|nhé|ạ)|(?:[\p{L}\p{M}]+\s+)?\p{Lu}[\p{L}\p{M}]*))?|[Bb]uổi\s+sáng\s+đẹp\s+quá(?:\s+(?:nha|nhé|nè))?(?:\s+(?:nàng|bạn|anh|chị|em))?)[\s\p{P}\p{S}\uFE0F]*$/u.test(target) &&
-    !/[?？]/u.test(target);
+  const target = String(post.target_text ?? post.text ?? post.caption ?? "")
+    .normalize("NFC")
+    .trim();
+  return (
+    /^(?:[Cc]hào\s+(?:buổi\s+)?sáng(?:\s+(?:(?:anh|chị|em|bạn|nàng|nha|nhé|ạ)|(?:[\p{L}\p{M}]+\s+)?\p{Lu}[\p{L}\p{M}]*))?|[Bb]uổi\s+sáng\s+đẹp\s+quá(?:\s+(?:nha|nhé|nè))?(?:\s+(?:nàng|bạn|anh|chị|em))?)[\s\p{P}\p{S}\uFE0F]*$/u.test(
+      target,
+    ) && !/[?？]/u.test(target)
+  );
 }
 const VI_MORNING_GREETING_RULE =
   " Answer this short morning greeting with a simple return wish or acknowledgment. Use the actual local reply time, not the morning timestamp of the greeting. After morning, use a timeless wish or a wish appropriate to the current time. Do not announce that the greeting is late. Do not invent work plans, coffee, weather or other personal updates. Follow the saved addressing style.";
 function shortGreetingStyleTarget(post = {}) {
   if (vietnameseMorningGreetingTarget(post)) return true;
-  const target = String(post.target_text ?? post.text ?? "").normalize("NFC")
+  const target = String(post.target_text ?? post.text ?? "")
+    .normalize("NFC")
     .replace(/https?:\/\/\S+|[#＃@][\p{L}\p{M}\p{N}_]+/gu, " ")
     .replace(/[\p{P}\p{S}\uFE0F]/gu, " ")
-    .replace(/\s+/gu, " ").trim();
-  return /^(?:hello|hi|chào)\s+(?:cô\s+gái(?:\s+trẻ)?|chàng\s+trai(?:\s+trẻ)?)(?:\s+(?:ơi|nha|nhé))?$/iu.test(target) ||
-    /^(?:(?:good\s+)?(?:morning|afternoon|evening)|good\s+day|gm)(?:\s+(?:everyone|all|folks|friends))?$/iu.test(target) ||
-    /^(?:chào\s+(?:buổi\s+)?(?:sáng|trưa|chiều|tối)|(?:buổi\s+)?(?:sáng|trưa|chiều|tối)\s+vui\s+vẻ)(?:\s+(?:nha|nhé|ạ|cả\s+nhà|mọi\s+người))*$/iu.test(target);
+    .replace(/\s+/gu, " ")
+    .trim();
+  return (
+    /^(?:hello|hi|chào)\s+(?:cô\s+gái(?:\s+trẻ)?|chàng\s+trai(?:\s+trẻ)?)(?:\s+(?:ơi|nha|nhé))?$/iu.test(
+      target,
+    ) ||
+    /^(?:(?:good\s+)?(?:morning|afternoon|evening)|good\s+day|gm)(?:\s+(?:everyone|all|folks|friends))?$/iu.test(
+      target,
+    ) ||
+    /^(?:chào\s+(?:buổi\s+)?(?:sáng|trưa|chiều|tối)|(?:buổi\s+)?(?:sáng|trưa|chiều|tối)\s+vui\s+vẻ)(?:\s+(?:nha|nhé|ạ|cả\s+nhà|mọi\s+người))*$/iu.test(
+      target,
+    )
+  );
 }
 const CASUAL_GREETING_RULE =
   " Use conversational greetings. Never routinely open replies with stacked politeness and guessed kinship such as ‘Dạ em chào anh’ or ‘Dạ em chào chị’. A brief greeting or return wish in the target language is enough for a greeting-only target. For example, ‘Good afternoon!’ or ‘Hope your afternoon’s going well!’ in English, or ‘Chào buổi chiều nha!’ in Vietnamese. If the greeting introduces a substantive post, respond to the actual topic. A custom voice does not require a salutation or a form of address.";
 function repairGreetingOpening(reply, post) {
   if (typeof reply === "string" && shortGreetingStyleTarget(post)) {
     // The full vocative and its shorthand are alternatives, never a pair.
-    reply = reply.replace(/^([\s\p{P}\p{S}]*(?:(?:dạ|em)\s+){0,2}(?:chào|hello|hi)[\s,]+)(anh|chị)[\s,]+([ac])(?=$|[^\p{L}\p{M}\p{N}])/iu,
+    reply = reply.replace(
+      /^([\s\p{P}\p{S}]*(?:(?:dạ|em)\s+){0,2}(?:chào|hello|hi)[\s,]+)(anh|chị)[\s,]+([ac])(?=$|[^\p{L}\p{M}\p{N}])/iu,
       (match, opening, address, shorthand) =>
-        address[0].toLowerCase() === shorthand.toLowerCase()
-          ? opening + address
-          : match);
+        address[0].toLowerCase() === shorthand.toLowerCase() ? opening + address : match,
+    );
   }
   if (typeof reply !== "string") return reply;
   const match = reply.match(
@@ -1290,8 +1297,7 @@ function repairGreetingOpening(reply, post) {
   const [, lead] = match;
   const remainder = reply.slice(match[0].length);
   if (/^\s+(?:đón|mừng)(?!\p{L})/iu.test(remainder)) return reply;
-  if (/^\s+buổi\s+(?:sáng|trưa|chiều|tối)/iu.test(remainder))
-    return lead + "Chào" + remainder;
+  if (/^\s+buổi\s+(?:sáng|trưa|chiều|tối)/iu.test(remainder)) return lead + "Chào" + remainder;
   const content = remainder.replace(/^[\s,.!?…:;–—-]+/u, "");
   if (/\p{L}/u.test(content))
     return lead + content.replace(/^\p{L}/u, (letter) => letter.toLocaleUpperCase());
@@ -1436,157 +1442,286 @@ function offContextThreadReply(text, post) {
 function replyContextFor(post = {}) {
   if (typeof post.reply_context === "string" && post.reply_context) return post.reply_context;
   try {
-    return JSON.parse(post.context ?? post.visible_context ?? post.visible_ancestor_context ?? "{}")?.reply_context || "";
+    return (
+      JSON.parse(post.context ?? post.visible_context ?? post.visible_ancestor_context ?? "{}")
+        ?.reply_context || ""
+    );
   } catch {
     return "";
   }
 }
 function ownResultPraiseTarget(post = {}) {
-  const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
-  if (!/^(?:(?:quả|đúng)\s+là\s+)?(?:thành\s+công\s+(?:m[ỹĩ]\s+mãn|rực\s+rỡ)|kết\s+quả\s+(?:quá\s+tốt|đáng\s+mừng))(?:\s+(?:luôn|nha|nhé|nè|đó))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(target))
+  const target = String(post.target_text ?? post.text ?? "")
+    .normalize("NFC")
+    .trim();
+  if (
+    !/^(?:(?:quả|đúng)\s+là\s+)?(?:thành\s+công\s+(?:m[ỹĩ]\s+mãn|rực\s+rỡ)|kết\s+quả\s+(?:quá\s+tốt|đáng\s+mừng))(?:\s+(?:luôn|nha|nhé|nè|đó))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(
+      target,
+    )
+  )
     return false;
   return replyContextFor(post) === "reply_to_comment_on_own_post";
 }
 function ownPostAcknowledgement(post = {}) {
-  const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
-  if (/^(?:gấp|hơn|kém)\s+(?:(?:gần|hơn|khoảng)\s+)?(?:đôi|hai|ba|bốn|\d+(?:[.,]\d+)?)\s*(?:lần\s+)?(?:view|viu|lượt\s+xem)\s+(?:của\s+)?(?:mình|tui|tôi|em|anh|chị)(?![\p{L}\p{M}])/iu.test(target))
+  const target = String(post.target_text ?? post.text ?? "")
+    .normalize("NFC")
+    .trim();
+  if (
+    /^(?:gấp|hơn|kém)\s+(?:(?:gần|hơn|khoảng)\s+)?(?:đôi|hai|ba|bốn|\d+(?:[.,]\d+)?)\s*(?:lần\s+)?(?:view|viu|lượt\s+xem)\s+(?:của\s+)?(?:mình|tui|tôi|em|anh|chị)(?![\p{L}\p{M}])/iu.test(
+      target,
+    )
+  )
     return "view_comparison";
-  if (/^(?:xinh(?:,?\s+dễ\s+thương)?|dễ\s+thương)(?:\s+(?:quá|ghê|lắm|thiệt))?(?:\s+(?:nha|nhé|nè))?(?:\s+(?:em|chị|anh|bạn)(?:\s+ơi)?)?[\s\p{P}\p{S}\uFE0F]*$/iu.test(target) &&
-      !/[?？]/u.test(target) &&
-      (replyContextFor(post) === "reply_to_comment_on_own_post" || /\s(?:em|chị|anh|bạn)(?:\s+ơi)?[\s\p{P}\p{S}\uFE0F]*$/iu.test(target)))
+  if (
+    /^(?:xinh(?:,?\s+dễ\s+thương)?|dễ\s+thương)(?:\s+(?:quá|ghê|lắm|thiệt))?(?:\s+(?:nha|nhé|nè))?(?:\s+(?:em|chị|anh|bạn)(?:\s+ơi)?)?[\s\p{P}\p{S}\uFE0F]*$/iu.test(
+      target,
+    ) &&
+    !/[?？]/u.test(target) &&
+    (replyContextFor(post) === "reply_to_comment_on_own_post" ||
+      /\s(?:em|chị|anh|bạn)(?:\s+ơi)?[\s\p{P}\p{S}\uFE0F]*$/iu.test(target))
+  )
     return "personal_praise";
-  if (/^dạ[\s,]+(?:anh|chị|cô|chú|bác|em)\s+\p{Lu}[\p{Ll}\p{M}]*(?:\s+\p{Lu}[\p{Ll}\p{M}]*){0,2}[\s\p{P}\p{S}\uFE0F]*$/u.test(target.replace(/^Dạ/u, "dạ")) &&
-      !/[?？]/u.test(target) &&
-      replyContextFor(post) !== "reply_to_comment_on_other_post")
+  if (
+    /^dạ[\s,]+(?:anh|chị|cô|chú|bác|em)\s+\p{Lu}[\p{Ll}\p{M}]*(?:\s+\p{Lu}[\p{Ll}\p{M}]*){0,2}[\s\p{P}\p{S}\uFE0F]*$/u.test(
+      target.replace(/^Dạ/u, "dạ"),
+    ) &&
+    !/[?？]/u.test(target) &&
+    replyContextFor(post) !== "reply_to_comment_on_other_post"
+  )
     return "named_acknowledgement";
-  if (replyContextFor(post) === "reply_to_comment_on_own_post" &&
-      /^(?:dạ|vâng|ừ|ừm)(?:\s+(?:nha|nhé|ạ|nè|(?:anh|chị|em|bác)(?:\s+ơi)?))?[\s\p{P}\p{S}\uFE0F]*$/iu.test(target) &&
-      !/[?？]/u.test(target))
+  if (
+    replyContextFor(post) === "reply_to_comment_on_own_post" &&
+    /^(?:dạ|vâng|ừ|ừm)(?:\s+(?:nha|nhé|ạ|nè|(?:anh|chị|em|bác)(?:\s+ơi)?))?[\s\p{P}\p{S}\uFE0F]*$/iu.test(
+      target,
+    ) &&
+    !/[?？]/u.test(target)
+  )
     return "named_acknowledgement";
-  if (/^(?:cái\s+)?(?:đề\s+xuất|ý\s+tưởng)\s+(?:(?:này|đó)\s+)?(?:đỉnh(?:\s+cao)?|hay|xịn|quá\s+hay)(?:\s+(?:quá|ghê|thiệt|luôn|nha|nè|đó))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(target) &&
-      !/[?？]/u.test(target))
+  if (
+    /^(?:cái\s+)?(?:đề\s+xuất|ý\s+tưởng)\s+(?:(?:này|đó)\s+)?(?:đỉnh(?:\s+cao)?|hay|xịn|quá\s+hay)(?:\s+(?:quá|ghê|thiệt|luôn|nha|nè|đó))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(
+      target,
+    ) &&
+    !/[?？]/u.test(target)
+  )
     return "idea_praise";
   if (replyContextFor(post) !== "reply_to_comment_on_own_post") return "";
-  if (target.length > 150 || /[?？]|(?<!\p{L})(?:tại sao|vì sao|bao nhiêu|nhưng)(?!\p{L})/iu.test(target)) return "";
-  if (/(?<!\p{L})nhờ\s+(?:ae|anh em|mọi người|cả nhà|các bạn)(?!\p{L})[^.!?]{0,40}(?:cùng|giúp|đỡ|ủng hộ)/iu.test(target))
+  if (
+    target.length > 150 ||
+    /[?？]|(?<!\p{L})(?:tại sao|vì sao|bao nhiêu|nhưng)(?!\p{L})/iu.test(target)
+  )
+    return "";
+  if (
+    /(?<!\p{L})nhờ\s+(?:ae|anh em|mọi người|cả nhà|các bạn)(?!\p{L})[^.!?]{0,40}(?:cùng|giúp|đỡ|ủng hộ)/iu.test(
+      target,
+    )
+  )
     return "shared_credit";
   if (/^c[ảá]m ơn(?:\s+[\p{L}]+){0,3}\s+đã\s+chia sẻ(?=$|[^\p{L}])/iu.test(target))
     return "reader_appreciation";
-  if (/(?<!\p{L})(?:(?:quá|rất)\s+đỉnh|đỉnh\s+(?:quá|cao|nóc|thật)|(?:thành quả|kết quả)\s+xứng đáng|giỏi\s+lắm|khéo\s+quá|quá\s+đều\s+tay|đều\s+tay\s+(?:quá|ghê|thật))(?!\p{L})/iu.test(target))
+  if (
+    /(?<!\p{L})(?:(?:quá|rất)\s+đỉnh|đỉnh\s+(?:quá|cao|nóc|thật)|(?:thành quả|kết quả)\s+xứng đáng|giỏi\s+lắm|khéo\s+quá|quá\s+đều\s+tay|đều\s+tay\s+(?:quá|ghê|thật))(?!\p{L})/iu.test(
+      target,
+    )
+  )
     return "praise";
   return "";
 }
 const OWN_POST_ACKNOWLEDGEMENT_INSTRUCTIONS = {
-  idea_praise: "The latest comment praises an idea. Resolve ‘đề xuất này’ or ‘ý tưởng này’ to the actual proposal in the parent turn. If the current user proposed it, reply as that person, with a brief acknowledgment or by lightly continuing the joke. For example, if the parent jokes about solving a grade-12 math problem to open apps after midnight, stay with the math challenge or sleeping earlier. Do not reinterpret ‘đề xuất’ as a platform recommendation algorithm, moderation sweep, or account metrics. When the proposal is unavailable, briefly acknowledge the praise without guessing the subject. Respect the saved addressing style.",
-  named_acknowledgement: "The commenter is briefly acknowledging the person they address. In ‘Dạ chị Ngọc’, the commenter is speaking to Ngọc. Write as the signed-in user answering the commenter. When the user is Ngọc, do not call the commenter chị Ngọc, thank Ngọc for sharing, or write as a reader listening to Ngọc. Answer only the brief social acknowledgment. Never turn it into a summary, comment on the article, advice, or a new claim about learning, following, or listening. If a warm emoji is present, a natural response may mirror its warmth, e.g. ‘Ừ nè, gửi lại một cái ôm nha’. Follow the saved account style for what to call the commenter and how to refer to yourself. The title in the incoming turn describes the addressee, so never copy it as a title for the commenter. If the saved style leaves the address unclear, omit it. Meet the configured word range with a complete conversational line and no filler.",
-  personal_praise: "The commenter gave the current user a personal compliment, such as ‘Xinh dễ thương em’. Each suggestion should accept it in a brief, everyday thank-you addressed to the commenter. The word ‘em’ refers to the current user and does not establish what to call the commenter. Use the account’s configured address if appropriate. Avoid describing the photo or location, inventing actions or emotions such as embarrassment, and thanking the person for visiting the post.",
-  view_comparison: "Answer the comparison from the current user’s point of view. In the standalone reply ‘Gấp đôi view mình 😅’, the omitted subject is the person being replied to and ‘mình’ means the commenter. Resolve the sentence as “Your views are twice mine.” This still holds when the UI omits the root post or labels the visible comment as a standalone post. For Ngọc replying to Doona, it is Ngọc’s views that are double Doona’s. Write as Ngọc, acknowledging her own higher count lightly, without pitying her own count or praising Doona as the owner of the higher count. In longer exchanges, explicit subject or recipient evidence overrides the omitted-subject reading. Reply lightly to the comparison without computing or repeating figures, praising the commenter as if they reached the root result, addressing them by a guessed title, or inventing week targets, payouts, or future outcomes.",
-  shared_credit: "Acknowledge the shared effort that the commenter mentioned. Refer to the group as contributors, while speaking to this one commenter. Keep the outcome with its actual owner and avoid giving advice or promising what happens next.",
-  reader_appreciation: "The commenter is thanking the current user for sharing. Reply to them as the author with a brief acknowledgment for reading or taking something from the post. Do not thank them for sharing or claim they have followed the account.",
-  praise: "Accept the praise from the person who gave it. For example, ‘Quá đều tay luôn. Hihi’ praises the root author's consistency. A brief everyday thank-you fits, and one concrete detail is optional when directly supported. Never send the advice back to the commenter, assign the result to them, recycle the chart as commentary, or turn unlabelled numbers into prices. A term the commenter uses to address the current user is not evidence about the commenter.",
+  idea_praise:
+    "The latest comment praises an idea. Resolve ‘đề xuất này’ or ‘ý tưởng này’ to the actual proposal in the parent turn. If the current user proposed it, reply as that person, with a brief acknowledgment or by lightly continuing the joke. For example, if the parent jokes about solving a grade-12 math problem to open apps after midnight, stay with the math challenge or sleeping earlier. Do not reinterpret ‘đề xuất’ as a platform recommendation algorithm, moderation sweep, or account metrics. When the proposal is unavailable, briefly acknowledge the praise without guessing the subject. Respect the saved addressing style.",
+  named_acknowledgement:
+    "The commenter is briefly acknowledging the person they address. In ‘Dạ chị Ngọc’, the commenter is speaking to Ngọc. Write as the signed-in user answering the commenter. When the user is Ngọc, do not call the commenter chị Ngọc, thank Ngọc for sharing, or write as a reader listening to Ngọc. Answer only the brief social acknowledgment. Never turn it into a summary, comment on the article, advice, or a new claim about learning, following, or listening. If a warm emoji is present, a natural response may mirror its warmth, e.g. ‘Ừ nè, gửi lại một cái ôm nha’. Follow the saved account style for what to call the commenter and how to refer to yourself. The title in the incoming turn describes the addressee, so never copy it as a title for the commenter. If the saved style leaves the address unclear, omit it. Meet the configured word range with a complete conversational line and no filler.",
+  personal_praise:
+    "The commenter gave the current user a personal compliment, such as ‘Xinh dễ thương em’. Each suggestion should accept it in a brief, everyday thank-you addressed to the commenter. The word ‘em’ refers to the current user and does not establish what to call the commenter. Use the account’s configured address if appropriate. Avoid describing the photo or location, inventing actions or emotions such as embarrassment, and thanking the person for visiting the post.",
+  view_comparison:
+    "Answer the comparison from the current user’s point of view. In the standalone reply ‘Gấp đôi view mình 😅’, the omitted subject is the person being replied to and ‘mình’ means the commenter. Resolve the sentence as “Your views are twice mine.” This still holds when the UI omits the root post or labels the visible comment as a standalone post. For Ngọc replying to Doona, it is Ngọc’s views that are double Doona’s. Write as Ngọc, acknowledging her own higher count lightly, without pitying her own count or praising Doona as the owner of the higher count. In longer exchanges, explicit subject or recipient evidence overrides the omitted-subject reading. Reply lightly to the comparison without computing or repeating figures, praising the commenter as if they reached the root result, addressing them by a guessed title, or inventing week targets, payouts, or future outcomes.",
+  shared_credit:
+    "Acknowledge the shared effort that the commenter mentioned. Refer to the group as contributors, while speaking to this one commenter. Keep the outcome with its actual owner and avoid giving advice or promising what happens next.",
+  reader_appreciation:
+    "The commenter is thanking the current user for sharing. Reply to them as the author with a brief acknowledgment for reading or taking something from the post. Do not thank them for sharing or claim they have followed the account.",
+  praise:
+    "Accept the praise from the person who gave it. For example, ‘Quá đều tay luôn. Hihi’ praises the root author's consistency. A brief everyday thank-you fits, and one concrete detail is optional when directly supported. Never send the advice back to the commenter, assign the result to them, recycle the chart as commentary, or turn unlabelled numbers into prices. A term the commenter uses to address the current user is not evidence about the commenter.",
 };
 function ownPostAcknowledgementInstructions(post) {
   const intent = ownPostAcknowledgement(post);
   if (!intent) return "";
   const recipient = encouragementRecipient(post);
-  return " OWN-POST ACKNOWLEDGMENT: Answer the latest comment as the current user. Preserve the ownership established by the conversation. " +
+  return (
+    " OWN-POST ACKNOWLEDGMENT: Answer the latest comment as the current user. Preserve the ownership established by the conversation. " +
     OWN_POST_ACKNOWLEDGEMENT_INSTRUCTIONS[intent] +
     " Use distinct short, conversational lines. Avoid formal filler about receiving a compliment, rating the wording, invented reactions or support, guesses about the future, and thanking a crowd. Do not stretch a simple social reply into an explanation." +
-    (recipient ? ` If using forms of address, call the commenter ‘${recipient}’ and refer to yourself as ‘em’ as configured.` : "");
+    (recipient
+      ? ` If using forms of address, call the commenter ‘${recipient}’ and refer to yourself as ‘em’ as configured.`
+      : "")
+  );
 }
 function simpleGoodWishTarget(post = {}) {
-  const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
-  return /^chúc\s+(?:(?:em|anh|chị|bạn|bà|cậu|nàng)\s+)?(?:một\s+ngày\s+)?(?:vui\s+vẻ|tốt\s+lành|buổi\s+(?:sáng|chiều|tối)\s+vui\s+vẻ)(?:\s+(?:nha|nh[eé]z?|nè|ạ|ha|luôn))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(target);
+  const target = String(post.target_text ?? post.text ?? "")
+    .normalize("NFC")
+    .trim();
+  return /^chúc\s+(?:(?:em|anh|chị|bạn|bà|cậu|nàng)\s+)?(?:một\s+ngày\s+)?(?:vui\s+vẻ|tốt\s+lành|buổi\s+(?:sáng|chiều|tối)\s+vui\s+vẻ)(?:\s+(?:nha|nh[eé]z?|nè|ạ|ha|luôn))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(
+    target,
+  );
 }
 function simpleAcknowledgementDrift(reply, allowGroupMention = false) {
-  const value = String(reply || "").normalize("NFC").trim();
+  const value = String(reply || "")
+    .normalize("NFC")
+    .trim();
   const thanks = value.match(/(?<!\p{L})c[ảá]m\s*ơn(?!\p{L})/giu) || [];
   const addressesGroup =
     /(?<!\p{L})(?:mọi\s+người|cả\s+nhà|tất\s+cả|các\s+(?:bạn|anh|chị|em)|anh\s+chị\s+em)(?!\p{L})/iu;
   const gradesMessage =
     /lời\s+(?:chúc|khen|động\s+viên)(?:\s+(?:này|ấy|đó|của\s+[\p{L}]+))?\s+(?:(?:rất|thật|quá)\s+)?(?:dễ\s+thương|ngọt\s+ngào|đáng\s+yêu|ấm\s+áp)/iu;
-  const commentsOnMessage = /(?:^|[,.!…;]\s*)lời\s+(?:chúc|khen|động\s+viên)\s+(?:này|ấy|đó)(?!\p{L})/iu;
+  const commentsOnMessage =
+    /(?:^|[,.!…;]\s*)lời\s+(?:chúc|khen|động\s+viên)\s+(?:này|ấy|đó)(?!\p{L})/iu;
   const performsAcceptance = /(?:xin\s+)?nhận\s+(?:được\s+)?lời\s+(?:chúc|khen|động\s+viên)/iu;
   const inventsReaction = /vui\s+(?:quá\s+trời|cả\s+buổi)|(?:đọc|nghe)[^.!?…\n]{0,35}cười/iu;
-  return thanks.length > 1 || (!allowGroupMention && addressesGroup.test(value)) ||
-    [gradesMessage, commentsOnMessage, performsAcceptance, inventsReaction].some((pattern) => pattern.test(value));
+  return (
+    thanks.length > 1 ||
+    (!allowGroupMention && addressesGroup.test(value)) ||
+    [gradesMessage, commentsOnMessage, performsAcceptance, inventsReaction].some((pattern) =>
+      pattern.test(value),
+    )
+  );
 }
 const SIMPLE_ACKNOWLEDGEMENT_RULE =
   " Address only the person who wrote the target comment. Thank once, without praising or grading the wording of the wish, inventing an emotional reaction, or thanking a group who did not write the comment.";
 function simpleGoodWishReplyFits(reply) {
   const value = String(reply || "").trim();
-  return !simpleAcknowledgementDrift(value) &&
-    !/^(?:và\s+chúc|(?:hôm|ngày hôm)\s+nay\s+(?:của|.+thế\s+nào))|có\s+trọn\s+vẹn\s+không/iu.test(value) &&
-    /(?:c[ảá]m\s*ơn|chúc)/iu.test(value);
+  return (
+    !simpleAcknowledgementDrift(value) &&
+    !/^(?:và\s+chúc|(?:hôm|ngày hôm)\s+nay\s+(?:của|.+thế\s+nào))|có\s+trọn\s+vẹn\s+không/iu.test(
+      value,
+    ) &&
+    /(?:c[ảá]m\s*ơn|chúc)/iu.test(value)
+  );
 }
 function bareCongratulationReplyFits(reply, post) {
-  return bareCongratulationTarget(post) && /c[ảá]m\s+ơn/iu.test(reply) &&
+  return (
+    bareCongratulationTarget(post) &&
+    /c[ảá]m\s+ơn/iu.test(reply) &&
     !simpleAcknowledgementDrift(reply) &&
-    !/(?:chặng\s+đường|đường\s+phía\s+trước|hành\s+trình|đà\s+này|về\s+đích|cán\s+mốc|chạm\s+mốc|mục\s+tiêu|biểu\s+đồ|cứ\s+(?:giữ|duy\s+trì)|sẽ\s+sớm|thấy\s+vui\s+(?:quá|cả))/iu.test(String(reply || ""));
+    !/(?:chặng\s+đường|đường\s+phía\s+trước|hành\s+trình|đà\s+này|về\s+đích|cán\s+mốc|chạm\s+mốc|mục\s+tiêu|biểu\s+đồ|cứ\s+(?:giữ|duy\s+trì)|sẽ\s+sớm|thấy\s+vui\s+(?:quá|cả))/iu.test(
+      String(reply || ""),
+    )
+  );
 }
 const SIMPLE_GOOD_WISH_RULE =
-  " SIMPLE GOOD WISH: Acknowledge a simple wish in everyday language. Thank once or return a brief wish. Do not ask how the other person's day went just to fill the reply. Avoid orphaned openings such as ‘Và chúc…’ and canned lines such as ‘Em nhận lời chúc ngọt ngào của anh rồi nha’. Keep the configured word range and respect explicit forms of address." + SIMPLE_ACKNOWLEDGEMENT_RULE;
+  " SIMPLE GOOD WISH: Acknowledge a simple wish in everyday language. Thank once or return a brief wish. Do not ask how the other person's day went just to fill the reply. Avoid orphaned openings such as ‘Và chúc…’ and canned lines such as ‘Em nhận lời chúc ngọt ngào của anh rồi nha’. Keep the configured word range and respect explicit forms of address." +
+  SIMPLE_ACKNOWLEDGEMENT_RULE;
 function bareCongratulationTarget(post = {}) {
-  const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
-  return /^chúc\s+mừng(?:\s+(?:bạn|bà|anh|chị|em|bác|nàng|cậu|bro))?(?:\s+(?:nha|nhé|nè|ạ|ha|luôn))*(?:[\s,.!…–—-]+(?:cứ\s+)?(?:duy\s+trì\s+(?:ổn\s+định|đều\s+đặn)|giữ\s+(?:nhịp|phong\s+độ)(?:\s+đều\s+đặn)?|cố\s+lên|ráng\s+lên)(?:\s+(?:nha|nhé|nè|ạ|ha))*)?[\s\p{P}\p{S}\uFE0F]*$/iu.test(target);
+  const target = String(post.target_text ?? post.text ?? "")
+    .normalize("NFC")
+    .trim();
+  return /^chúc\s+mừng(?:\s+(?:bạn|bà|anh|chị|em|bác|nàng|cậu|bro))?(?:\s+(?:nha|nhé|nè|ạ|ha|luôn))*(?:[\s,.!…–—-]+(?:cứ\s+)?(?:duy\s+trì\s+(?:ổn\s+định|đều\s+đặn)|giữ\s+(?:nhịp|phong\s+độ)(?:\s+đều\s+đặn)?|cố\s+lên|ráng\s+lên)(?:\s+(?:nha|nhé|nè|ạ|ha))*)?[\s\p{P}\p{S}\uFE0F]*$/iu.test(
+    target,
+  );
 }
 function acknowledgesSimpleWish(reply, post) {
-  return (bareCongratulationTarget(post) || simpleGoodWishTarget(post)) &&
+  return (
+    (bareCongratulationTarget(post) || simpleGoodWishTarget(post)) &&
     !simpleAcknowledgementDrift(reply) &&
-    /^(?:(?:dạ|hihi|hì hì)\s*,?\s*)?(?:(?:em|mình|tui|tôi)\s+)?c[ảá]m\s*ơn(?!\p{L})/iu.test(String(reply || "").trim());
+    /^(?:(?:dạ|hihi|hì hì)\s*,?\s*)?(?:(?:em|mình|tui|tôi)\s+)?c[ảá]m\s*ơn(?!\p{L})/iu.test(
+      String(reply || "").trim(),
+    )
+  );
 }
 const BARE_CONGRATULATION_RULE =
-  " BARE CONGRATULATION RULE: The latest comment is a simple congratulations, possibly followed by a short encouragement such as ‘duy trì ổn định nha’. Acknowledge both with one thank-you. Thank the commenter in everyday language, as the recipient of the congratulations. Keep it brief, within the configured word range. You may briefly acknowledge progress directly mentioned in the author's post. Do not describe the journey ahead, analyze the metrics, predict the finish date, coach the commenter, or explain why the result happened." + SIMPLE_ACKNOWLEDGEMENT_RULE;
+  " BARE CONGRATULATION RULE: The latest comment is a simple congratulations, possibly followed by a short encouragement such as ‘duy trì ổn định nha’. Acknowledge both with one thank-you. Thank the commenter in everyday language, as the recipient of the congratulations. Keep it brief, within the configured word range. You may briefly acknowledge progress directly mentioned in the author's post. Do not describe the journey ahead, analyze the metrics, predict the finish date, coach the commenter, or explain why the result happened." +
+  SIMPLE_ACKNOWLEDGEMENT_RULE;
 function directEncouragementTarget(post = {}) {
   if (ownResultPraiseTarget(post)) return true;
-  const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
-  return target.length <= 120 && !/[?？]/u.test(target) &&
-    /(?:^|[.!?,]\s*|(?:giỏi|hay|đỉnh)\s+quá\s+|(?<!\p{L})(?:nhỉ|ha|nè)\s+)(?:(?:bạn|anh|chị|em)\s+)?(?:cố\s+(?:lên|gắng\s+(?:lên|nha|nhé|để\s+(?:về\s+đích|đạt|chạm)|về\s+đích))|ráng\s+lên|làm\s+được\s+mà)(?=$|[^\p{L}])/iu.test(target);
+  const target = String(post.target_text ?? post.text ?? "")
+    .normalize("NFC")
+    .trim();
+  return (
+    target.length <= 120 &&
+    !/[?？]/u.test(target) &&
+    /(?:^|[.!?,]\s*|(?:giỏi|hay|đỉnh)\s+quá\s+|(?<!\p{L})(?:nhỉ|ha|nè)\s+)(?:(?:bạn|anh|chị|em)\s+)?(?:cố\s+(?:lên|gắng\s+(?:lên|nha|nhé|để\s+(?:về\s+đích|đạt|chạm)|về\s+đích))|ráng\s+lên|làm\s+được\s+mà)(?=$|[^\p{L}])/iu.test(
+      target,
+    )
+  );
 }
 function encouragementRecipient(post = {}) {
   const style = String(post.style ?? post.style_hint ?? "").normalize("NFC");
-  const matches = [...style.matchAll(
-    /(?<!\p{L})gọi\s+['"‘’“”]?(anh|chị)(?:\s*\/\s*(?:a|c))?['"‘’“”]?(?:\s+hoặc\s+['"‘’“”]?(?:a|c)['"‘’“”]?)?[\s,;:–—-]+xưng\s+['"‘’“”]?em(?![\p{L}\p{M}])/giu,
-  )];
+  const matches = [
+    ...style.matchAll(
+      /(?<!\p{L})gọi\s+['"‘’“”]?(anh|chị)(?:\s*\/\s*(?:a|c))?['"‘’“”]?(?:\s+hoặc\s+['"‘’“”]?(?:a|c)['"‘’“”]?)?[\s,;:–—-]+xưng\s+['"‘’“”]?em(?![\p{L}\p{M}])/giu,
+    ),
+  ];
   return matches.at(-1)?.[1]?.toLocaleLowerCase() || "";
 }
 function ownPostAcknowledgementFits(reply, intent, post) {
-  const value = String(reply || "").normalize("NFC").trim();
+  const value = String(reply || "")
+    .normalize("NFC")
+    .trim();
   if (intent === "idea_praise") {
-    return Boolean(value) && !incompleteReplyEnding(value) &&
-      !simpleAcknowledgementDrift(value) && !personalAddressingMismatch(value, post) &&
-      !/(?:thuật\s+toán|quét\s+(?:chuẩn|đợt)|timeline|lượt\s+xem|tương\s+tác)/iu.test(value);
+    return (
+      Boolean(value) &&
+      !incompleteReplyEnding(value) &&
+      !simpleAcknowledgementDrift(value) &&
+      !personalAddressingMismatch(value, post) &&
+      !/(?:thuật\s+toán|quét\s+(?:chuẩn|đợt)|timeline|lượt\s+xem|tương\s+tác)/iu.test(value)
+    );
   }
   if (intent === "view_comparison") {
-    return Boolean(value) && !simpleAcknowledgementDrift(value) &&
+    return (
+      Boolean(value) &&
+      !simpleAcknowledgementDrift(value) &&
       !personalAddressingMismatch(value, post) &&
-      !/(?:chị|anh|bạn|nàng)\s+(?:đã\s+)?(?:kiếm|chạm|đạt|vượt)|số\s+liệu\s+của\s+(?:chị|anh|bạn|nàng)|tài\s+khoản\s+bay|chỉ\s+tiêu|theo\s+không\s+kịp|tủi\s+thân|bứt\s+phá|xách\s+dép|học\s+hỏi|chúc\s+mừng|thành\s+quả\s+của|\p{N}/iu.test(value);
+      !/(?:chị|anh|bạn|nàng)\s+(?:đã\s+)?(?:kiếm|chạm|đạt|vượt)|số\s+liệu\s+của\s+(?:chị|anh|bạn|nàng)|tài\s+khoản\s+bay|chỉ\s+tiêu|theo\s+không\s+kịp|tủi\s+thân|bứt\s+phá|xách\s+dép|học\s+hỏi|chúc\s+mừng|thành\s+quả\s+của|\p{N}/iu.test(
+        value,
+      )
+    );
   }
-  if (intent === "personal_praise" &&
-      /(?<!\p{L})(?:ngại|đỏ\s+mặt|đứng|cổng|ghé\s+thăm|ghé\s+qua|bài\s+viết)(?!\p{L})/iu.test(value))
+  if (
+    intent === "personal_praise" &&
+    /(?<!\p{L})(?:ngại|đỏ\s+mặt|đứng|cổng|ghé\s+thăm|ghé\s+qua|bài\s+viết)(?!\p{L})/iu.test(value)
+  )
     return false;
   if (intent === "named_acknowledgement") {
     const target = String(post.target_text ?? post.text ?? "").normalize("NFC");
-    const addressedName = target.match(/\p{Lu}[\p{Ll}\p{M}]*(?:\s+\p{Lu}[\p{Ll}\p{M}]*){0,2}(?=[\s\p{P}\p{S}\uFE0F]*$)/u)?.[0];
-    return Boolean(value) && !incompleteReplyEnding(value) &&
+    const addressedName = target.match(
+      /\p{Lu}[\p{Ll}\p{M}]*(?:\s+\p{Lu}[\p{Ll}\p{M}]*){0,2}(?=[\s\p{P}\p{S}\uFE0F]*$)/u,
+    )?.[0];
+    return (
+      Boolean(value) &&
+      !incompleteReplyEnding(value) &&
       (!addressedName || !value.toLocaleLowerCase().includes(addressedName.toLocaleLowerCase())) &&
-      !/(?:xin\s+phép|chăm\s+chú|lắng\s+nghe|theo\s+dõi|học\s+hỏi|ghi\s+nhận|bài\s+viết|chia\s+sẻ|góc\s+nhìn|kiên\s+trì|bí\s+quyết|kinh\s+nghiệm|tiến\s+bộ)/iu.test(value) &&
-      !personalAddressingMismatch(value, post);
+      !/(?:xin\s+phép|chăm\s+chú|lắng\s+nghe|theo\s+dõi|học\s+hỏi|ghi\s+nhận|bài\s+viết|chia\s+sẻ|góc\s+nhìn|kiên\s+trì|bí\s+quyết|kinh\s+nghiệm|tiến\s+bộ)/iu.test(
+        value,
+      ) &&
+      !personalAddressingMismatch(value, post)
+    );
   }
   const sharedCredit = intent === "shared_credit";
   if (!value || simpleAcknowledgementDrift(value, sharedCredit)) return false;
-  const unsupported = /(?:^|[,.!]\s*)(?:nhiều nha|và chúc|cứ\s+(?:giữ|duy trì|tiếp tục)|giữ vững|phát huy)|(?<!\p{L})(?:mức giá|giá này|dự tính|vui (?:cả ngày|ghê|lắm)|tâm huyết|bất ngờ|học hỏi (?:anh|chị)|có động lực|động viên tinh thần|vui lây|mừng thay|chắc chắn|sắp về đích|chẳng mấy chốc|tín hiệu khả quan|làm việc|công việc|nhịp tăng trưởng|chặng đường phía trước|từ mọi người)(?!\p{L})/iu;
-  const wrongThanks = /c[ảá]m ơn[^.!?,]{0,32}(?:(?:đã|vì)\s+(?:chia sẻ|theo dõi|gửi lời)|vì lời khen)|c[ảá]m ơn\s+(?:mọi người|cả nhà|anh (?:chị )?em|các bạn|tất cả)/iu;
-  if (unsupported.test(value) || wrongThanks.test(value) || incompleteReplyEnding(value) ||
-      engagementManipulationReply(value) || /(?<!\p{L})(\p{L}+)\s+\1(?=$|[^\p{L}])/iu.test(value))
+  const unsupported =
+    /(?:^|[,.!]\s*)(?:nhiều nha|và chúc|cứ\s+(?:giữ|duy trì|tiếp tục)|giữ vững|phát huy)|(?<!\p{L})(?:mức giá|giá này|dự tính|vui (?:cả ngày|ghê|lắm)|tâm huyết|bất ngờ|học hỏi (?:anh|chị)|có động lực|động viên tinh thần|vui lây|mừng thay|chắc chắn|sắp về đích|chẳng mấy chốc|tín hiệu khả quan|làm việc|công việc|nhịp tăng trưởng|chặng đường phía trước|từ mọi người)(?!\p{L})/iu;
+  const wrongThanks =
+    /c[ảá]m ơn[^.!?,]{0,32}(?:(?:đã|vì)\s+(?:chia sẻ|theo dõi|gửi lời)|vì lời khen)|c[ảá]m ơn\s+(?:mọi người|cả nhà|anh (?:chị )?em|các bạn|tất cả)/iu;
+  if (
+    unsupported.test(value) ||
+    wrongThanks.test(value) ||
+    incompleteReplyEnding(value) ||
+    engagementManipulationReply(value) ||
+    /(?<!\p{L})(\p{L}+)\s+\1(?=$|[^\p{L}])/iu.test(value)
+  )
     return false;
   const recipient = encouragementRecipient(post);
-  const directAddress = /(?<!\p{L})(?:c[ảá]m ơn\s+|chúc\s+|nhờ\s+có\s+)(anh|chị|em|nàng|bà|bác)(?!\p{L}|\s+em(?!\p{L}))|(?<!\p{L})(anh|chị|em|nàng|bà|bác)\s+ơi(?!\p{L})/giu;
-  if ([...value.matchAll(directAddress)].some((match) => (match[1] || match[2]).toLowerCase() !== recipient))
+  const directAddress =
+    /(?<!\p{L})(?:c[ảá]m ơn\s+|chúc\s+|nhờ\s+có\s+)(anh|chị|em|nàng|bà|bác)(?!\p{L}|\s+em(?!\p{L}))|(?<!\p{L})(anh|chị|em|nàng|bà|bác)\s+ơi(?!\p{L})/giu;
+  if (
+    [...value.matchAll(directAddress)].some(
+      (match) => (match[1] || match[2]).toLowerCase() !== recipient,
+    )
+  )
     return false;
   if (sharedCredit)
-    return /(?:anh em|mọi người|cả nhà|các bạn)/iu.test(value) &&
-      /(?:nhờ|góp|cùng|đỡ|hỗ trợ|giúp)/iu.test(value);
+    return (
+      /(?:anh em|mọi người|cả nhà|các bạn)/iu.test(value) &&
+      /(?:nhờ|góp|cùng|đỡ|hỗ trợ|giúp)/iu.test(value)
+    );
   return /(?<!\p{L})c[ảá]m ơn(?!\p{L})/iu.test(value);
 }
 function acknowledgementWording(reply) {
@@ -1601,25 +1736,37 @@ function encouragementInstructions(post) {
   const instruction = praise
     ? " OWN-RESULT PRAISE: The commenter is praising the current user's result on their own post. A simple thank-you fits one option. For other options, continue the exchange in the author's voice with a different detail grounded in the current root post, such as a milestone already crossed, the remaining goal, or a feeling the author actually expressed. Never invent emotions, assign the result to the commenter, or return four slight rewrites of the same thank-you. Keep every reply within the configured word range."
     : DIRECT_ENCOURAGEMENT_RULE;
-  return instruction + SIMPLE_ACKNOWLEDGEMENT_RULE + (recipient
-    ? ` The user's explicit address preference applies here: call the commenter ‘${recipient}’ and refer to yourself as ‘em’, for example ‘Em cảm ơn ${recipient} ${praise ? "đã khen em" : "đã động viên"} nha’.`
-    : "");
+  return (
+    instruction +
+    SIMPLE_ACKNOWLEDGEMENT_RULE +
+    (recipient
+      ? ` The user's explicit address preference applies here: call the commenter ‘${recipient}’ and refer to yourself as ‘em’, for example ‘Em cảm ơn ${recipient} ${praise ? "đã khen em" : "đã động viên"} nha’.`
+      : "")
+  );
 }
 function briefEncouragementThanks(reply, post) {
   if (!directEncouragementTarget(post)) return false;
   const recipient = encouragementRecipient(post);
   const value = String(reply || "").trim();
   if (recipient) {
-    const match = value.match(/^(?:(?:dạ|hihi|hì hì)\s*,?\s*)?em\s+c[ảá]m\s*ơn\s+(anh|chị)(?:\s+(?:nhiều(?:\s+lắm)?|đã\s+động\s+viên|đã\s+khen\s+em))?(?:\s+(?:nha|nhé|ạ))?[\s.!…]*$/iu);
+    const match = value.match(
+      /^(?:(?:dạ|hihi|hì hì)\s*,?\s*)?em\s+c[ảá]m\s*ơn\s+(anh|chị)(?:\s+(?:nhiều(?:\s+lắm)?|đã\s+động\s+viên|đã\s+khen\s+em))?(?:\s+(?:nha|nhé|ạ))?[\s.!…]*$/iu,
+    );
     return match?.[1]?.toLocaleLowerCase() === recipient;
   }
-  return /^(?:(?:dạ|hihi|hì hì)\s*,?\s*)?c[ảá]m\s*ơn(?:\s+(?:nhiều(?:\s+lắm)?|vì\s+đã\s+động\s+viên|lời\s+(?:động\s+viên|khen)))?(?:\s+(?:nha|nhé|ạ))?[\s.!…]*$/iu.test(value);
+  return /^(?:(?:dạ|hihi|hì hì)\s*,?\s*)?c[ảá]m\s*ơn(?:\s+(?:nhiều(?:\s+lắm)?|vì\s+đã\s+động\s+viên|lời\s+(?:động\s+viên|khen)))?(?:\s+(?:nha|nhé|ạ))?[\s.!…]*$/iu.test(
+    value,
+  );
 }
 const DIRECT_ENCOURAGEMENT_RULE =
   " DIRECT ENCOURAGEMENT: The commenter is encouraging the person who will send this reply. When the goal belongs to the current author, acknowledge the encouragement as its recipient. Acknowledge the encouragement with a natural thank-you within the configured word range, even for simple replies. Do not give the commenter coaching such as ‘cứ duy trì’, ‘giữ phong độ’, or ‘tiến bước’; avoid promises, progress reports, and invented shared goals. Keep forms of address optional.";
 function singularPraiseTarget(post = {}) {
-  const target = String(post.target_text ?? post.text ?? "").normalize("NFC").trim();
-  return /^(?:em\s+giỏi\s+(?:lắm|quá|thật)(?:\s+(?:nè|đó|luôn|nha|á))?|giỏi\s+(?:lắm|quá|thật)(?:\s+(?:nè|đó|luôn|nha|á))?\s+em(?:\s+ơi)?)[\s\p{P}\p{S}\uFE0F]*$/iu.test(target);
+  const target = String(post.target_text ?? post.text ?? "")
+    .normalize("NFC")
+    .trim();
+  return /^(?:em\s+giỏi\s+(?:lắm|quá|thật)(?:\s+(?:nè|đó|luôn|nha|á))?|giỏi\s+(?:lắm|quá|thật)(?:\s+(?:nè|đó|luôn|nha|á))?\s+em(?:\s+ơi)?)[\s\p{P}\p{S}\uFE0F]*$/iu.test(
+    target,
+  );
 }
 const SINGULAR_PRAISE_INSTRUCTIONS =
   " DIRECT PRAISE OF ONE PERSON: The commenter calls the current user ‘em’ and praises that one person. Give a short, natural acknowledgment in the current user's voice, especially in option 1. A simple thank-you fits. Use singular self-reference or omit it. Do not turn ‘em’ into ‘tụi em’, invent help or ongoing encouragement from the commenter, promise to work harder, or infer how to address the commenter from their use of ‘em’. Do not force a reference to the root post.";
@@ -1627,19 +1774,22 @@ function ownPostDirectComplimentDriftReply(text, post = {}) {
   if (post?.reply_context !== "reply_to_comment_on_own_post") return false;
   const target = String(post?.target_text || "").trim();
   if (!target || Array.from(target).length > 80 || /[?？]/u.test(target)) return false;
-  const directCompliment = /(?:(?:tóc|mái\s+tóc|kiểu\s+tóc|mái|món|ảnh|hình|áo|váy|bài|post|câu)[\s\S]{0,35}(?:đẹp|xinh|hay|ngon|xịn|ưng|hợp|mượt|gọn|đỉnh|dễ\s+thương)(?![\p{L}])|(?:^|[^\p{L}])(?:đẹp|xinh|hay|ngon|xịn|ưng|hợp|mượt|gọn|đỉnh|dễ\s+thương)(?=$|[^\p{L}]))/iu.test(
-    target,
-  );
+  const directCompliment =
+    /(?:(?:tóc|mái\s+tóc|kiểu\s+tóc|mái|món|ảnh|hình|áo|váy|bài|post|câu)[\s\S]{0,35}(?:đẹp|xinh|hay|ngon|xịn|ưng|hợp|mượt|gọn|đỉnh|dễ\s+thương)(?![\p{L}])|(?:^|[^\p{L}])(?:đẹp|xinh|hay|ngon|xịn|ưng|hợp|mượt|gọn|đỉnh|dễ\s+thương)(?=$|[^\p{L}]))/iu.test(
+      target,
+    );
   if (!directCompliment) return false;
   const value = String(text || "").trim();
   if (!value) return false;
-  const rootProcess = /(?:cắt\s+tóc|thợ\s+(?:hỏi|cắt)|hỏi\s+(?:có\s+)?hài\s+lòng|nằm\s+dưới\s+đất|mọc\s+lại|trên\s+sàn)/iu.test(
-    value,
-  );
+  const rootProcess =
+    /(?:cắt\s+tóc|thợ\s+(?:hỏi|cắt)|hỏi\s+(?:có\s+)?hài\s+lòng|nằm\s+dưới\s+đất|mọc\s+lại|trên\s+sàn)/iu.test(
+      value,
+    );
   if (!rootProcess) return false;
-  const complimentResponse = /(?:cảm\s*ơn|thanks|thank\s+you|vui\s+(?:quá|ghê).{0,20}(?:được|khi)\s+khen|(?:tóc|mái|kiểu).{0,25}(?:đẹp|xinh|hợp|ưng|mượt)|(?:đẹp|xinh|hợp|ưng|mượt).{0,25}(?:tóc|mái|kiểu))/iu.test(
-    value,
-  );
+  const complimentResponse =
+    /(?:cảm\s*ơn|thanks|thank\s+you|vui\s+(?:quá|ghê).{0,20}(?:được|khi)\s+khen|(?:tóc|mái|kiểu).{0,25}(?:đẹp|xinh|hợp|ưng|mượt)|(?:đẹp|xinh|hợp|ưng|mượt).{0,25}(?:tóc|mái|kiểu))/iu.test(
+      value,
+    );
   return !complimentResponse;
 }
 function markOwnPostDirectComplimentDrift(item, post = {}) {
@@ -1703,12 +1853,14 @@ function ownPostCommentMediaDriftReply(text, post = {}) {
     return false;
   const value = String(text || "").trim();
   if (!value) return false;
-  const mediaInventory = /(?:bánh\s*xèo|rau\s+sống|nước\s+chấm|mẹt|chén|xiên|đĩa|cuộn|gắp|giòn|xém\s+cạnh)/iu.test(
-    value,
-  );
-  const intentBridge = /(?:bụng|đói|thèm|muốn|tâm\s+đắc|hưởng\s+ứng|cuốn\s+liền\s+tay|ăn\s+liền|gắp\s+liền|nghe\s+anh|nghe\s+vậy|vậy\s+là)/iu.test(
-    value,
-  );
+  const mediaInventory =
+    /(?:bánh\s*xèo|rau\s+sống|nước\s+chấm|mẹt|chén|xiên|đĩa|cuộn|gắp|giòn|xém\s+cạnh)/iu.test(
+      value,
+    );
+  const intentBridge =
+    /(?:bụng|đói|thèm|muốn|tâm\s+đắc|hưởng\s+ứng|cuốn\s+liền\s+tay|ăn\s+liền|gắp\s+liền|nghe\s+anh|nghe\s+vậy|vậy\s+là)/iu.test(
+      value,
+    );
   return mediaInventory && !intentBridge;
 }
 function markOwnPostCommentMediaDrift(item, post = {}) {
@@ -1724,7 +1876,9 @@ function markOwnPostCommentMediaDrift(item, post = {}) {
   return item;
 }
 function isDirectMealWish(target) {
-  return /(?:ngon\s+miệng|ăn\s+ngon(?:\s+miệng)?|(?:chúc|mời)[^.!?…\n]{0,45}(?:ăn|dùng|uống)[^.!?…\n]{0,30}ngon|(?:cơm|bữa)\s+(?:sáng|trưa|tối)\s+ngon\s+(?:nha|nhé|ạ))(?![\p{L}\p{M}])/iu.test(target);
+  return /(?:ngon\s+miệng|ăn\s+ngon(?:\s+miệng)?|(?:chúc|mời)[^.!?…\n]{0,45}(?:ăn|dùng|uống)[^.!?…\n]{0,30}ngon|(?:cơm|bữa)\s+(?:sáng|trưa|tối)\s+ngon\s+(?:nha|nhé|ạ))(?![\p{L}\p{M}])/iu.test(
+    target,
+  );
 }
 function directFoodWishTarget(post = {}) {
   const target = String(post.target_text ?? post.text ?? "").trim();
@@ -1733,9 +1887,14 @@ function directFoodWishTarget(post = {}) {
   const isCommentTarget =
     post?.target_kind === "comment" ||
     /^reply_to_comment(?:_on_own_post|_on_other_post)$/u.test(String(post?.reply_context || ""));
-  if (replyContextFor(post) === "reply_to_comment_on_own_post" &&
-      /^(?:(?:nhìn|trông)\s+)?ngon(?:\s+(?:quá|ghê|thiệt|thật|lắm))?(?:\s+(?:nha|nhé|nè|ha|ạ))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(target) &&
-      !/[?？]/u.test(target)) return true;
+  if (
+    replyContextFor(post) === "reply_to_comment_on_own_post" &&
+    /^(?:(?:nhìn|trông)\s+)?ngon(?:\s+(?:quá|ghê|thiệt|thật|lắm))?(?:\s+(?:nha|nhé|nè|ha|ạ))*[\s\p{P}\p{S}\uFE0F]*$/iu.test(
+      target,
+    ) &&
+    !/[?？]/u.test(target)
+  )
+    return true;
   return (
     isCommentTarget &&
     /(?:bát|tô|ly|cơm|canh|món|bữa)[^.!?…]{0,45}(?:ngon|thơm|nóng|đúng\s+điệu|hợp\s+vị)|(?:ngon|thơm|nóng|đúng\s+điệu|hợp\s+vị)[^.!?…]{0,45}(?:bát|tô|ly|cơm|canh|món|bữa)/iu.test(
@@ -1750,22 +1909,24 @@ function directFoodWishDriftReply(text, post = {}) {
   // A short wish such as “Ngon quá, chúc bác ăn ngon miệng” is its own
   // conversational turn. Do not invent a new meal, schedule or action from
   // the ancestor post/media (e.g. “chuẩn bị từ sáng”, “bữa trưa”, “đổi món”).
-  const acknowledgesWish = /(?:cảm\s*ơn|thanks|thank\s+you|chúc|ngon\s+miệng|mời\s+.+(?:ăn|dùng))/iu.test(
-      value,
-    ),
-    unrelatedAction = /(?:phần\s+ăn|chuẩn\s+bị|từ\s+sáng|đi\s+làm|mang\s+theo|bữa\s+(?:sáng|trưa|tối)|đổi\s+món|cùng\s+em|lạ\s+miệng|làm\s+nhanh|đang\s+ăn|đang\s+uống|mời\s+.+\s+dùng\s+bữa|nạp\s+năng\s+lượng|cơm\s+nhà|tự\s+nấu|ấm\s+bụng|hộp\s+(?:cơm|nhiều\s+món)|ăn\s+một\s+mình|hơi\s+no|chiều\s+làm\s+việc)/iu.test(
-      value,
-    ),
-    mediaDetailOnly = /(?:cơm|món|bát|hộp|phần|canh|thịt|rau|nước)/iu.test(value) && !acknowledgesWish;
+  const acknowledgesWish =
+      /(?:cảm\s*ơn|thanks|thank\s+you|chúc|ngon\s+miệng|mời\s+.+(?:ăn|dùng))/iu.test(value),
+    unrelatedAction =
+      /(?:phần\s+ăn|chuẩn\s+bị|từ\s+sáng|đi\s+làm|mang\s+theo|bữa\s+(?:sáng|trưa|tối)|đổi\s+món|cùng\s+em|lạ\s+miệng|làm\s+nhanh|đang\s+ăn|đang\s+uống|mời\s+.+\s+dùng\s+bữa|nạp\s+năng\s+lượng|cơm\s+nhà|tự\s+nấu|ấm\s+bụng|hộp\s+(?:cơm|nhiều\s+món)|ăn\s+một\s+mình|hơi\s+no|chiều\s+làm\s+việc)/iu.test(
+        value,
+      ),
+    mediaDetailOnly =
+      /(?:cơm|món|bát|hộp|phần|canh|thịt|rau|nước)/iu.test(value) && !acknowledgesWish;
   return unrelatedAction || mediaDetailOnly;
 }
 function directFoodWishReplyMismatch(text, post = {}) {
   if (!directFoodWishTarget(post)) return false;
   const value = String(text || "").trim();
   if (!value) return true;
-  const acknowledgesWish = /(?:cảm\s*ơn|thanks|thank\s+you|ngon\s+miệng|ăn\s+ngon|dùng\s+bữa|mời\s+.+(?:ăn|dùng)|chúc[^.!?…]{0,35}(?:ngon|ăn|dùng|uống))/iu.test(
-    value,
-  );
+  const acknowledgesWish =
+    /(?:cảm\s*ơn|thanks|thank\s+you|ngon\s+miệng|ăn\s+ngon|dùng\s+bữa|mời\s+.+(?:ăn|dùng)|chúc[^.!?…]{0,35}(?:ngon|ăn|dùng|uống))/iu.test(
+      value,
+    );
   const malformedAddress = /(?:cảm\s*ơn|chúc|mời)\s+(?:sai|n(?:í|i)s?)\b/iu.test(value);
   return (
     directFoodWishDriftReply(value, post) ||
@@ -1773,7 +1934,9 @@ function directFoodWishReplyMismatch(text, post = {}) {
     malformedAddress ||
     simpleAcknowledgementDrift(value) ||
     /vì\s+(?:đã\s+gửi|lời\s+chúc\s+này)|nhiều\s+vì\s+lời\s+chúc/iu.test(value) ||
-    /(?<!\p{L})(?:(?:thấy|nghe|đọc|làm)\b[^.!?…\n]{0,35}vui|vui\s+(?:ghê|lắm|quá|cả\s+buổi|hẳn|thiệt)|cười\s+(?:luôn|tủm\s+tỉm))(?!\p{L})/iu.test(value) ||
+    /(?<!\p{L})(?:(?:thấy|nghe|đọc|làm)\b[^.!?…\n]{0,35}vui|vui\s+(?:ghê|lắm|quá|cả\s+buổi|hẳn|thiệt)|cười\s+(?:luôn|tủm\s+tỉm))(?!\p{L})/iu.test(
+      value,
+    ) ||
     directFoodWishAddressMismatch(value, post)
   );
 }
@@ -1793,7 +1956,10 @@ function directFoodWishAddress(post = {}) {
   const preferred = encouragementRecipient(post);
   if (preferred) return preferred;
   const style = String(post?.style ?? post?.style_hint ?? "");
-  const styleCall = style.match(/gọi\s+['"`]([^'"`\n]+?)['"`](?=\s*(?:\/|,|;|\s+xưng\b))/iu)?.[1]?.split("/")[0]?.trim();
+  const styleCall = style
+    .match(/gọi\s+['"`]([^'"`\n]+?)['"`](?=\s*(?:\/|,|;|\s+xưng\b))/iu)?.[1]
+    ?.split("/")[0]
+    ?.trim();
   if (styleCall) return styleCall;
   return "";
 }
@@ -1803,10 +1969,16 @@ function directFoodWishAddressMismatch(text, post = {}) {
   const actual = String(text || "").match(
     /(?:cảm\s*ơn\s+(?:lời\s+chúc\s+của\s+)?|chúc\s+|mời\s+)([^\s,!.?]+)/iu,
   )?.[1];
-  if (!actual || /^(?:nha|nhé|ạ|nè|nhiều|nghen|vì|ăn|dùng)(?:[,.!?…]|$)/iu.test(actual)) return false;
-  const normalize = (value) => String(value || "").replace(/[.,!?…]+$/gu, "").toLocaleLowerCase();
-  const expected = normalize(preferred), received = normalize(actual);
-  const aliases = expected === "anh" ? ["anh", "a"] : expected === "chị" ? ["chị", "c"] : [expected];
+  if (!actual || /^(?:nha|nhé|ạ|nè|nhiều|nghen|vì|ăn|dùng)(?:[,.!?…]|$)/iu.test(actual))
+    return false;
+  const normalize = (value) =>
+    String(value || "")
+      .replace(/[.,!?…]+$/gu, "")
+      .toLocaleLowerCase();
+  const expected = normalize(preferred),
+    received = normalize(actual);
+  const aliases =
+    expected === "anh" ? ["anh", "a"] : expected === "chị" ? ["chị", "c"] : [expected];
   return !aliases.includes(received);
 }
 function threadQualityContext(post = {}) {
@@ -1823,7 +1995,9 @@ function threadQualityContext(post = {}) {
   ];
   const seen = new Set();
   const uniqueTurns = turns.filter((turn) => {
-    const text = String(turn?.text || turn?.reply || "").replace(/\s+/gu, " ").trim();
+    const text = String(turn?.text || turn?.reply || "")
+      .replace(/\s+/gu, " ")
+      .trim();
     const key = `${String(turn?.author || "").toLowerCase()}|${normalizeReplyText(text)}`;
     if (!text || seen.has(key)) return false;
     seen.add(key);
@@ -1869,9 +2043,14 @@ const COMPACT_NUMBER_UNITS =
   "ngày|tuần|tháng|năm|giờ|phút|giây|lần|bài|người|lượt|mốc|tuổi|phần|câu|điểm|kỳ|đợt|nghìn|ngàn|triệu|tỷ|trăm";
 function normalizeCompactNumberWords(text) {
   const pattern =
-    "\\b(" + Object.keys(COMPACT_NUMBER_WORDS).join("|") + ")\\s+(?=(?:" + COMPACT_NUMBER_UNITS + ")\\b)";
-  return String(text || "").replace(new RegExp(pattern, "giu"), (match, word) =>
-    `${COMPACT_NUMBER_WORDS[String(word).toLocaleLowerCase()] || word} `,
+    "\\b(" +
+    Object.keys(COMPACT_NUMBER_WORDS).join("|") +
+    ")\\s+(?=(?:" +
+    COMPACT_NUMBER_UNITS +
+    ")\\b)";
+  return String(text || "").replace(
+    new RegExp(pattern, "giu"),
+    (match, word) => `${COMPACT_NUMBER_WORDS[String(word).toLocaleLowerCase()] || word} `,
   );
 }
 function conversationHistoryTexts(post = {}) {
@@ -1879,7 +2058,11 @@ function conversationHistoryTexts(post = {}) {
   if (!context) return [];
   const target = normalizeReplyText(context.target);
   return context.turns
-    .map((turn) => String(turn?.text || turn?.reply || "").replace(/\s+/gu, " ").trim())
+    .map((turn) =>
+      String(turn?.text || turn?.reply || "")
+        .replace(/\s+/gu, " ")
+        .trim(),
+    )
     .filter((text) => text && normalizeReplyText(text) !== target);
 }
 function repeatedConversationReply(reply, post = {}) {
@@ -2052,10 +2235,9 @@ function stripMisattributedShareThanks(text, post = {}) {
 }
 function removeCannedCrunchPhrase(text) {
   if (typeof text !== "string") return text;
-  return text.normalize("NFC").replace(
-    /(?<![\p{L}\p{M}])(giòn)[\s\p{Pd}]+rụm(?![\p{L}\p{M}])/giu,
-    "$1",
-  );
+  return text
+    .normalize("NFC")
+    .replace(/(?<![\p{L}\p{M}])(giòn)[\s\p{Pd}]+rụm(?![\p{L}\p{M}])/giu, "$1");
 }
 function normalizeReplies(result, post) {
   if (!Array.isArray(result?.replies)) return result;
@@ -2072,7 +2254,10 @@ function normalizeReplies(result, post) {
     if (repaired !== item.reply) {
       item.reply = repaired;
       item.quality_issues = [
-        ...new Set([...(Array.isArray(item.quality_issues) ? item.quality_issues : []), "Đã sửa cụm từ tiếng Việt bị biến dạng"]),
+        ...new Set([
+          ...(Array.isArray(item.quality_issues) ? item.quality_issues : []),
+          "Đã sửa cụm từ tiếng Việt bị biến dạng",
+        ]),
       ];
       const score = Number(item.relevance_score);
       item.relevance_score = Number.isFinite(score) ? Math.min(score, 30) : 30;
@@ -2246,7 +2431,10 @@ function validateTranslations(result, post, allowMissing = false) {
       "Gợi ý không tuân thủ xưng hô của phong cách riêng. Hãy dùng đúng đại từ đã thiết lập và tạo lại.",
     );
   const styleRange = postStyleWordRange(post);
-  if (styleRange && result.replies?.some((item) => postStyleLengthMismatch(item.reply, post, expected || actual)))
+  if (
+    styleRange &&
+    result.replies?.some((item) => postStyleLengthMismatch(item.reply, post, expected || actual))
+  )
     throw new Error(
       `Gợi ý không tuân thủ độ dài phong cách đã chọn (${styleRange.min}-${styleRange.max} từ). Hãy tạo lại gợi ý.`,
     );
@@ -2373,17 +2561,27 @@ function cleanPost(input) {
       Math.min(5, Number(input.mediaCount) || 0),
     ),
     visible_context = String(input.context || "").slice(0, 3000),
-    normalizedConversationHistory = (Array.isArray(input.conversationHistory) ? input.conversationHistory : Array.isArray(input.conversation_history) ? input.conversation_history : [])
+    normalizedConversationHistory = (
+      Array.isArray(input.conversationHistory)
+        ? input.conversationHistory
+        : Array.isArray(input.conversation_history)
+          ? input.conversation_history
+          : []
+    )
       .map((turn, index) => ({
         turn: Number(turn?.turn) || index + 1,
         author: String(turn?.author || "").slice(0, 80),
-        text: String(turn?.text || turn?.reply || "").replace(/\s+/gu, " ").trim().slice(0, 320),
+        text: String(turn?.text || turn?.reply || "")
+          .replace(/\s+/gu, " ")
+          .trim()
+          .slice(0, 320),
       }))
       .filter((turn) => turn.text)
       .slice(0, 32),
-    conversation_history = normalizedConversationHistory.length > 8
-      ? [normalizedConversationHistory[0], ...normalizedConversationHistory.slice(-7)]
-      : normalizedConversationHistory;
+    conversation_history =
+      normalizedConversationHistory.length > 8
+        ? [normalizedConversationHistory[0], ...normalizedConversationHistory.slice(-7)]
+        : normalizedConversationHistory;
   let contextData = {};
   try {
     contextData = JSON.parse(visible_context) || {};
@@ -2398,26 +2596,33 @@ function cleanPost(input) {
     contextTurns = Array.isArray(contextData.turns) ? contextData.turns : [],
     viewerHandle = normalizeContextHandle(contextData.viewer_handle || input.viewerHandle),
     targetAuthor = normalizeContextHandle(
-      contextData.target_author || contextData.target_turn?.author || input.targetAuthor || match[1],
+      contextData.target_author ||
+        contextData.target_turn?.author ||
+        input.targetAuthor ||
+        match[1],
     ),
     rootAuthor = normalizeContextHandle(
-      contextData.root_author || contextTurns[0]?.author || conversation_history[0]?.author ||
-        contextData.target_author || match[1],
+      contextData.root_author ||
+        contextTurns[0]?.author ||
+        conversation_history[0]?.author ||
+        contextData.target_author ||
+        match[1],
     ),
     rootIsViewer =
       contextData.root_is_viewer === true || (!!viewerHandle && rootAuthor === viewerHandle),
-    targetKind = contextData.target_kind === "comment" || contextTurns.length || conversation_history.length
-      ? "comment"
-      : "post",
+    targetKind =
+      contextData.target_kind === "comment" || contextTurns.length || conversation_history.length
+        ? "comment"
+        : "post",
     replyContext =
       replyContextFor(input) ||
-        (targetKind === "comment"
-          ? rootIsViewer
-            ? "reply_to_comment_on_own_post"
-            : "reply_to_comment_on_other_post"
-          : rootIsViewer
-            ? "reply_to_own_post"
-            : "reply_to_other_user_post");
+      (targetKind === "comment"
+        ? rootIsViewer
+          ? "reply_to_comment_on_own_post"
+          : "reply_to_comment_on_other_post"
+        : rootIsViewer
+          ? "reply_to_own_post"
+          : "reply_to_other_user_post");
   if (!text && !media_expected && !visible_context.trim())
     throw new Error("Bài không có nội dung chữ, media hoặc trích dẫn để phân tích.");
   if (media_expected && !media_urls.length && !media_inline.length)
@@ -2430,18 +2635,27 @@ function cleanPost(input) {
   const style = String(input.style ?? input.style_hint ?? "").slice(0, 8000);
   const rawStyleWordRange = input?.styleWordRange || input?.style_word_range;
   const styleWordRange =
-    rawStyleWordRange && Number(rawStyleWordRange.min) > 0 && Number(rawStyleWordRange.max) >= Number(rawStyleWordRange.min)
+    rawStyleWordRange &&
+    Number(rawStyleWordRange.min) > 0 &&
+    Number(rawStyleWordRange.max) >= Number(rawStyleWordRange.min)
       ? {
           min: Math.min(100, Number(rawStyleWordRange.min)),
           max: Math.min(100, Number(rawStyleWordRange.max)),
         }
       : null;
-  const autoRepostTopics = (Array.isArray(input.autoRepostTopics)
-    ? input.autoRepostTopics
-    : Array.isArray(input.auto_repost_topics)
-      ? input.auto_repost_topics
-      : [])
-    .map((value) => String(value || "").replace(/\s+/gu, " ").trim().slice(0, 60))
+  const autoRepostTopics = (
+    Array.isArray(input.autoRepostTopics)
+      ? input.autoRepostTopics
+      : Array.isArray(input.auto_repost_topics)
+        ? input.auto_repost_topics
+        : []
+  )
+    .map((value) =>
+      String(value || "")
+        .replace(/\s+/gu, " ")
+        .trim()
+        .slice(0, 60),
+    )
     .filter(Boolean)
     .slice(0, 30);
   return {
@@ -2454,8 +2668,7 @@ function cleanPost(input) {
     target_kind: targetKind,
     reply_context: replyContext,
     conversation_depth: Number(contextData.conversation_depth) || conversation_history.length + 1,
-    immediate_parent_turn:
-      contextData.immediate_parent_turn || conversation_history.at(-1) || null,
+    immediate_parent_turn: contextData.immediate_parent_turn || conversation_history.at(-1) || null,
     target_text: text,
     draft_text: String(input.draftText || input.draft_text || "")
       .replace(/\s+/gu, " ")
@@ -2493,7 +2706,8 @@ function cleanPost(input) {
     // style; dropping either one silently disabled personal styles.
     style,
     style_hint: style,
-    styleWordRange: styleWordRange && styleWordRange.max >= styleWordRange.min ? styleWordRange : undefined,
+    styleWordRange:
+      styleWordRange && styleWordRange.max >= styleWordRange.min ? styleWordRange : undefined,
     auto_repost_topics: autoRepostTopics,
     reply_count: Math.min(10, Math.max(1, Number(input.replyCount) || 3)),
     quick_greeting_used: input.quickGreetingUsed === true,
@@ -3665,16 +3879,15 @@ function replyInstructions(message) {
     " MEDIA ACTION RULE: With a clear image, name the verified object/action (e.g. xôi in the poster's hand), not generic ‘món ăn’/‘năng lượng’ or invented hunger. Media is secondary when target_text already contains a concrete claim, plan, answer or opinion; in that case do not import decorative or unrelated image details such as a sign, cat, flowers, furniture or background into the reply. Do not ask for a portion unless sharing is explicit.";
   const ownershipRule =
     message?.post?.reply_context === "reply_to_comment_on_own_post"
-       ? " OWN-POST COMMENT MODE: The root post belongs to the current user, but target_text is another person's comment. Write from the root author's point of view and reply to that comment's exact claim, joke, question or tone first. Use the root post to resolve who did what: an action, meal, experience or object described in the root post belongs to the current user unless the comment explicitly assigns it to someone else. A style that asks you to call the commenter ‘anh’ or ‘chị’ changes only address terms; it never changes who authored or shared the root post. Never write ‘cảm ơn anh/chị đã chia sẻ’, ‘cảm ơn bạn đã đăng khoảnh khắc này’ or similar when the commenter is reacting to the current user's own post, because A is the person who shared it. Thank the commenter only for a direct thank-you, congratulations, or a specific action the commenter actually did. If the comment says the commenter has not eaten something for a long time, treat that as the commenter's memory/reaction; do not write as if the commenter just ate the root author's food, and do not swap speakers with phrases like ‘chị ăn lại’ or ‘em cũng thèm’ without textual support. If the comment states a first-person plan or answer (‘mình sẽ…’, ‘tôi muốn…’, ‘dự định…’), respond to that plan as the commenter's hypothetical choice and preserve its named activity and objects; never let the attached image replace the plan with a sign, cat, flowers, furniture or other decorative detail. If the root praises, quotes or celebrates a third party's result, keep the achievement attributed to that third party: do not make the current user sound as if they received the money, earned the result, were praised or caused it, and do not invent causes such as ‘trộm vía’, ‘nhờ chăm chỉ/cày cuốc’, ‘may mắn’ or ‘được mọi người ủng hộ’. Prefer a direct bridge between both turns: acknowledge the commenter's reaction or joke, then confirm one concrete detail without taking credit. Do not generate a fresh reply to the root post, summarize the root caption, or let the root post drown out the comment. CONTEXT SCORING: In this mode, relevance_score must prioritize correct speaker/actor attribution and a concrete link between target_text and the root post above generic fluency. A grounded, role-correct reply should outrank a poetic image reaction; penalize any reply that assigns the root author's action to the commenter, replaces a stated plan with media details, or invents a new action."
+      ? " OWN-POST COMMENT MODE: The root post belongs to the current user, but target_text is another person's comment. Write from the root author's point of view and reply to that comment's exact claim, joke, question or tone first. Use the root post to resolve who did what: an action, meal, experience or object described in the root post belongs to the current user unless the comment explicitly assigns it to someone else. A style that asks you to call the commenter ‘anh’ or ‘chị’ changes only address terms; it never changes who authored or shared the root post. Never write ‘cảm ơn anh/chị đã chia sẻ’, ‘cảm ơn bạn đã đăng khoảnh khắc này’ or similar when the commenter is reacting to the current user's own post, because A is the person who shared it. Thank the commenter only for a direct thank-you, congratulations, or a specific action the commenter actually did. If the comment says the commenter has not eaten something for a long time, treat that as the commenter's memory/reaction; do not write as if the commenter just ate the root author's food, and do not swap speakers with phrases like ‘chị ăn lại’ or ‘em cũng thèm’ without textual support. If the comment states a first-person plan or answer (‘mình sẽ…’, ‘tôi muốn…’, ‘dự định…’), respond to that plan as the commenter's hypothetical choice and preserve its named activity and objects; never let the attached image replace the plan with a sign, cat, flowers, furniture or other decorative detail. If the root praises, quotes or celebrates a third party's result, keep the achievement attributed to that third party: do not make the current user sound as if they received the money, earned the result, were praised or caused it, and do not invent causes such as ‘trộm vía’, ‘nhờ chăm chỉ/cày cuốc’, ‘may mắn’ or ‘được mọi người ủng hộ’. Prefer a direct bridge between both turns: acknowledge the commenter's reaction or joke, then confirm one concrete detail without taking credit. Do not generate a fresh reply to the root post, summarize the root caption, or let the root post drown out the comment. CONTEXT SCORING: In this mode, relevance_score must prioritize correct speaker/actor attribution and a concrete link between target_text and the root post above generic fluency. A grounded, role-correct reply should outrank a poetic image reaction; penalize any reply that assigns the root author's action to the commenter, replaces a stated plan with media details, or invents a new action."
       : message?.post?.reply_context === "reply_to_other_user_post"
         ? " OTHER-USER POST MODE: target_text is the other user's own post. Answer its main claim, request or story directly. Use attached media and any context only to support that answer, not to invent a separate topic."
         : message?.post?.reply_context === "reply_to_comment_on_other_post"
           ? " OTHER-USER COMMENT MODE: target_text is a comment in someone else's thread. Answer that comment first and use the ancestor post only to resolve what the comment means."
           : "";
-  const ownPostShortPraiseRule =
-    ownPostShortPraiseTarget(message?.post)
-      ? " OWN-POST SHORT PRAISE RULE: The current user is answering a compliment about the current root post. For ‘Em mình đỉnh thật sự đó’, a brief thank-you or playful acknowledgment from its recipient fits. A relevant detail from the current root is optional. Avoid generic advice such as ‘giữ phong độ’, detached chart commentary, ‘nhớ mấy bài trước’, and invented feelings or actions. Ignore quoted/embedded older posts and their metrics unless the target explicitly mentions them."
-      : "";
+  const ownPostShortPraiseRule = ownPostShortPraiseTarget(message?.post)
+    ? " OWN-POST SHORT PRAISE RULE: The current user is answering a compliment about the current root post. For ‘Em mình đỉnh thật sự đó’, a brief thank-you or playful acknowledgment from its recipient fits. A relevant detail from the current root is optional. Avoid generic advice such as ‘giữ phong độ’, detached chart commentary, ‘nhớ mấy bài trước’, and invented feelings or actions. Ignore quoted/embedded older posts and their metrics unless the target explicitly mentions them."
+    : "";
   const ownPostCommentIntentRule =
     message?.post?.reply_context === "reply_to_comment_on_own_post"
       ? " OWN-POST COMMENT INTENT RULE: When the latest comment uses a joke, craving, hunger metaphor or eager action such as ‘chiếc bụng đói’, ‘muốn cuốn liền tay’, ‘thèm’ or ‘tâm đắc cách hưởng ứng’, treat that wording as the main conversational cue. Reply to the commenter's joke/desire first, then optionally use at most one concrete food detail as support. Do not turn the four options into a visual inventory of bánh, rau, chén, nước chấm, mẹt or xiên; do not repeat the root caption or describe the image instead of continuing the comment. A line that only names what is visible is off-topic even when the named food is accurate. Keep the current user as the speaker and never pretend the commenter ate the food."
@@ -3699,17 +3912,18 @@ function replyInstructions(message) {
     ]
       .filter(Boolean)
       .join(" "),
-    socialMetricRule = /(?:\bfollow(?:er|ers)?\b|người\s+theo\s+dõi|lượt\s+theo\s+dõi|\b\d+(?:[.,]\d+)?\s*k\s*(?:follow|follower|người)\b)/iu.test(
-      contextText,
-    )
-      ? message.post?.fastMode
-        ? " SOCIAL METRIC WORDING RULE: In follower-growth posts, preserve compact counts such as ‘10 ngày’ and ‘1k follow’; never spell them out."
-        : " SOCIAL METRIC WORDING RULE: For follower-growth or X milestone posts, preserve the source's compact numeric style: write ‘10 ngày’, ‘1k follow/followers’ or ‘1k người theo dõi’, never ‘mười ngày’ or ‘một ngàn’. Prefer casual X phrasing such as ‘10 ngày lên 1k follow’ or ‘10 ngày được 1k người theo dõi’. Do not turn the reaction into formal wording like ‘số lượng rất nhanh rồi đó ạ’; state the concrete growth naturally and directly.":
-      "",
+    socialMetricRule =
+      /(?:\bfollow(?:er|ers)?\b|người\s+theo\s+dõi|lượt\s+theo\s+dõi|\b\d+(?:[.,]\d+)?\s*k\s*(?:follow|follower|người)\b)/iu.test(
+        contextText,
+      )
+        ? message.post?.fastMode
+          ? " SOCIAL METRIC WORDING RULE: In follower-growth posts, preserve compact counts such as ‘10 ngày’ and ‘1k follow’; never spell them out."
+          : " SOCIAL METRIC WORDING RULE: For follower-growth or X milestone posts, preserve the source's compact numeric style: write ‘10 ngày’, ‘1k follow/followers’ or ‘1k người theo dõi’, never ‘mười ngày’ or ‘một ngàn’. Prefer casual X phrasing such as ‘10 ngày lên 1k follow’ or ‘10 ngày được 1k người theo dõi’. Do not turn the reaction into formal wording like ‘số lượng rất nhanh rồi đó ạ’; state the concrete growth naturally and directly."
+        : "",
     shortCommentRule =
       String(message?.post?.target_text || "").trim() &&
       Array.from(String(message?.post?.target_text || "").trim()).length <= 100
-         ? " SHORT COMMENT SEMANTIC RULE: Preserve an unfamiliar or colloquial phrase and use the root context; never invent ‘nghe giải thích’, ‘hóa ra’ or an abstract ‘dạng này tiện’. If the target says ‘bỏ túi’ in a found-money joke, treat it as pocketing the money, not a product or explanation. If a short comment such as ‘Ví luôn mà bác’ reacts to a third party's payout/result, treat it as a playful remark about that person's money/result; answer that remark without taking credit, thanking the commenter for an achievement, or inventing hard work, luck, support or personal action. If it only praises the question as thú vị/hay, do not repeat that praise; continue the root question with a concrete angle. If it names a plan or answer such as ‘mua một ly trà sữa ngon’ or ‘mình sẽ mở tiệm sách cũ kèm góc cà phê’, treat that plan as the target's hypothetical answer and respond to the named plan first. Keep the exact objects, activity and intent from target_text; do not replace them with details from an attached image, do not invent toppings, flavor, work context or other details, and do not imply the commenter already did the planned action."
+        ? " SHORT COMMENT SEMANTIC RULE: Preserve an unfamiliar or colloquial phrase and use the root context; never invent ‘nghe giải thích’, ‘hóa ra’ or an abstract ‘dạng này tiện’. If the target says ‘bỏ túi’ in a found-money joke, treat it as pocketing the money, not a product or explanation. If a short comment such as ‘Ví luôn mà bác’ reacts to a third party's payout/result, treat it as a playful remark about that person's money/result; answer that remark without taking credit, thanking the commenter for an achievement, or inventing hard work, luck, support or personal action. If it only praises the question as thú vị/hay, do not repeat that praise; continue the root question with a concrete angle. If it names a plan or answer such as ‘mua một ly trà sữa ngon’ or ‘mình sẽ mở tiệm sách cũ kèm góc cà phê’, treat that plan as the target's hypothetical answer and respond to the named plan first. Keep the exact objects, activity and intent from target_text; do not replace them with details from an attached image, do not invent toppings, flavor, work context or other details, and do not imply the commenter already did the planned action."
         : "",
     foodListCommentRule =
       /(?:món\s+ngon|ngon\s+nha|ngon\s+quá|toàn\s+là\s+món)/iu.test(
@@ -3720,10 +3934,12 @@ function replyInstructions(message) {
       )
         ? " FOOD LIST COMMENT RULE: The target is a short positive reaction to a list of dishes. Answer that reaction while using the root post's verified food context: across the set, vary between confirming the list, naming one listed dish, and noting that local versions can have a different taste. Do not merely repeat ‘món nào cũng ngon’, invent a dish or claim to have tasted it, and do not drift into generic morning wishes."
         : "",
-    congratulationDiversityRule =
-      bareCongratulationTarget(message?.post) ? BARE_CONGRATULATION_RULE :
-      /(?:chúc\s+mừng|hoan\s+hô|tuyệt\s+vời)/iu.test(String(message?.post?.target_text || "")) &&
-      /(?:view|lượt|cột\s+mốc|ngày\s+\d+|tăng|chạm|\b\d+(?:[.,]\d+)?\s*[kmb]\b)/iu.test(contextText)
+    congratulationDiversityRule = bareCongratulationTarget(message?.post)
+      ? BARE_CONGRATULATION_RULE
+      : /(?:chúc\s+mừng|hoan\s+hô|tuyệt\s+vời)/iu.test(String(message?.post?.target_text || "")) &&
+          /(?:view|lượt|cột\s+mốc|ngày\s+\d+|tăng|chạm|\b\d+(?:[.,]\d+)?\s*[kmb]\b)/iu.test(
+            contextText,
+          )
         ? " SHORT CONGRATULATION DIVERSITY RULE: The target is a short congratulations on a measurable milestone. Reply naturally to that congratulations, and make each option materially different in angle, wording, structure and rhythm. Across the set, vary the focus between the current milestone, recent growth, consistency/streak, the next milestone, and appreciation for the community when those details are present. Do not make every option a copy of ‘chúc mừng bạn’; a shared brief acknowledgment is okay only when the substantive remainder clearly changes. Keep every detail grounded in the post and do not invent facts."
         : "",
     greetingPattern =
@@ -3740,7 +3956,8 @@ function replyInstructions(message) {
       ? " SHORT GREETING TARGET RULE: target_text is itself a short greeting or good-wish comment. Reply only with a concise greeting, return wish or warm acknowledgment. Do not import the ancestor/root post's food, drink, image, work or other topic; never describe a glass, dish, flavor, meal, eating or drinking just because those details appear above the comment. Do not reject a natural return wish merely for containing ngày mới, vui vẻ, chúc, good morning or the equivalent. Keep it concise and do not invent a separate event or topic."
       : "",
     foodWishTargetRule = directFoodWishTarget(message?.post)
-      ? " DIRECT FOOD-WISH COMMENT RULE: target_text is a short comment such as ‘Ngon quá, chúc bác ăn ngon miệng’, ‘Cơm trưa ngon miệng em ơi’ or ‘Chúc ngon miệng nha’. Treat the latest wish/compliment as the whole conversational turn. Every option must directly acknowledge it with cảm ơn or a natural return wish about ăn ngon/dùng bữa; do not turn it into a work/productivity wish. A simple thank-you is enough. For bare praise like ‘Ngon quá nha’ under the current user’s meal post, reply as the person who shared the meal. Acknowledge the praise naturally, without describing the picture, speaking like a hungry viewer, or inventing what you tasted. If the target adds a timely afternoon wish, one natural option is to return it briefly after thanking once. Across the options, vary the wording and structure. Avoid formal filler like ‘vì đã gửi lời chúc’ and never thank twice in one reply. Never invent feelings or reactions such as being happy all afternoon, laughing, or being thrilled. Respect the configured word range. Do not replace the reply with a description of the root meal such as ‘món mặn đậm đà’, or invent that the current user prepared food from the morning, is going to work, is eating lunch/dinner, is changing dishes, is carrying a meal, or is inviting the commenter to eat together. Do not import a separate dish detail or action from the ancestor post/media merely because the root post contains food." + SIMPLE_ACKNOWLEDGEMENT_RULE
+      ? " DIRECT FOOD-WISH COMMENT RULE: target_text is a short comment such as ‘Ngon quá, chúc bác ăn ngon miệng’, ‘Cơm trưa ngon miệng em ơi’ or ‘Chúc ngon miệng nha’. Treat the latest wish/compliment as the whole conversational turn. Every option must directly acknowledge it with cảm ơn or a natural return wish about ăn ngon/dùng bữa; do not turn it into a work/productivity wish. A simple thank-you is enough. For bare praise like ‘Ngon quá nha’ under the current user’s meal post, reply as the person who shared the meal. Acknowledge the praise naturally, without describing the picture, speaking like a hungry viewer, or inventing what you tasted. If the target adds a timely afternoon wish, one natural option is to return it briefly after thanking once. Across the options, vary the wording and structure. Avoid formal filler like ‘vì đã gửi lời chúc’ and never thank twice in one reply. Never invent feelings or reactions such as being happy all afternoon, laughing, or being thrilled. Respect the configured word range. Do not replace the reply with a description of the root meal such as ‘món mặn đậm đà’, or invent that the current user prepared food from the morning, is going to work, is eating lunch/dinner, is changing dishes, is carrying a meal, or is inviting the commenter to eat together. Do not import a separate dish detail or action from the ancestor post/media merely because the root post contains food." +
+        SIMPLE_ACKNOWLEDGEMENT_RULE
       : "",
     visualClicheRule =
       " NATURAL WORDING RULE: Do not use the canned Vietnamese food/image adjectives ‘vàng ươm’ or ‘giòn rụm’. Prefer plain spoken wording such as ‘lên màu đẹp’, ‘hơi xém cạnh’, ‘vỏ ngoài giòn’, or ‘cắn nghe rôm rốp’ only when the visible detail supports it.",
@@ -3897,10 +4114,7 @@ const SIMPLE_ENGLISH_GREETING_REPLIES = [
     "Morning! Have a good day and take it easy.",
     "Chào buổi sáng! Chúc bạn một ngày vui, cứ thong thả nha.",
   ],
-  [
-    "Good morning to you too! Have a good one.",
-    "Chào buổi sáng nha! Chúc bạn hôm nay vui vẻ.",
-  ],
+  ["Good morning to you too! Have a good one.", "Chào buổi sáng nha! Chúc bạn hôm nay vui vẻ."],
   [
     "Morning! Hope you get some time to yourself today.",
     "Chào buổi sáng! Mong hôm nay bạn có chút thời gian cho riêng mình.",
@@ -4049,10 +4263,7 @@ const SIMPLE_ENGLISH_GREETING_REPLIES = [
     "gm gm ☀️ hope today treats you really well!",
     "Chào buổi sáng nha ☀️ Mong hôm nay mọi chuyện đều tốt với bạn!",
   ],
-  [
-    "GM to you too! Have a good one.",
-    "Chào buổi sáng lại bạn nha! Chúc một ngày vui.",
-  ],
+  ["GM to you too! Have a good one.", "Chào buổi sáng lại bạn nha! Chúc một ngày vui."],
   [
     "gm! thx for saying hi. Have a good one!",
     "Chào buổi sáng! Cảm ơn đã ghé chào nha. Chúc bạn một ngày vui!",
@@ -4065,10 +4276,7 @@ const SIMPLE_ENGLISH_GREETING_REPLIES = [
     "gm gm! Fingers crossed for an easy day today.",
     "Chào buổi sáng nha! Mong hôm nay mọi chuyện nhẹ nhàng.",
   ],
-  [
-    "gm! How’s your morning going so far, btw?",
-    "Chào buổi sáng! À mà sáng nay bạn thế nào rồi?",
-  ],
+  ["gm! How’s your morning going so far, btw?", "Chào buổi sáng! À mà sáng nay bạn thế nào rồi?"],
   [
     "GM! Hope you get some good news today, too.",
     "Chào buổi sáng! Mong hôm nay bạn cũng nhận được tin vui.",
@@ -4077,10 +4285,7 @@ const SIMPLE_ENGLISH_GREETING_REPLIES = [
     "gm! Here’s hoping today goes smoother than expected.",
     "Chào buổi sáng! Mong hôm nay suôn sẻ hơn bạn nghĩ.",
   ],
-  [
-    "gm gm! Have a good one out there today.",
-    "Chào buổi sáng nha! Chúc bạn hôm nay vui vẻ.",
-  ],
+  ["gm gm! Have a good one out there today.", "Chào buổi sáng nha! Chúc bạn hôm nay vui vẻ."],
   [
     "GM! A slow morning sounds pretty good rn, honestly.",
     "Chào buổi sáng! Nói thiệt, giờ mà có buổi sáng thong thả thì thích ha.",
@@ -4102,10 +4307,15 @@ function simpleEnglishGreetingResult(post = {}) {
     isSimpleGreeting = ["goodmorning", "gm", "morning"].includes(target);
   if (!isSimpleGreeting) return null;
   const pool = [...SIMPLE_ENGLISH_GREETING_REPLIES];
-  const count = Math.min(pool.length, Math.max(1, Math.trunc(Number(post.reply_count ?? post.replyCount)) || 3), 10);
+  const count = Math.min(
+    pool.length,
+    Math.max(1, Math.trunc(Number(post.reply_count ?? post.replyCount)) || 3),
+    10,
+  );
   const replies = [];
   const usedLengths = new Set();
-  const words = ([reply]) => reply.split(/\s+/u).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
+  const words = ([reply]) =>
+    reply.split(/\s+/u).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
   while (replies.length < count) {
     const freshLengths = pool.filter((entry) => !usedLengths.has(words(entry)));
     if (!freshLengths.length) usedLengths.clear();
@@ -4138,8 +4348,12 @@ function simpleEnglishGreetingResult(post = {}) {
 }
 function foodBreakTarget(post = {}) {
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC");
-  return /(?:giải\s+lao|nghỉ\s+tay|nghỉ\s+giữa\s+giờ|ăn\s+nhẹ)/iu.test(target) &&
-    /(?<!\p{L})(?:bánh|miếng|món|trà|cà\s+phê|đồ\s+ăn|đồ\s+uống|cherry|trái\s+cây|hoa\s+quả)(?!\p{L})/iu.test(target);
+  return (
+    /(?:giải\s+lao|nghỉ\s+tay|nghỉ\s+giữa\s+giờ|ăn\s+nhẹ)/iu.test(target) &&
+    /(?<!\p{L})(?:bánh|miếng|món|trà|cà\s+phê|đồ\s+ăn|đồ\s+uống|cherry|trái\s+cây|hoa\s+quả)(?!\p{L})/iu.test(
+      target,
+    )
+  );
 }
 const FOOD_BREAK_RULE =
   " SNACK BREAK RULE: Answer the snack break and the named food in one natural thought. Option 1 should respond to the break itself. A closing wish such as ‘Chiều mát mẻ nhé’ is secondary and does not call for an opening greeting. Avoid inventorying the image, including color, shine or arrangement, unless relevant to the text. Do not invent work, productivity, a weekday, or time of day. Use timing only if the target makes it relevant, and distinguish when the post was written from now. An image does not establish flavor, mouthfeel or that you tasted it. Skip cutlery and packaging unless the target makes them relevant. Avoid slogans such as ‘cứu tinh’ and filler such as ‘cuốn quá’. Use neutral address unless the conversation or an explicit personal style establishes it.";
@@ -4162,18 +4376,22 @@ function foodBreakReplyDrift(reply, post) {
     /(?:chiếc|cái)\s+thìa/iu,
     /(?:đỏ\s+bóng|bóng\s+loáng|xếp\s+(?:ngay\s+)?(?:đều|gọn))/iu,
   ];
-  return unsupportedDetails.some(addsUnsupportedDetail) ||
+  return (
+    unsupportedDetails.some(addsUnsupportedDetail) ||
     /^(?:dạ\s+)?(?:em\s+)?chào(?=$|[^\p{L}])/iu.test(value.trim()) ||
     /(?:cứu\s+tinh|cuốn\s+quá|cuốn\s+ghê)/iu.test(value) ||
     (/(?<!\p{L})(?:nha|nhé|ơi)\s+bà(?!\p{L})/iu.test(value) &&
       !/(?<!\p{L})bà(?!\p{L})/iu.test(target) &&
-      !/gọi\s+['"\u2018\u201c]bà(?=['"/\u2019\u201d])/iu.test(style));
+      !/gọi\s+['"\u2018\u201c]bà(?=['"/\u2019\u201d])/iu.test(style))
+  );
 }
 function casualMealShareTarget(post = {}) {
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC");
-  return !/[?？]/u.test(target) &&
+  return (
+    !/[?？]/u.test(target) &&
     /(?<!\p{L})(?:bún|cơm|phở|mì|bánh|cháo|topping)(?!\p{L})/iu.test(target) &&
-    /(?:\bnay\s+ăn|(?:sáng|trưa|tối)\s+nay\s+ăn|mời[^.!?…\n]{0,60}(?:ăn|dùng\s+bữa))/iu.test(target);
+    /(?:\bnay\s+ăn|(?:sáng|trưa|tối)\s+nay\s+ăn|mời[^.!?…\n]{0,60}(?:ăn|dùng\s+bữa))/iu.test(target)
+  );
 }
 const CASUAL_MEAL_SHARE_RULE =
   " CASUAL MEAL SHARE RULE: For a casual meal update or invitation, option 1 should be a light, natural reaction to the whole dish. Keep the remaining options equally simple. Keep the dish name exactly as written or use its generic noun (e.g. ‘bún xì dầu’ or ‘tô bún’). Do not rename it to ‘bún trộn’ because the image looks similar. Do not list ingredients, describe their arrangement, infer flavor or freshness from the image, or narrate your own meal. Follow the selected regional voice without forcing dialect or an unestablished form of address.";
@@ -4185,7 +4403,9 @@ function casualMealShareReplyDrift(reply, post) {
     (/bún\s+xì\s+dầu/iu.test(target) &&
       !/bún\s+trộn/iu.test(target) &&
       /bún\s+trộn/iu.test(value)) ||
-    /(?:^(?:dạ\s+)?(?:miếng\s+)?(?:chả\s+giò|(?:con\s+)?tôm|trứng\s+luộc|miếng\s+thịt)(?!\p{L})|cắt\s+đôi|(?:nằm|ngay)\s+(?:góc|giữa)\s+tô|(?:sốt|vị)\s+đậm\s+đà|tôm(?:\s+luộc)?\s+đỏ\s+tươi)/iu.test(value)
+    /(?:^(?:dạ\s+)?(?:miếng\s+)?(?:chả\s+giò|(?:con\s+)?tôm|trứng\s+luộc|miếng\s+thịt)(?!\p{L})|cắt\s+đôi|(?:nằm|ngay)\s+(?:góc|giữa)\s+tô|(?:sốt|vị)\s+đậm\s+đà|tôm(?:\s+luộc)?\s+đỏ\s+tươi)/iu.test(
+      value,
+    )
   );
 }
 function replyContextCheck(post) {
@@ -4194,57 +4414,92 @@ function replyContextCheck(post) {
     const afterMorning = localHour != null && Number(localHour) >= 12;
     return {
       accepts: (reply) =>
-        !/(?:trưa\s+rồi|muộn\s+rồi|cà\s+phê|thời\s+tiết|khung\s+cảnh|(?:đang|vừa|mới|sắp)\s+(?:chuẩn\s+bị|uống|ăn|làm|xử\s+lý)|việc\s+quan\s+trọng)/iu.test(reply) &&
+        !/(?:trưa\s+rồi|muộn\s+rồi|cà\s+phê|thời\s+tiết|khung\s+cảnh|(?:đang|vừa|mới|sắp)\s+(?:chuẩn\s+bị|uống|ăn|làm|xử\s+lý)|việc\s+quan\s+trọng)/iu.test(
+          reply,
+        ) &&
         !(afterMorning && /(?:buổi\s+(?:sáng|trưa)|chào\s+sáng|good\s+morning)/iu.test(reply)) &&
         !personalAddressingMismatch(reply, post),
       correction: VI_MORNING_GREETING_RULE,
     };
   }
-  const target = String(post.target_text ?? post.text ?? "").normalize("NFC")
-    .replace(/[\p{P}\p{S}\uFE0F]/gu, " ").replace(/\s+/gu, " ").trim();
-  if (/^(?:hello|hi|chào)\s+(?:cô\s+gái(?:\s+trẻ)?|chàng\s+trai(?:\s+trẻ)?)(?:\s+(?:ơi|nha|nhé))?$/iu.test(target)) {
+  const target = String(post.target_text ?? post.text ?? "")
+    .normalize("NFC")
+    .replace(/[\p{P}\p{S}\uFE0F]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (
+    /^(?:hello|hi|chào)\s+(?:cô\s+gái(?:\s+trẻ)?|chàng\s+trai(?:\s+trẻ)?)(?:\s+(?:ơi|nha|nhé))?$/iu.test(
+      target,
+    )
+  ) {
     return {
-      accepts: (reply) => /^[\s\p{P}\p{S}]*(?:(?:hihi|hì hì)[\s,]+)?(?:chào|hello|hi|chúc)(?![\p{L}\p{M}])/iu.test(reply) &&
-        !/^[\s\p{P}\p{S}]*(?:(?:hihi|hì hì)[\s,]+)?chào\s+(?:nha|nhé)(?![\p{L}\p{M}])/iu.test(reply) &&
-        !/(?:thời\s+tiết|ngoài\s+phố|làm\s+việc|đi\s+dạo|đi\s+đâu|dạo\s+phố|trời\s+mát|thăm\s+hỏi|ghé\s+nhà|vui\s+quá\s+chừng)/iu.test(reply) &&
-        !/(?<![\p{L}\p{M}])(?:anh[\s,]+a|chị[\s,]+c|nha[\s,]+[ac](?:[\s,]+nha)?)(?![\p{L}\p{M}])/iu.test(reply) &&
+      accepts: (reply) =>
+        /^[\s\p{P}\p{S}]*(?:(?:hihi|hì hì)[\s,]+)?(?:chào|hello|hi|chúc)(?![\p{L}\p{M}])/iu.test(
+          reply,
+        ) &&
+        !/^[\s\p{P}\p{S}]*(?:(?:hihi|hì hì)[\s,]+)?chào\s+(?:nha|nhé)(?![\p{L}\p{M}])/iu.test(
+          reply,
+        ) &&
+        !/(?:thời\s+tiết|ngoài\s+phố|làm\s+việc|đi\s+dạo|đi\s+đâu|dạo\s+phố|trời\s+mát|thăm\s+hỏi|ghé\s+nhà|vui\s+quá\s+chừng)/iu.test(
+          reply,
+        ) &&
+        !/(?<![\p{L}\p{M}])(?:anh[\s,]+a|chị[\s,]+c|nha[\s,]+[ac](?:[\s,]+nha)?)(?![\p{L}\p{M}])/iu.test(
+          reply,
+        ) &&
         (personalAddressingRule(post.style ?? post.style_hint) ||
           !/(?<![\p{L}\p{M}])(?:anh|chị|a|c)(?![\p{L}\p{M}])/iu.test(reply)) &&
         !personalAddressingMismatch(reply, post),
-      correction: "Greet back casually in Vietnamese. Do not infer how to address the commenter from their greeting. If an explicitly configured address fits, choose either its full form or its abbreviation, never both. Avoid “Chào nha” and “Chào nhé” as openings. A short natural return wish can stand on its own. Avoid repeated particles, weather, work, outings and invented feelings.",
+      correction:
+        "Greet back casually in Vietnamese. Do not infer how to address the commenter from their greeting. If an explicitly configured address fits, choose either its full form or its abbreviation, never both. Avoid “Chào nha” and “Chào nhé” as openings. A short natural return wish can stand on its own. Avoid repeated particles, weather, work, outings and invented feelings.",
     };
   }
   if (asksForVia(post) && replyContextFor(post) === "reply_to_comment_on_own_post") {
     return {
-      accepts: (reply) => !asksForVia({ text: reply }) &&
-        /(?:nhả|cho|gửi|chia|rải|thả)\s+(?:(?:ké|chút|một|miếng|tí|xíu|ít|phần)\s+){0,3}vía|vía\s+(?:đây|nè|tới)/iu.test(reply),
-      correction: "The commenter asked for vía. Reply as the person giving it, without asking for it in return.",
+      accepts: (reply) =>
+        !asksForVia({ text: reply }) &&
+        /(?:nhả|cho|gửi|chia|rải|thả)\s+(?:(?:ké|chút|một|miếng|tí|xíu|ít|phần)\s+){0,3}vía|vía\s+(?:đây|nè|tới)/iu.test(
+          reply,
+        ),
+      correction:
+        "The commenter asked for vía. Reply as the person giving it, without asking for it in return.",
     };
   }
   const acknowledgement = ownPostAcknowledgement(post);
-  if (acknowledgement) return {
-    accepts: (reply) => ownPostAcknowledgementFits(reply, acknowledgement, post),
-    correction: OWN_POST_ACKNOWLEDGEMENT_INSTRUCTIONS[acknowledgement],
-  };
-  if (bareCongratulationTarget(post)) return {
-    accepts: (reply) => bareCongratulationReplyFits(reply, post),
-    correction: "Thank the actual commenter once, without discussing progress or the road ahead.",
-  };
-  if (simpleGoodWishTarget(post)) return {
-    accepts: simpleGoodWishReplyFits,
-    correction: "Briefly thank the commenter or return the wish without commenting on their wording.",
-  };
-  if (directFoodWishTarget(post)) return {
-    accepts: (reply) => !directFoodWishReplyMismatch(reply, post),
-    correction: "Acknowledge the meal wish or compliment directly instead of describing food or inventing preparation. Use the configured address only when useful.",
-  };
+  if (acknowledgement)
+    return {
+      accepts: (reply) => ownPostAcknowledgementFits(reply, acknowledgement, post),
+      correction: OWN_POST_ACKNOWLEDGEMENT_INSTRUCTIONS[acknowledgement],
+    };
+  if (bareCongratulationTarget(post))
+    return {
+      accepts: (reply) => bareCongratulationReplyFits(reply, post),
+      correction: "Thank the actual commenter once, without discussing progress or the road ahead.",
+    };
+  if (simpleGoodWishTarget(post))
+    return {
+      accepts: simpleGoodWishReplyFits,
+      correction:
+        "Briefly thank the commenter or return the wish without commenting on their wording.",
+    };
+  if (directFoodWishTarget(post))
+    return {
+      accepts: (reply) => !directFoodWishReplyMismatch(reply, post),
+      correction:
+        "Acknowledge the meal wish or compliment directly instead of describing food or inventing preparation. Use the configured address only when useful.",
+    };
   const encourages = directEncouragementTarget(post);
-  if (singularPraiseTarget(post) || encourages) return {
-    accepts: (reply) => (!encourages || ownResultPraiseTarget(post) || /c[ảá]m\s+ơn/iu.test(reply)) &&
-      !simpleAcknowledgementDrift(reply) && !personalAddressingMismatch(reply, post) &&
-      !/(?<!\p{L})(?:(?:tụi|bọn|chúng|team)\s+(?:em|mình|tôi|tui)|theo\s+sát|hỗ\s+trợ|mừng\s+thay|cứ\s+(?:giữ|duy trì|tiếp tục)|giữ\s+vững\s+phong\s+độ|yên\s+tâm\s+tiến\s+bước|em\s+em)(?!\p{L})/iu.test(reply),
-    correction: "Accept the praise or encouragement from one person in the correct speaker's voice. Avoid invented support, coaching the commenter, or referring to yourself as a group.",
-  };
+  if (singularPraiseTarget(post) || encourages)
+    return {
+      accepts: (reply) =>
+        (!encourages || ownResultPraiseTarget(post) || /c[ảá]m\s+ơn/iu.test(reply)) &&
+        !simpleAcknowledgementDrift(reply) &&
+        !personalAddressingMismatch(reply, post) &&
+        !/(?<!\p{L})(?:(?:tụi|bọn|chúng|team)\s+(?:em|mình|tôi|tui)|theo\s+sát|hỗ\s+trợ|mừng\s+thay|cứ\s+(?:giữ|duy trì|tiếp tục)|giữ\s+vững\s+phong\s+độ|yên\s+tâm\s+tiến\s+bước|em\s+em)(?!\p{L})/iu.test(
+          reply,
+        ),
+      correction:
+        "Accept the praise or encouragement from one person in the correct speaker's voice. Avoid invented support, coaching the commenter, or referring to yourself as a group.",
+    };
   return null;
 }
 async function suggestWithPreferences(message) {
@@ -4267,8 +4522,11 @@ async function suggestWithPreferences(message) {
       : message.post,
     post = { ...resolvedPost },
     task = message.provider === "gemini" ? geminiSuggest : suggest;
-  if (!post.styleWordRange && !post.style_word_range &&
-      (stored.styleMinWords != null || stored.styleMaxWords != null)) {
+  if (
+    !post.styleWordRange &&
+    !post.style_word_range &&
+    (stored.styleMinWords != null || stored.styleMaxWords != null)
+  ) {
     const min = Math.min(100, Math.max(1, Number(stored.styleMinWords) || 6));
     post.styleWordRange = {
       min,
@@ -4278,8 +4536,7 @@ async function suggestWithPreferences(message) {
   // A bare English greeting has no substantive claim to analyze. Keep the
   // first suggestion fast and deterministic; once the composer has a prior
   // quick result, the next generate/regenerate goes through the model.
-  const quickGreetingUsed =
-    post.quick_greeting_used === true || post.quickGreetingUsed === true;
+  const quickGreetingUsed = post.quick_greeting_used === true || post.quickGreetingUsed === true;
   const excludedReplies = post.exclude_replies || post.excludeReplies || [];
   if (!quickGreetingUsed && !excludedReplies.length) {
     const quickGreeting = simpleEnglishGreetingResult(post);
@@ -4288,16 +4545,16 @@ async function suggestWithPreferences(message) {
       return { result: quickGreeting, model: "local-greeting", mediaAnalyzed: 0 };
     }
   }
-  const configuredCount = Math.min(10, Math.max(1,
-    Math.trunc(Number(post.replyCount ?? post.reply_count) || 3),
-  ));
+  const configuredCount = Math.min(
+    10,
+    Math.max(1, Math.trunc(Number(post.replyCount ?? post.reply_count) || 3)),
+  );
   const contextCheck = replyContextCheck(post);
   const styleRange = postStyleWordRange(post);
   const previousWording = new Set(contextCheck ? excludedReplies.map(acknowledgementWording) : []);
-  const useReserve = styleRange || foodBreakTarget(post) || casualMealShareTarget(post) || contextCheck;
-  const modelPost = useReserve
-    ? { ...post, replyCount: Math.min(10, configuredCount * 2) }
-    : post;
+  const useReserve =
+    styleRange || foodBreakTarget(post) || casualMealShareTarget(post) || contextCheck;
+  const modelPost = useReserve ? { ...post, replyCount: Math.min(10, configuredCount * 2) } : post;
   let request = { ...message, post: modelPost },
     lastError = null,
     firstResponse = null,
@@ -4316,18 +4573,26 @@ async function suggestWithPreferences(message) {
         if (typeof item.reply === "string")
           item.reply = item.reply.replace(/^\s*và\s+chúc(?=\s)/iu, "Chúc");
         if (typeof item.translation_vi === "string")
-          item.translation_vi = removeCannedCrunchPhrase(repairGreetingOpening(item.translation_vi, post));
+          item.translation_vi = removeCannedCrunchPhrase(
+            repairGreetingOpening(item.translation_vi, post),
+          );
       }
       if (!useReserve) return response;
-      const grounded = replies.filter((item) =>
-        !foodBreakReplyDrift(item?.reply, post) && !casualMealShareReplyDrift(item?.reply, post),
+      const grounded = replies.filter(
+        (item) =>
+          !foodBreakReplyDrift(item?.reply, post) && !casualMealShareReplyDrift(item?.reply, post),
       );
       const addCandidate = (item) => {
         const wording = contextCheck && acknowledgementWording(item?.reply);
-        if (accepted.length < configuredCount && item?.reply?.trim() &&
+        if (
+          accepted.length < configuredCount &&
+          item?.reply?.trim() &&
           !postStyleLengthMismatch(item.reply, post, language) &&
           (!contextCheck || language !== "vi" || contextCheck.accepts(item.reply)) &&
-          (wording ? !previousWording.has(wording) : !accepted.some((prior) => sameText(prior.reply, item.reply)))) {
+          (wording
+            ? !previousWording.has(wording)
+            : !accepted.some((prior) => sameText(prior.reply, item.reply)))
+        ) {
           accepted.push(item);
           if (wording) previousWording.add(wording);
         }
@@ -4348,7 +4613,10 @@ async function suggestWithPreferences(message) {
       for (const item of replies) {
         if (accepted.length >= configuredCount) break;
         const score = Number(item.relevance_score);
-        addCandidate({ ...item, relevance_score: Number.isFinite(score) ? Math.min(score, 30) : 30 });
+        addCandidate({
+          ...item,
+          relevance_score: Number.isFinite(score) ? Math.min(score, 30) : 30,
+        });
       }
       firstResponse ??= response;
       if (accepted.length === configuredCount) {
@@ -4364,16 +4632,19 @@ async function suggestWithPreferences(message) {
       }
       fillAttempts++;
       const outsideRange = styleRange
-        ? replies.map((item) => globalThis.X_REPLY_WORD_COUNT(item?.reply, language))
-          .filter((count) => count < styleRange.min || count > styleRange.max)
+        ? replies
+            .map((item) => globalThis.X_REPLY_WORD_COUNT(item?.reply, language))
+            .filter((count) => count < styleRange.min || count > styleRange.max)
         : [];
       const lengthCorrection = outsideRange.length
         ? " The previous replies measured " +
-          outsideRange.join(", ") + " words outside the specified range. Use the specified counting method."
+          outsideRange.join(", ") +
+          " words outside the specified range. Use the specified counting method."
         : "";
       const reason =
         `The previous batch left ${remaining} slots unfilled. Generate fresh alternatives. Keep each one complete, grounded in the target, and different from the excluded replies.` +
-        (contextCheck && language === "vi" ? " " + contextCheck.correction : "") + lengthCorrection;
+        (contextCheck && language === "vi" ? " " + contextCheck.correction : "") +
+        lengthCorrection;
       request = {
         ...request,
         force: true,
@@ -4382,10 +4653,7 @@ async function suggestWithPreferences(message) {
           ...request.post,
           replyCount: Math.min(10, remaining * 2),
           retryReason: reason,
-          excludeReplies: [
-            ...accepted.map((item) => item.reply),
-            ...excludedReplies,
-          ],
+          excludeReplies: [...accepted.map((item) => item.reply), ...excludedReplies],
         },
       };
     } catch (error) {
@@ -4621,10 +4889,14 @@ const assistantOriginalFinishReplies = finishReplies;
 finishReplies = async function (result, post, message) {
   const value = await assistantOriginalFinishReplies(result, post, message);
   const target = String(post.target_text || "").trim();
-  if (/(?:có\s+còn\s+hơn\s+không|đúng\s+là\s+có\s+còn\s+hơn\s+không)/iu.test(target) &&
-      /(?:đúng\s+không|phải\s+không|nhỉ|bro\s*$|\?\s*$)/iu.test(target)) {
+  if (
+    /(?:có\s+còn\s+hơn\s+không|đúng\s+là\s+có\s+còn\s+hơn\s+không)/iu.test(target) &&
+    /(?:đúng\s+không|phải\s+không|nhỉ|bro\s*$|\?\s*$)/iu.test(target)
+  ) {
     const index = value.replies.findIndex((item) =>
-      /^(?:đúng|chuẩn|phải|ừ|uh|yeah|yes|exactly|có\s+còn\s+hơn\s+không)(?=$|[^\p{L}])/iu.test(item.reply),
+      /^(?:đúng|chuẩn|phải|ừ|uh|yeah|yes|exactly|có\s+còn\s+hơn\s+không)(?=$|[^\p{L}])/iu.test(
+        item.reply,
+      ),
     );
     if (index >= 0) {
       const [first] = value.replies.splice(index, 1);
@@ -4633,7 +4905,7 @@ finishReplies = async function (result, post, message) {
     }
   }
   const dangling =
-    /^(?:vẫn|còn|chưa|rất|khá|hơn|nhất|mà|thì|với|cho|của|là|đang|được|một|những|and|but|because|if|when|with|of|to|for|only|just)$/iu,
+      /^(?:vẫn|còn|chưa|rất|khá|hơn|nhất|mà|thì|với|cho|của|là|đang|được|một|những|and|but|because|if|when|with|of|to|for|only|just)$/iu,
     hasDangling = value.replies?.some((item) =>
       dangling.test(
         String(item.reply || "")
@@ -4654,9 +4926,9 @@ finishReplies = async function (result, post, message) {
     hasDirectComplimentDrift = value.replies?.some((item) =>
       ownPostDirectComplimentDriftReply(item?.reply, post),
     ),
-    hasOwnPostShortPraiseDrift = !ownPostAcknowledgement(post) && value.replies?.some((item) =>
-      ownPostShortPraiseDriftReply(item?.reply, post),
-    ),
+    hasOwnPostShortPraiseDrift =
+      !ownPostAcknowledgement(post) &&
+      value.replies?.some((item) => ownPostShortPraiseDriftReply(item?.reply, post)),
     hasCommentIntentDrift =
       hasMediaCommentIntentDrift || hasDirectComplimentDrift || hasOwnPostShortPraiseDrift;
   for (const item of value.replies || []) markOwnPostCommentMediaDrift(item, post);
@@ -4683,9 +4955,9 @@ finishReplies = async function (result, post, message) {
               ? "Mô hình bỏ lạc ý bình luận hoặc không trả lời lời khen trực tiếp. Hãy tạo lại gợi ý."
               : hasOwnPostShortPraiseDrift
                 ? "Mô hình chưa nối lời khen với kết quả cụ thể của bài hiện tại. Hãy tạo lại gợi ý."
-              : hasCommentIntentDrift
-                ? "Mô hình bám chi tiết media nhưng bỏ lạc ý bình luận. Hãy tạo lại gợi ý."
-        : "Mô hình trả về câu bị cắt giữa chừng. Hãy tạo lại gợi ý.",
+                : hasCommentIntentDrift
+                  ? "Mô hình bám chi tiết media nhưng bỏ lạc ý bình luận. Hãy tạo lại gợi ý."
+                  : "Mô hình trả về câu bị cắt giữa chừng. Hãy tạo lại gợi ý.",
     );
     error.result = value;
     error.shortReplyRetry = true;
@@ -4881,30 +5153,33 @@ const assistantReplyInstructionsFlexibleLength = replyInstructions;
 function targetLanguageLock(post = {}) {
   const target = String(post.target_text ?? post.text ?? "").trim();
   if (!target) return "";
-  const normalizedTarget =
-    globalThis.X_REPLY_NORMALIZE?.(target)?.trim() || target;
+  const normalizedTarget = globalThis.X_REPLY_NORMALIZE?.(target)?.trim() || target;
   const language = postReplyLanguage(post);
   if (!language) return "";
   const names = { en: "English", vi: "Vietnamese", zh: "Chinese", ja: "Japanese", ko: "Korean" };
   const name = names[language] || language;
-  const shorthandHint = normalizedTarget !== target
-    ? ` Interpret chat shorthand in target_text as: “${normalizedTarget}”.`
-    : "";
+  const shorthandHint =
+    normalizedTarget !== target
+      ? ` Interpret chat shorthand in target_text as: “${normalizedTarget}”.`
+      : "";
   return ` TARGET LANGUAGE LOCK: The dominant language of the exact target_text is ${name} (${language}). This is a hard constraint that overrides style wording and account tone. Write every reply in ${name} and set source_language to ${language}; never switch to Vietnamese just because the style instructions are Vietnamese. For a short greeting such as “good morning”, answer naturally in the same language.${shorthandHint}`;
 }
 function autoSkipTopicInstructions(post = {}) {
   const topics = Array.isArray(post.auto_repost_topics) ? post.auto_repost_topics : [];
   const style = String(post.style || post.style_hint || "");
-  const hasSkipRule = /(?:bỏ\s+qua|skip)\s+(?:(?:các|những|the)\s+)?(?:(?:chủ\s*đề|topics?)\s*)?/iu.test(style);
+  const hasSkipRule =
+    /(?:bỏ\s+qua|skip)\s+(?:(?:các|những|the)\s+)?(?:(?:chủ\s*đề|topics?)\s*)?/iu.test(style);
   if (!topics.length && !hasSkipRule) return "";
   const selectedTopicRule = topics.length
     ? ` Compare only against these selected labels: ${JSON.stringify(topics)}. Return exact matching labels or “không khớp”; never force a match.`
     : " Return a concise topic label grounded in the post, conversation and verified media.";
-  return ` TOPIC CLASSIFICATION FOR AUTOMATION: ${selectedTopicRule} Treat any style_hint rule to skip topics during automation as a policy for the runner, not as a writing instruction; still create the normal reply suggestions and return the topic label.`;
+  return ` TOPIC CLASSIFICATION FOR AUTOMATION: ${selectedTopicRule} The topic field must contain only a short category label (at most 5 words), never a description or sentence. Treat any style_hint rule to skip topics during automation as a policy for the runner, not as a writing instruction; still create the normal reply suggestions and return the topic label.`;
 }
 function asksForVia(post = {}) {
   const target = String(post.target_text ?? post.text ?? "").normalize("NFC");
-  return /(?<!\p{L})xin(?:\s+ké)?(?:\s+(?:một|1|chút|miếng|tí|xíu|ít|cái|mẩu|phần|mấy)){0,3}\s+v[ií]a(?!\p{L})/iu.test(target);
+  return /(?<!\p{L})xin(?:\s+ké)?(?:\s+(?:một|1|chút|miếng|tí|xíu|ít|cái|mẩu|phần|mấy)){0,3}\s+v[ií]a(?!\p{L})/iu.test(
+    target,
+  );
 }
 const xinViaMilestoneInstructions =
   " XIN VIA MILESTONE RULE: When a short target comment says ‘xin vía’ or asks for vía, answer as the root author playfully granting/sharing the vía. Use natural wording such as ‘nhả vía’, ‘cho vía’ or ‘gửi vía’ tied to the root result. This is a hard speaker rule: never answer with ‘em xin vía’, ‘trộm vía’, ‘nhận vía’ or another phrase that keeps the reply in the asker's role. Do not switch to generic congratulations, ‘năng lượng’, ‘biểu đồ’, or a wish that ignores the request. This is figurative conversation, not a literal transfer of luck or views. If “làm 1 ngày ăn 5 ngày” refers to an analogy about views, treat it as a joke and do not promise income. A playful grant is enough.";
@@ -4912,7 +5187,9 @@ const readerFeedbackInstructions =
   " READER FEEDBACK RULE: When the target comment says reading the root post gave the commenter motivation or inspiration to write, reply as the root author acknowledging that effect. Tie the response to the commenter’s exact feeling and the root post’s writing journey; do not say ‘hóng bài mới’, ‘câu chữ cuốn’, ‘nguồn năng lượng’, or tell the commenter to write immediately. Do not invent that the commenter took an action; answer with a natural, brief next turn such as appreciating that the post sparked their own writing mood.";
 function readerFeedbackRule(message) {
   const target = String(message?.post?.target_text || "");
-  return /(?:đọc|xem).{0,45}(?:thêm|có|cho).{0,30}(?:động\s+lực|cảm\s+hứng).{0,35}(?:viết|bài)|(?:động\s+lực|cảm\s+hứng).{0,35}(?:viết|bài)/iu.test(target)
+  return /(?:đọc|xem).{0,45}(?:thêm|có|cho).{0,30}(?:động\s+lực|cảm\s+hứng).{0,35}(?:viết|bài)|(?:động\s+lực|cảm\s+hứng).{0,35}(?:viết|bài)/iu.test(
+    target,
+  )
     ? readerFeedbackInstructions
     : "";
 }
@@ -4927,7 +5204,9 @@ function mealWorkThreadRule(message) {
     post.caption,
     post.visible_context,
     post.visible_ancestor_context,
-    ...(Array.isArray(post.conversation_history) ? post.conversation_history.map((turn) => turn?.text || "") : []),
+    ...(Array.isArray(post.conversation_history)
+      ? post.conversation_history.map((turn) => turn?.text || "")
+      : []),
   ]
     .filter(Boolean)
     .join(" ");
@@ -4967,7 +5246,9 @@ replyInstructions = function (message) {
     autoSkipTopicInstructions(message.post) +
     xinViaMilestoneRule(message) +
     readerFeedbackRule(message) +
-     (message.post?.fastMode ? engagementAuthenticityInstructionsFast : engagementAuthenticityInstructions) +
+    (message.post?.fastMode
+      ? engagementAuthenticityInstructionsFast
+      : engagementAuthenticityInstructions) +
     (message.post?.fastMode ? uncertaintyCauseInstructionsFast : uncertaintyCauseInstructions) +
     mealWorkThreadRule(message) +
     (message.post?.fastMode ? groundedActionInstructionsFast : groundedActionInstructions) +
@@ -5045,8 +5326,10 @@ function unsupportedPaymentCauseReply(text, post = {}) {
 }
 function unsupportedFirstPersonActionReply(text, post = {}) {
   const value = String(text || "").trim(),
-    firstPersonAction = /(?<![\p{L}])(?:em|mình|tôi|tao|tớ|i|we)(?![\p{L}]).{0,35}(?:(?:vừa|mới|đã|từng|hồi\s+nãy|đang|just|already|recently|am|was)\s+)(?:ăn|uống|mua|đặt|nấu|làm|đi|ghé|tới|đến|thử|dùng|xem|gọi|đọc|viết|chụp|đăng|trải\s+nghiệm|ate|drank|bought|ordered|made|went|visited|tried|used|watched|read|wrote|took|posted)(?![\p{L}])/iu,
-    futureOrHypothetical = /\b(?:sẽ|muốn|định|nếu|giả\s+(?:sử|định)|would|will|want\s+to|plan\s+to)\b/iu,
+    firstPersonAction =
+      /(?<![\p{L}])(?:em|mình|tôi|tao|tớ|i|we)(?![\p{L}]).{0,35}(?:(?:vừa|mới|đã|từng|hồi\s+nãy|đang|just|already|recently|am|was)\s+)(?:ăn|uống|mua|đặt|nấu|làm|đi|ghé|tới|đến|thử|dùng|xem|gọi|đọc|viết|chụp|đăng|trải\s+nghiệm|ate|drank|bought|ordered|made|went|visited|tried|used|watched|read|wrote|took|posted)(?![\p{L}])/iu,
+    futureOrHypothetical =
+      /\b(?:sẽ|muốn|định|nếu|giả\s+(?:sử|định)|would|will|want\s+to|plan\s+to)\b/iu,
     source = [
       post?.target_text,
       post?.caption,
@@ -5063,8 +5346,12 @@ function unsupportedFirstPersonActionReply(text, post = {}) {
     post?.root_is_viewer === true ||
     /^(?:reply_to_own_post|reply_to_comment_on_own_post)$/u.test(String(post?.reply_context || ""));
   if (ownRoot && firstPersonAction.test(source)) {
-    const sourceWords = normalizeReplyText(source).split(" ").filter((word) => word.length > 2);
-    const replyWords = normalizeReplyText(value).split(" ").filter((word) => word.length > 2);
+    const sourceWords = normalizeReplyText(source)
+      .split(" ")
+      .filter((word) => word.length > 2);
+    const replyWords = normalizeReplyText(value)
+      .split(" ")
+      .filter((word) => word.length > 2);
     if (replyWords.some((word) => sourceWords.includes(word))) return false;
   }
   return true;
@@ -5162,8 +5449,13 @@ function engagementManipulationReply(text) {
   );
 }
 function unnecessaryGratitudeReply(text, post = {}) {
-  if (singularPraiseTarget(post) || directEncouragementTarget(post) || simpleGoodWishTarget(post) ||
-      ownPostAcknowledgement(post)) return false;
+  if (
+    singularPraiseTarget(post) ||
+    directEncouragementTarget(post) ||
+    simpleGoodWishTarget(post) ||
+    ownPostAcknowledgement(post)
+  )
+    return false;
   const value = String(text || "").trim();
   if (
     !/(?:^|[.!?…]\s*)(?:dạ\s+|ừ\s+|à\s+|vâng\s+|ok\s+|okay\s+)?(?:(?:em|mình|tôi|tui)\s+)?cảm\s*ơn\b|(?:^|[.!?…]\s*)(?:thanks|thank\s+you)\b/iu.test(
@@ -5172,7 +5464,11 @@ function unnecessaryGratitudeReply(text, post = {}) {
   )
     return false;
   const target = String(
-    post?.target_text || post?.caption || post?.visible_context || post?.visible_ancestor_context || "",
+    post?.target_text ||
+      post?.caption ||
+      post?.visible_context ||
+      post?.visible_ancestor_context ||
+      "",
   );
   return !/(?:cảm\s*ơn|thanks|thank\s+you|chúc\s*mừng|congrat(?:ulation|ulations)?|lời\s+chúc|khen|chúc\s+bạn|chúc\s+mừng|^\s*(?:bạn|em|anh|chị)\s+giỏi\s+quá)/iu.test(
     target,
@@ -5220,7 +5516,10 @@ validateTranslations = function (result, post, allowMissing = false) {
   for (const item of result?.replies || []) {
     if (!unsupportedPaymentCauseReply(item?.reply, post)) continue;
     item.quality_issues = [
-      ...new Set([...(Array.isArray(item.quality_issues) ? item.quality_issues : []), "suy diễn nguyên nhân"]),
+      ...new Set([
+        ...(Array.isArray(item.quality_issues) ? item.quality_issues : []),
+        "suy diễn nguyên nhân",
+      ]),
     ];
     const score = Number(item.relevance_score);
     item.relevance_score = Number.isFinite(score) ? Math.min(score, 30) : 30;
@@ -5228,7 +5527,10 @@ validateTranslations = function (result, post, allowMissing = false) {
   for (const item of result?.replies || []) {
     if (!unsupportedFirstPersonActionReply(item?.reply, post)) continue;
     item.quality_issues = [
-      ...new Set([...(Array.isArray(item.quality_issues) ? item.quality_issues : []), "fake hành động"]),
+      ...new Set([
+        ...(Array.isArray(item.quality_issues) ? item.quality_issues : []),
+        "fake hành động",
+      ]),
     ];
     const score = Number(item.relevance_score);
     item.relevance_score = Number.isFinite(score) ? Math.min(score, 30) : 30;
