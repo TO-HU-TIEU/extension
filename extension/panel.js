@@ -635,8 +635,20 @@ let feedbackScanAbort = false;
 let feedbackScanTabId = null;
 let feedbackRunRunning = false;
 let feedbackRunAbort = false;
+let feedbackRunPaused = false;
 let feedbackRunTabId = null;
 let feedbackExtraContext = "";
+function feedbackPostSelected(postId) {
+  return feedbackState.posts.some((post) =>
+    post && String(post.id) === String(postId) && post.selected && !post.feedbackRejected);
+}
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== "feedbackCanReply" || sender.tab?.id !== feedbackRunTabId) return;
+  sendResponse({
+    allowed: feedbackRunRunning && !feedbackRunAbort && feedbackPostSelected(message.postId),
+    paused: feedbackRunPaused,
+  });
+});
 function feedbackSave() {
   return chrome.storage.local.set({ [FEEDBACK_STATE_KEY]: feedbackState });
 }
@@ -666,18 +678,16 @@ function feedbackMethodValues() {
   if (continuousWait) continuousWait.value = String(feedbackState.continuousWaitMinutes);
 }
 function feedbackSpeedValue() {
-  feedbackState.speed = Math.max(-3, Math.min(3, Number($("feedbackSpeed")?.value) || 0));
+  feedbackState.speed = Math.max(-5, Math.min(5, Number($("feedbackSpeed")?.value) || 0));
   const output = $("feedbackSpeedValue");
   if (output) output.textContent = String(feedbackState.speed);
   return feedbackState.speed;
 }
 function feedbackDelayMs() {
   const speed = feedbackSpeedValue();
-  // Slow the neutral feedback cadence by 20% to leave more room between replies.
-  const base = 1242;
-  const speedFactor = 1 - speed * 0.1;
-  const jitter = 0.88 + Math.random() * 0.24;
-  return Math.max(650, Math.round(base * speedFactor * jitter));
+  const base = 30_000 * (1 - speed * 0.12);
+  const jitter = 0.85 + Math.random() * 0.3;
+  return Math.max(Math.round(base), Math.round(base * jitter));
 }
 function feedbackEmojiOnly(value) {
   const input = String(value || "").trim();
@@ -744,8 +754,8 @@ function renderFeedbackState() {
         meta.textContent = `${replied}/${eligibleComments.length} đã phản hồi · ${post.id}`;
       }
       const completed = eligibleComments.length > 0 && replied >= eligibleComments.length;
-      check.disabled = completed || !!post.feedbackInspectPending || !!post.feedbackInspectError;
-      if (completed) {
+      check.disabled = (completed && feedbackState.method !== "continuous") || !!post.feedbackInspectPending || !!post.feedbackInspectError;
+      if (completed && feedbackState.method !== "continuous") {
         post.selected = false;
         check.checked = false;
         check.title = "Bài viết đã phản hồi đủ comment";
@@ -838,7 +848,10 @@ async function feedbackRefreshPost(tabId, post) {
 }
 async function feedbackScan() {
   if (feedbackRunRunning) {
-    feedbackRunAbort = true;
+    if (feedbackRunAbort) return;
+    feedbackRunPaused = !feedbackRunPaused;
+    $("feedbackScan").textContent = feedbackRunPaused ? "Tiếp tục" : "Tạm dừng";
+    $("feedbackStatus").textContent = feedbackRunPaused ? "Đã tạm dừng phản hồi." : "Đang tiếp tục phản hồi…";
     return;
   }
   if (feedbackScanRunning) {
@@ -982,43 +995,49 @@ async function feedbackScan() {
   }
 }
 async function feedbackRun() {
-  if (feedbackRunRunning) {
-    feedbackRunAbort = true;
-    return;
-  }
+  if (feedbackRunRunning) return;
   const tab = await activeTab();
   if (!tab?.id || !/^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i.test(tab.url || ""))
     throw new Error("Hãy mở một tab X trước khi thực hiện phản hồi.");
   await stopAutoFlowForFeedback(tab.id);
   feedbackMethodValues();
   feedbackSpeedValue();
-  let selected = (feedbackState.posts || []).filter((post) => post.selected);
-  if (!selected.length) throw new Error("Hãy chọn ít nhất một bài viết.");
+  const selectedPosts = () => feedbackState.posts.filter((post) => post?.selected && !post.feedbackRejected);
+  if (!selectedPosts().length) throw new Error("Hãy chọn ít nhất một bài viết.");
   const button = $("feedbackScan"),
+    endButton = $("feedbackEnd"),
     status = $("feedbackStatus");
   feedbackRunRunning = true;
   feedbackRunAbort = false;
+  feedbackRunPaused = false;
   feedbackRunTabId = tab.id;
   button.disabled = false;
   button.classList.add("is-running");
-  button.textContent = "Dừng";
+  button.textContent = "Tạm dừng";
+  button.title = "";
+  if (endButton) endButton.hidden = false;
   try {
     await chrome.storage.local.set({ feedbackExtraContext });
     await feedbackEnsureScript(tab.id);
     let total = 0,
-      round = 0;
-    const failedAttempts = new Map();
+      round = 0,
+      nextReplyAt = 0;
+    const waitWhilePaused = async () => {
+      while (feedbackRunPaused && !feedbackRunAbort && selectedPosts().length)
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    };
     const waitInterruptible = async (duration) => {
       const until = Date.now() + duration;
-      while (!feedbackRunAbort && Date.now() < until)
+      while (!feedbackRunAbort && selectedPosts().length && Date.now() < until)
         await new Promise((resolve) => setTimeout(resolve, Math.min(1000, until - Date.now())));
     };
-    while (!feedbackRunAbort) {
+    while (!feedbackRunAbort && selectedPosts().length) {
+      await waitWhilePaused();
       round++;
-      let roundTotal = 0,
-        roundCompleted = 0;
-      for (const post of selected) {
+      let roundTotal = 0;
+      for (const post of selectedPosts()) {
         if (feedbackRunAbort) break;
+        if (!feedbackPostSelected(post.id)) continue;
         let pending = (post.comments || []).filter(
           (comment) =>
             !comment.responded &&
@@ -1040,83 +1059,47 @@ async function feedbackRun() {
           pending = pending.sort(() => Math.random() - 0.5).slice(0, target);
         }
         for (const comment of pending) {
-          if (feedbackRunAbort) break;
+          while (!feedbackRunAbort && feedbackPostSelected(post.id) && Date.now() < nextReplyAt)
+            await waitInterruptible(Math.min(250, nextReplyAt - Date.now()));
+          await waitWhilePaused();
+          if (feedbackRunAbort || !feedbackPostSelected(post.id)) break;
           total++;
           roundTotal++;
           status.textContent = `Lượt ${round} · Đang phản hồi ${total}: ${post.text ? String(post.text).slice(0, 45) : "bài viết"}…`;
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.max(250, Math.round(feedbackDelayMs() * 0.35))),
-          );
-          await chrome.tabs.update(tab.id, { url: comment.url });
-          await feedbackWaitForTab(tab.id);
-          await feedbackEnsureScript(tab.id);
-          const result = await chrome.tabs
-            .sendMessage(tab.id, {
+          let result;
+          try {
+            await chrome.tabs.update(tab.id, { url: comment.url });
+            await feedbackWaitForTab(tab.id);
+            await feedbackEnsureScript(tab.id);
+            await waitWhilePaused();
+            if (feedbackRunAbort || !feedbackPostSelected(post.id)) break;
+            result = await chrome.tabs.sendMessage(tab.id, {
               type: "feedbackReplyComment",
+              postId: post.id,
               commentUrl: comment.url,
               extraContext: feedbackExtraContext,
               ownHandleOverride: feedbackState.handle,
-            })
-            .catch((error) => ({ ok: false, error: error.message }));
-          let completed = result?.ok;
-          if (!completed && result?.alreadyReplied) {
+            });
+          } catch (error) {
+            result = { ok: false, error: error.message };
+          }
+          if (result?.selectionCancelled) break;
+          if (result?.ok || result?.alreadyReplied) {
             comment.responded = true;
             comment.respondedAt ||= new Date().toISOString();
-            comment.feedbackSkipReason = "Đã có phản hồi trước khi chạy";
-            await feedbackSave();
-            renderFeedbackState();
-            status.textContent = "Bỏ qua comment đã được phản hồi trước đó.";
-            continue;
-          }
-          if (!completed && result?.reload) {
-            await feedbackWaitForTab(tab.id);
-            await feedbackEnsureScript(tab.id);
-            const retry = await chrome.tabs
-              .sendMessage(tab.id, {
-                type: "feedbackReplyComment",
-                commentUrl: comment.url,
-                extraContext: feedbackExtraContext,
-                ownHandleOverride: feedbackState.handle,
-              })
-              .catch((error) => ({ ok: false, error: error.message }));
-            completed = retry?.ok;
-            if (!completed && retry?.alreadyReplied) {
-              comment.responded = true;
-              comment.respondedAt ||= new Date().toISOString();
-              comment.feedbackSkipReason = "Đã có phản hồi trước khi chạy";
-              await feedbackSave();
-              renderFeedbackState();
-              status.textContent = "Bỏ qua comment đã được phản hồi trước đó.";
-              continue;
-            }
-            if (!completed)
-              status.textContent = `Bỏ qua comment: ${retry?.error || "chưa sẵn sàng"}.`;
-          } else if (!completed)
-            status.textContent = `Bỏ qua comment: ${result?.error || "chưa sẵn sàng"}.`;
-          if (completed) {
-            comment.responded = true;
-            comment.respondedAt = new Date().toISOString();
-            failedAttempts.delete(comment.url);
-            roundCompleted++;
-            await feedbackSave();
-            renderFeedbackState();
+            if (result.ok) nextReplyAt = Date.now() + feedbackDelayMs();
+            else status.textContent = "Bỏ qua comment đã được phản hồi trước đó.";
           } else {
-            const attempts = (failedAttempts.get(comment.url) || 0) + 1;
-            failedAttempts.set(comment.url, attempts);
-            // Do not retry one broken comment forever and block the rest of
-            // the queue. It is excluded after two failed rounds and remains
-            // visible in the saved state for diagnostics.
-            if (attempts >= 2) {
-              comment.feedbackSkipped = true;
-              comment.feedbackSkipReason = "Không thể phản hồi sau 2 lượt thử";
-              await feedbackSave();
-              renderFeedbackState();
-            }
+            comment.feedbackSkipped = true;
+            comment.feedbackSkipReason = result?.error || "Không thể phản hồi";
+            status.textContent = `Bỏ qua comment: ${comment.feedbackSkipReason}.`;
           }
-          await new Promise((resolve) => setTimeout(resolve, feedbackDelayMs()));
+          await feedbackSave();
+          renderFeedbackState();
         }
       }
-      const remaining = selected.some((post) =>
+      if (feedbackRunAbort || !selectedPosts().length) break;
+      const remaining = selectedPosts().some((post) =>
         (post.comments || []).some(
           (comment) =>
             !comment.responded &&
@@ -1135,14 +1118,11 @@ async function feedbackRun() {
         status.textContent = `Đã xử lý hết comment hiện tại · nghỉ ${waitMinutes} phút trước khi quét lại…`;
         await waitInterruptible(waitMinutes * 60000);
         if (feedbackRunAbort) break;
-        feedbackState.posts.forEach((post) => {
-          post.selected = true;
-        });
-        selected = (feedbackState.posts || []).filter((post) => post.selected);
         let added = 0;
-        for (const post of selected) {
+        for (const post of selectedPosts()) {
+          await waitWhilePaused();
           if (feedbackRunAbort) break;
-          added += await feedbackRefreshPost(tab.id, post);
+          if (feedbackPostSelected(post.id)) added += await feedbackRefreshPost(tab.id, post);
         }
         await feedbackSave();
         renderFeedbackState();
@@ -1152,20 +1132,18 @@ async function feedbackRun() {
         continue;
       }
       if (feedbackState.method !== "random" || !remaining || !roundTotal) break;
-      if (!roundCompleted) {
-        status.textContent = `Lượt ${round} chưa có comment hoàn tất · sẽ thử lại sau 5 phút…`;
-      } else {
-        status.textContent = `Đã xong lượt ${round} · nghỉ 5 phút trước lượt tiếp theo…`;
-      }
+      status.textContent = `Đã xong lượt ${round} · nghỉ 5 phút trước lượt tiếp theo…`;
       await waitInterruptible(300000);
     }
     status.textContent = feedbackRunAbort
-      ? "Đã dừng phản hồi."
+      ? "Đã kết thúc phản hồi."
       : "Đã thực hiện xong toàn bộ comment hợp lệ đã chọn.";
   } finally {
     chrome.storage.local.remove("feedbackExtraContext").catch(() => {});
     feedbackRunRunning = false;
     feedbackRunAbort = false;
+    feedbackRunPaused = false;
+    if (endButton) endButton.hidden = true;
     feedbackRunTabId = null;
     button.disabled = false;
     button.classList.remove("is-running");
@@ -1175,6 +1153,11 @@ async function feedbackRun() {
 }
 function feedbackWire() {
   const scanButton = $("feedbackScan");
+  $("feedbackEnd")?.addEventListener("click", () => {
+    if (!feedbackRunRunning) return;
+    feedbackRunAbort = true;
+    $("feedbackStatus").textContent = "Đang kết thúc phản hồi…";
+  });
   const status = $("feedbackStatus");
   const continuousLabel = document.querySelector(
     'input[name="feedbackMethod"][value="continuous"]',
@@ -2487,6 +2470,48 @@ function renderAutoExcludedAuthors(handles = []) {
     list.append(chip);
   }
 }
+function renderAutoRepostAllowedAuthors(handles = []) {
+  const list = $("autoRepostAllowedAuthorsList");
+  if (!list) return;
+  const normalized = [
+    ...new Set(
+      (Array.isArray(handles) ? handles : []).map(normalizeAutoExcludedAuthor).filter(Boolean),
+    ),
+  ].sort();
+  list.replaceChildren();
+  if (!normalized.length) {
+    const empty = document.createElement("small");
+    empty.className = "auto-exclusion-empty";
+    empty.textContent = "Chưa giới hạn tài khoản repost.";
+    list.append(empty);
+    $("autoRepostAllowedAuthorsToggle")?.classList.remove("has-data");
+    return;
+  }
+  $("autoRepostAllowedAuthorsToggle")?.classList.add("has-data");
+  for (const handle of normalized) {
+    const chip = document.createElement("span");
+    chip.className = "auto-exclusion-chip";
+    const name = document.createElement("span");
+    name.textContent = `@${handle}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.innerHTML = ICON.cancel;
+    remove.title = `Bỏ @${handle} khỏi danh sách được repost`;
+    remove.setAttribute("aria-label", remove.title);
+    remove.addEventListener("click", () =>
+      safely(async () => {
+        const stored = await chrome.storage.local.get("autoRepostAllowedAuthors"),
+          next = (stored.autoRepostAllowedAuthors || []).filter(
+            (item) => normalizeAutoExcludedAuthor(item) !== handle,
+          );
+        await chrome.storage.local.set({ autoRepostAllowedAuthors: next });
+        renderAutoRepostAllowedAuthors(next);
+      }),
+    );
+    chip.append(name, remove);
+    list.append(chip);
+  }
+}
 function setAutoExcludedAuthorsCollapsed(collapsed, persist = true) {
   const toggle = $("autoExcludedAuthorsToggle"),
     body = $("autoExcludedAuthorsBody");
@@ -2500,9 +2525,26 @@ function setAutoExcludedAuthorsCollapsed(collapsed, persist = true) {
   if (persist)
     chrome.storage.local.set({ autoExcludedAuthorsCollapsed: isCollapsed }).catch(() => {});
 }
+function setAutoRepostAllowedAuthorsCollapsed(collapsed, persist = true) {
+  const toggle = $("autoRepostAllowedAuthorsToggle"),
+    body = $("autoRepostAllowedAuthorsBody");
+  if (!toggle || !body) return;
+  const isCollapsed = !!collapsed;
+  body.hidden = isCollapsed;
+  toggle.setAttribute("aria-expanded", String(!isCollapsed));
+  toggle.title = `${isCollapsed ? "Mở" : "Thu gọn"} tài khoản được phép tự repost`;
+  toggle.setAttribute("aria-label", toggle.title);
+  toggle.classList.toggle("is-expanded", !isCollapsed);
+  if (persist)
+    chrome.storage.local.set({ autoRepostAllowedAuthorsCollapsed: isCollapsed }).catch(() => {});
+}
 $("autoExcludedAuthorsToggle")?.addEventListener("click", () => {
   const isExpanded = $("autoExcludedAuthorsToggle")?.getAttribute("aria-expanded") === "true";
   setAutoExcludedAuthorsCollapsed(isExpanded);
+});
+$("autoRepostAllowedAuthorsToggle")?.addEventListener("click", () => {
+  const isExpanded = $("autoRepostAllowedAuthorsToggle")?.getAttribute("aria-expanded") === "true";
+  setAutoRepostAllowedAuthorsCollapsed(isExpanded);
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.geminiKey || changes.geminiKeyLabel || changes.geminiKeys)) {
@@ -2521,8 +2563,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
     $("replyTone").value = changes.replyTone.newValue || "";
   if (area === "local" && changes.autoReplyExcludedAuthors)
     renderAutoExcludedAuthors(changes.autoReplyExcludedAuthors.newValue || []);
+  if (area === "local" && changes.autoRepostAllowedAuthors)
+    renderAutoRepostAllowedAuthors(changes.autoRepostAllowedAuthors.newValue || []);
   if (area === "local" && changes.autoExcludedAuthorsCollapsed)
     setAutoExcludedAuthorsCollapsed(changes.autoExcludedAuthorsCollapsed.newValue, false);
+  if (area === "local" && changes.autoRepostAllowedAuthorsCollapsed)
+    setAutoRepostAllowedAuthorsCollapsed(changes.autoRepostAllowedAuthorsCollapsed.newValue, false);
 });
 safely(async () => {
   await globalThis.AssistantSettingsBackup?.ready;
@@ -2546,6 +2592,8 @@ safely(async () => {
     "hideAds",
     "autoReplyExcludedAuthors",
     "autoExcludedAuthorsCollapsed",
+    "autoRepostAllowedAuthors",
+    "autoRepostAllowedAuthorsCollapsed",
     "quoteAnalysisState",
     "quoteExtraPrompt",
   ]);
@@ -2592,6 +2640,8 @@ safely(async () => {
   ];
   renderAutoExcludedAuthors(s.autoReplyExcludedAuthors || []);
   setAutoExcludedAuthorsCollapsed(s.autoExcludedAuthorsCollapsed ?? true, false);
+  renderAutoRepostAllowedAuthors(s.autoRepostAllowedAuthors || []);
+  setAutoRepostAllowedAuthorsCollapsed(s.autoRepostAllowedAuthorsCollapsed ?? true, false);
   renderStyles(s.styleId);
   setProvider(s.provider || "gemini", false);
   lockConfig();
@@ -2868,6 +2918,34 @@ $("autoExcludedAuthorInput")?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     safely(addAutoExcludedAuthor);
+  }
+});
+async function addAutoRepostAllowedAuthor() {
+  const input = $("autoRepostAllowedAuthorInput"),
+    handle = normalizeAutoExcludedAuthor(input?.value);
+  if (!handle) {
+    status("Nhập @username hoặc liên kết hồ sơ X hợp lệ.");
+    input?.focus();
+    return;
+  }
+  const stored = await chrome.storage.local.get("autoRepostAllowedAuthors"),
+    current = Array.isArray(stored.autoRepostAllowedAuthors)
+      ? stored.autoRepostAllowedAuthors.map(normalizeAutoExcludedAuthor).filter(Boolean)
+      : [],
+    next = [...new Set([...current, handle])];
+  await chrome.storage.local.set({ autoRepostAllowedAuthors: next });
+  renderAutoRepostAllowedAuthors(next);
+  input.value = "";
+  input.focus();
+  status(`Đã thêm @${handle} vào danh sách được phép tự repost.`);
+}
+$("addAutoRepostAllowedAuthor")?.addEventListener("click", () =>
+  safely(addAutoRepostAllowedAuthor),
+);
+$("autoRepostAllowedAuthorInput")?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    safely(addAutoRepostAllowedAuthor);
   }
 });
 chrome.runtime.onMessage.addListener((message, sender) => {

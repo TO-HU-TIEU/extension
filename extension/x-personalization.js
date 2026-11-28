@@ -40,6 +40,23 @@
     await chrome.storage.local.set({ autoReplyExcludedAuthors: next });
     return !excluded;
   };
+  const readRepostAllowedAuthors = async () => {
+    const stored = await chrome.storage.local.get("autoRepostAllowedAuthors");
+    return Array.isArray(stored.autoRepostAllowedAuthors)
+      ? stored.autoRepostAllowedAuthors.map(normalizeExcludedAuthor).filter(Boolean)
+      : [];
+  };
+  const toggleRepostAllowedAuthor = async (handle) => {
+    const normalized = normalizeExcludedAuthor(handle);
+    if (!normalized) return false;
+    const current = await readRepostAllowedAuthors();
+    const allowed = current.includes(normalized);
+    const next = allowed
+      ? current.filter((value) => value !== normalized)
+      : [...new Set([...current, normalized])];
+    await chrome.storage.local.set({ autoRepostAllowedAuthors: next });
+    return !allowed;
+  };
   function enablePersonDialogDrag(target, handle) {
     if (!target || !handle) return;
     handle.classList.add("xra-person-dialog-title");
@@ -238,11 +255,33 @@
       ? "Thay đổi phong cách trả lời riêng"
       : "Gán phong cách trả lời riêng";
     b.onclick = () => open(handle);
-    menu.append(excludedButton, b);
+    const repostAllowedButton = document.createElement("button");
+    repostAllowedButton.textContent = "Cho phép tự repost";
+    repostAllowedButton.onclick = async () => {
+      repostAllowedButton.disabled = true;
+      try {
+        const allowed = await toggleRepostAllowedAuthor(handle);
+        repostAllowedButton.textContent = allowed
+          ? "Đã thêm vào danh sách cho phép repost"
+          : "Đã bỏ khỏi danh sách cho phép repost";
+        setTimeout(() => menu?.remove(), 450);
+      } catch {
+        repostAllowedButton.disabled = false;
+      }
+    };
+    menu.append(excludedButton, repostAllowedButton, b);
+    menu.style.left = `${Math.max(8, Math.min(event.clientX, innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(event.clientY, innerHeight - menu.offsetHeight - 8))}px`;
     readExcludedAuthors()
       .then((authors) => {
         if (authors.includes(normalizeExcludedAuthor(handle)))
           excludedButton.textContent = "Bỏ khỏi danh sách tự động bỏ qua";
+      })
+      .catch(() => {});
+    readRepostAllowedAuthors()
+      .then((authors) => {
+        if (authors.includes(normalizeExcludedAuthor(handle)))
+          repostAllowedButton.textContent = "Bỏ khỏi danh sách cho phép repost";
       })
       .catch(() => {});
     document.body.append(menu);

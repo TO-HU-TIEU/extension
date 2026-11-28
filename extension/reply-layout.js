@@ -2,6 +2,7 @@
   const ids = [
     "generate",
     "regenerate",
+    "wordRange",
     "style",
     "count",
     "fast",
@@ -12,9 +13,10 @@
   ];
   const defaults = {
     left: ["generate", "regenerate"],
-    right: ["style", "count", "fast", "settings"],
+    right: ["wordRange", "style", "count", "fast", "settings"],
     hidden: [],
     menu: ["autoSuggest", "autoLike", "autoReply", "replyEnterToSend"],
+    panelMenu: ["autoSuggest", "autoLike", "autoRepost", "autoReply", "replyEnterToSend"],
     density: "comfortable",
     showLabels: false,
     border: true,
@@ -25,6 +27,7 @@
       right: [...defaults.right],
       hidden: [],
       menu: [...defaults.menu],
+      panelMenu: [...defaults.panelMenu],
     };
     return result;
   }
@@ -35,6 +38,7 @@
     const selectors = {
         generate: ".xra-generate",
         regenerate: ".xra-sync",
+        wordRange: ".xra-word-range",
         style: ".xra-style-select",
         count: ".xra-count-wrap",
         fast: ".xra-fast",
@@ -62,17 +66,27 @@
     }
     const panel = box.querySelector(".xra-auto-panel");
     if (panel) {
-      const rows = [...panel.querySelectorAll("label")];
-      const ordered = [
-        ...layout.menu
-          .map((id) => rows.find((row) => row.querySelector("input")?.dataset.key === id))
-          .filter(Boolean),
-        ...rows.filter((row) => !layout.menu.includes(row.querySelector("input")?.dataset.key)),
-      ];
-      if (ordered.some((row, index) => panel.children[index] !== row))
+      const groups = new Map(),
+        leading = [];
+      let activeKey = "";
+      for (const child of [...panel.children]) {
+        if (child.tagName === "LABEL") {
+          activeKey = child.querySelector("input")?.dataset.key || "";
+          if (!groups.has(activeKey)) groups.set(activeKey, []);
+          groups.get(activeKey).push(child);
+        } else if (activeKey) groups.get(activeKey)?.push(child);
+        else leading.push(child);
+      }
+      const keys = [
+          ...layout.panelMenu,
+          ...[...groups.keys()].filter((key) => !layout.panelMenu.includes(key)),
+        ],
+        ordered = [...leading, ...keys.flatMap((key) => groups.get(key) || [])];
+      if (ordered.some((child, index) => panel.children[index] !== child))
         panel.replaceChildren(...ordered);
-      for (const row of rows)
-        row.hidden = !layout.menu.includes(row.querySelector("input")?.dataset.key);
+      for (const [key, children] of groups)
+        for (const row of children)
+          if (row.tagName === "LABEL") row.hidden = !layout.panelMenu.includes(key);
     }
     box.classList.remove("xra-compact", "xra-show-labels", "xra-no-border");
     for (const id of ["generate", "regenerate", "fast", "settings"]) {

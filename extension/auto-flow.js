@@ -371,21 +371,134 @@
     }
   };
   const likeCurrentPostIfEnabled = async (postIdValue) => {
-    let enabled = false;
+    let settings = {};
     try {
-      enabled = (await chrome.storage.local.get("autoLike"))?.autoLike === true;
+      settings = await chrome.storage.local.get("autoLike");
     } catch {}
-    if (!enabled) return false;
+    if (settings?.autoLike !== true) return "disabled";
     const article = [...document.querySelectorAll('article[data-testid="tweet"]')].find(
-      (candidate) =>
-        [...candidate.querySelectorAll('a[href*="/status/"]')].some((anchor) =>
-          new RegExp(`/status/${postIdValue}(?:$|[?#/])`).test(anchor.href),
-        ),
+      (candidate) => postId(candidate) === String(postIdValue),
     );
-    const like = article?.querySelector('[data-testid="like"]');
-    if (!like) return false;
+    const like = article?.querySelector('[data-testid="like"]'),
+      alreadyLiked =
+        !!article?.querySelector('[data-testid="unlike"]') ||
+        like?.getAttribute("aria-pressed") === "true" ||
+        /(?:unlike|đã thích|bỏ thích)/iu.test(like?.getAttribute("aria-label") || "");
+    if (alreadyLiked) return "already";
+    if (!like) return "unknown";
     like.click();
-    return true;
+    return "clicked";
+  };
+  const articleForInteraction = (postIdValue) =>
+    [...document.querySelectorAll('article[data-testid="tweet"]')].find(
+      (candidate) => postId(candidate) === String(postIdValue),
+    ) || null;
+  const readInteractionState = (postIdValue, handle = own()) => {
+    const article = articleForInteraction(postIdValue),
+      like = article?.querySelector('[data-testid="like"],[data-testid="unlike"]'),
+      repost = article?.querySelector(
+        '[data-testid="retweet"],[data-testid="repost"],[data-testid="unretweet"],[data-testid="unrepost"]',
+      ),
+      liked = article
+        ? !!article.querySelector('[data-testid="unlike"]') ||
+          like?.getAttribute("aria-pressed") === "true" ||
+          /(?:unlike|đã thích|bỏ thích)/iu.test(like?.getAttribute("aria-label") || "")
+        : null,
+      reposted = article
+        ? !!article.querySelector('[data-testid="unretweet"],[data-testid="unrepost"]') ||
+          /(?:undo repost|undo retweet|đã đăng lại|bỏ đăng lại|huỷ đăng lại)/iu.test(
+            repost?.getAttribute("aria-label") || "",
+          )
+        : null,
+      replied = article && handle ? domHasOwnReply(handle) : null;
+    return { article, liked, reposted, replied };
+  };
+  const readAutoRepostSettings = async () => {
+    try {
+      const stored = await chrome.storage.local.get([
+        "autoRepost",
+        "autoRepostMaxAgeHours",
+        "autoRepostTopics",
+        "autoRepostAllowedAuthors",
+      ]);
+      return {
+        enabled: stored.autoRepost === true,
+        maxAgeHours: Math.max(1, Math.min(8760, Number(stored.autoRepostMaxAgeHours) || 10)),
+        topics: Array.isArray(stored.autoRepostTopics)
+          ? stored.autoRepostTopics.map((topic) => String(topic || "").trim()).filter(Boolean)
+          : ["Ăn uống", "Đồ ăn", "Kinh tế", "Đời sống thường ngày"],
+        allowedAuthors: Array.isArray(stored.autoRepostAllowedAuthors)
+          ? stored.autoRepostAllowedAuthors
+              .map((value) => String(value || "").trim().replace(/^@/u, "").toLowerCase())
+              .filter((handle) => /^[a-z0-9_]{1,15}$/u.test(handle))
+          : [],
+      };
+    } catch {
+      return { enabled: false, maxAgeHours: 10, topics: [] };
+    }
+  };
+  const repostCurrentPostIfEligible = async (postIdValue, topic, settings) => {
+    if (!settings?.enabled) return "disabled";
+    if (!settings.topics.length) {
+      log("Tự repost đang bật nhưng chưa có chủ đề nào · bỏ repost");
+      return "no-topics";
+    }
+    const matchedTopic = matchingAutoTopicRule(topic, settings.topics);
+    if (!matchedTopic) {
+      log("Không repost: chủ đề mô hình trả về không khớp danh sách" + (topic ? " · " + topic : ""));
+      return "topic-miss";
+    }
+    const article = articleForInteraction(postIdValue);
+    if (!article) return "unknown";
+    if (settings.allowedAuthors.length) {
+      const permalink = statusLinkForArticle(article, postIdValue)?.href || "",
+        author = permalink.match(/\/([^/]+)\/status\//u)?.[1]?.toLowerCase();
+      if (!author || !settings.allowedAuthors.includes(author)) {
+        log("Không repost: tài khoản không có trong danh sách được phép" + (author ? " · @" + author : ""));
+        return "author-not-allowed";
+      }
+    }
+    if (readInteractionState(postIdValue).reposted) {
+      log("Đã repost từ trước · không thao tác lại");
+      return "already";
+    }
+    const ageHours = postAgeHours(article);
+    if (ageHours === null || ageHours > settings.maxAgeHours) {
+      log(ageHours === null ? "Không xác định được tuổi bài · bỏ repost" : "Không repost: bài đã quá " + settings.maxAgeHours + " giờ");
+      return "too-old";
+    }
+    const repostButton = article.querySelector('[data-testid="retweet"],[data-testid="repost"]');
+    if (!repostButton) {
+      log("Không tìm thấy nút Repost trên bài · bỏ qua thao tác");
+      return "button-missing";
+    }
+    repostButton.click();
+    let confirmButton = null;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      if (!(await waitIfPaused())) return "paused";
+      confirmButton =
+        document.querySelector('[data-testid="retweetConfirm"],[data-testid="repostConfirm"]') ||
+        [...document.querySelectorAll('[role="menuitem"],[role="dialog"] button')].find((candidate) => {
+          const label = String(candidate.innerText || candidate.textContent || candidate.getAttribute("aria-label") || "")
+            .replace(/\s+/gu, " ").trim().toLocaleLowerCase();
+          return /^(?:repost|retweet|đăng lại)$/u.test(label);
+        });
+      if (confirmButton) break;
+      await pauseSleep(150);
+    }
+    if (!confirmButton) {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      log("Không xác nhận được lựa chọn Repost · không gửi thao tác");
+      return "confirm-missing";
+    }
+    confirmButton.click();
+    await pauseSleep(500);
+    if (!readInteractionState(postIdValue).reposted) {
+      log("Đã chọn Repost nhưng chưa xác nhận được trạng thái");
+      return "unconfirmed";
+    }
+    log("Đã repost · chủ đề: " + matchedTopic);
+    return "reposted";
   };
   const createRunId = () => {
     // Keep run IDs independent from extension APIs so a stale content script
@@ -1929,7 +2042,31 @@
         dashboard();
         break;
       }
-      if (await likeCurrentPostIfEnabled(id)) log("Đã thả like theo cài đặt");
+      const repostSettings = await readAutoRepostSettings(),
+        initialInteractionState = readInteractionState(id, own());
+      log(
+        "Trạng thái bài: Repost " +
+          (initialInteractionState.reposted === null
+            ? "chưa xác định"
+            : initialInteractionState.reposted
+              ? "đã"
+              : "chưa") +
+          " · Trả lời " +
+          (initialInteractionState.replied === null
+            ? "chưa xác định"
+            : initialInteractionState.replied
+              ? "đã"
+              : "chưa") +
+          " · Like " +
+          (initialInteractionState.liked === null
+            ? "chưa xác định"
+            : initialInteractionState.liked
+              ? "đã"
+              : "chưa"),
+      );
+      const likeAction = await likeCurrentPostIfEnabled(id);
+      if (likeAction === "clicked") log("Đã thả like theo cài đặt");
+      else if (likeAction === "already") log("Đã like từ trước · không thao tác lại");
       // The assistant toolbar is mounted near the reply composer. Do not
       // advance the whole X page while waiting for it; that can run to the
       // bottom of a long conversation when the toolbar is unavailable.
@@ -1993,7 +2130,12 @@
         [...read(processedKey), ...read(skippedKey)].map((entry) => entry.id),
       );
       const myHandle = own();
-      if (currentDone.has(id) || domHasOwnReply(myHandle)) {
+      const currentInteractionState = readInteractionState(id, myHandle),
+        needsTopicForRepost =
+          repostSettings.enabled &&
+          repostSettings.topics.length > 0 &&
+          currentInteractionState.reposted !== true;
+      if (currentDone.has(id) || (currentInteractionState.replied && !needsTopicForRepost)) {
         log("Trạng thái: Đã trả lời -> Skip");
         s.push({ ...item, reason: "Đã có reply hoặc đã xử lý", skippedAt: Date.now() });
         save(skippedKey, s);
@@ -2002,6 +2144,8 @@
         dashboard();
         break;
       }
+      if (currentInteractionState.replied && needsTopicForRepost)
+        log("Đã trả lời từ trước · vẫn phân loại chủ đề để kiểm tra repost");
       const claim = await coordinate("claim", item);
       if (!claim.granted) {
         const reason = "Bài đang được tab khác xử lý";
@@ -2206,6 +2350,22 @@
             log(`Bỏ qua ${id}: ${reason}${detectedTopic ? ` · Nhãn: ${detectedTopic}` : ""}`);
             await coordinate("release", item);
             if (noteNoActionPost(id)) return;
+            await returnHome();
+            clearCurrentProcessing();
+            dashboard();
+            break;
+          }
+          await repostCurrentPostIfEligible(id, detectedTopic, repostSettings);
+          if (currentInteractionState.replied) {
+            log("Đã có phản hồi của bạn · repost đã được kiểm tra, không bình luận lần hai");
+            s.push({
+              ...item,
+              topic: detectedTopic,
+              reason: "Đã có phản hồi; chỉ kiểm tra repost",
+              skippedAt: Date.now(),
+            });
+            save(skippedKey, s);
+            await coordinate("release", item);
             await returnHome();
             clearCurrentProcessing();
             dashboard();

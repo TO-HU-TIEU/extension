@@ -69,10 +69,21 @@
                 type="button"
                 aria-expanded="false"
                 aria-controls="autoExcludedAuthorsBody"
-                title="Mở danh sách tài khoản tự động bỏ qua"
-                aria-label="Mở danh sách tài khoản tự động bỏ qua"
+                title="Mở danh sách bỏ qua tự động trả lời"
+                aria-label="Mở danh sách bỏ qua tự động trả lời"
               >
-                <span data-icon="user" aria-hidden="true"></span>
+                <span data-icon="message-square" aria-hidden="true"></span>
+              </button>
+              <button
+                id="autoRepostAllowedAuthorsToggle"
+                class="auto-exclusion-toggle auto-repost-allow-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="autoRepostAllowedAuthorsBody"
+                title="Mở danh sách cho phép tự repost"
+                aria-label="Mở danh sách cho phép tự repost"
+              >
+                <span data-icon="repost" aria-hidden="true"></span>
               </button>
             </div>
           </div>
@@ -81,6 +92,7 @@
           </div>
         </div>
         <div id="autoExcludedAuthorsBody" class="auto-exclusion-expanded-row" hidden>
+          <small>Tài khoản trong danh sách này sẽ bị bỏ qua khi tự động trả lời.</small>
           <div class="auto-exclusion-entry">
             <input
               id="autoExcludedAuthorInput"
@@ -98,6 +110,26 @@
             </button>
           </div>
           <div id="autoExcludedAuthorsList" class="auto-exclusion-list" aria-live="polite"></div>
+        </div>
+        <div id="autoRepostAllowedAuthorsBody" class="auto-exclusion-expanded-row" hidden>
+          <small>Nếu danh sách có tài khoản, chỉ repost bài của các tài khoản này; để trống thì dùng bộ lọc chủ đề và giới hạn giờ.</small>
+          <div class="auto-exclusion-entry">
+            <input
+              id="autoRepostAllowedAuthorInput"
+              type="text"
+              placeholder="@username hoặc liên kết X"
+              autocomplete="off"
+            />
+            <button
+              id="addAutoRepostAllowedAuthor"
+              type="button"
+              aria-label="Thêm tài khoản được phép repost"
+              title="Thêm"
+            >
+              <span data-icon="plus" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div id="autoRepostAllowedAuthorsList" class="auto-exclusion-list" aria-live="polite"></div>
         </div>
         <div class="toggle-row compact-row">
           <b>Ẩn quảng cáo</b>
@@ -377,7 +409,10 @@
             <h2>Phản hồi tự động</h2>
             <small>Quét bài trên trang cá nhân và lưu mốc comment</small>
           </div>
-          <button id="feedbackScan" class="primary feedback-scan-button">Bắt đầu</button>
+          <div class="panel-row">
+            <button id="feedbackScan" class="primary feedback-scan-button">Bắt đầu</button>
+            <button id="feedbackEnd" type="button" hidden>Kết thúc</button>
+          </div>
         </div>
         <p id="feedbackStatus" class="hint feedback-status" role="status">
           Nhấn Bắt đầu để quét bài và tự động phản hồi
@@ -447,8 +482,8 @@
           <h3>Tốc độ phản hồi</h3>
           <label class="feedback-speed" for="feedbackSpeed">
             <span><output id="feedbackSpeedValue">0</output></span>
-            <input id="feedbackSpeed" type="range" min="-3" max="3" step="0.5" value="0" />
-            <small>Chậm hơn <i>•</i> Nhanh hơn</small>
+            <input id="feedbackSpeed" type="range" min="-5" max="5" step="0.5" value="0" />
+            <small>−5 Chậm hơn <i>•</i> +5 Nhanh hơn</small>
           </label>
         </section>
       </section>

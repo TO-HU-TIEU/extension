@@ -371,8 +371,8 @@
         .filter((a) => !promotedArticle(a) && originalTextNode(a))
         .filter(Boolean),
       before =
-      beforeCandidates.length > 8
-        ? [beforeCandidates[0], ...beforeCandidates.slice(-7)]
+        beforeCandidates.length > 8
+          ? [beforeCandidates[0], ...beforeCandidates.slice(-7)]
           : beforeCandidates,
       urls = [...ownMedia.mediaUrls];
     const turns = before
@@ -1286,10 +1286,12 @@
     }
     const topNav = document.querySelector('[data-testid="TopNavBar"]');
     if (topNav) return topNav;
-    const title = [...document.querySelectorAll("header span,header div,[role=\"banner\"] span")].find(
-      (node) => /^(?:Bài đăng|Bai dang|Post|Posts)$/i.test((node.textContent || "").trim()),
+    const title = [
+      ...document.querySelectorAll('header span,header div,[role="banner"] span'),
+    ].find((node) => /^(?:Bài đăng|Bai dang|Post|Posts)$/i.test((node.textContent || "").trim()));
+    return (
+      title?.closest('header,[role="banner"]') || document.querySelector('header,[role="banner"]')
     );
-    return title?.closest('header,[role="banner"]') || document.querySelector('header,[role="banner"]');
   }
   function placeStickyUser(card, header) {
     const rect = header?.getBoundingClientRect?.();
@@ -1361,7 +1363,9 @@
         !!article?.querySelector('[data-testid="unlike"]') ||
         article?.querySelector('[data-testid="like"]')?.getAttribute("aria-pressed") === "true" ||
         /(?:unlike|đã thích|bỏ thích)/iu.test(
-          article?.querySelector('[data-testid="like"],[data-testid="unlike"]')?.getAttribute("aria-label") || "",
+          article
+            ?.querySelector('[data-testid="like"],[data-testid="unlike"]')
+            ?.getAttribute("aria-label") || "",
         ),
       b = article?.querySelector('[data-testid="like"]');
     if (alreadyLiked) {
@@ -1372,6 +1376,115 @@
       b.click();
       state.liked = true;
     }
+  }
+  const normalizeRepostTopic = (value) =>
+    String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/gu, "")
+      .replace(/đ/gu, "d")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}+#.-]+/gu, " ")
+      .replace(/\s+/gu, " ")
+      .trim();
+  async function repostManualPostIfEligible(postId, topic) {
+    if (globalThis.__assistantAutoFlowRunning === true || !topic) return;
+    const settings = await safeGet([
+      "autoRepost",
+      "autoRepostMaxAgeHours",
+      "autoRepostTopics",
+      "autoRepostAllowedAuthors",
+    ]);
+    if (settings?.autoRepost !== true) return;
+    const topics = Array.isArray(settings.autoRepostTopics)
+      ? settings.autoRepostTopics.map((value) => String(value || "").trim()).filter(Boolean)
+      : ["Ăn uống", "Đồ ăn", "Kinh tế", "Đời sống thường ngày"];
+    const normalizedTopic = normalizeRepostTopic(topic);
+    const matchesTopic = topics.some((entry) => {
+      const normalizedEntry = normalizeRepostTopic(entry);
+      const aliases =
+        normalizedEntry === "crypto"
+          ? [
+              "crypto",
+              "tien ma hoa",
+              "tien dien tu",
+              "bitcoin",
+              "ethereum",
+              "blockchain",
+              "altcoin",
+              "token",
+              "defi",
+              "web3",
+              "nft",
+            ]
+          : normalizedEntry === "nhay cam"
+            ? ["nhay cam", "tinh duc", "bao luc", "tu hai", "ma tuy", "thu ghet", "18+"]
+            : [normalizedEntry];
+      return aliases.some(
+        (alias) => alias && normalizedTopic.includes(normalizeRepostTopic(alias)),
+      );
+    });
+    if (!matchesTopic) return;
+
+    const article = articleFor(postId);
+    if (!article) return;
+    const allowedAuthors = Array.isArray(settings.autoRepostAllowedAuthors)
+      ? settings.autoRepostAllowedAuthors
+          .map((value) => String(value || "").trim().replace(/^@/u, "").toLowerCase())
+          .filter((handle) => /^[a-z0-9_]{1,15}$/u.test(handle))
+      : [];
+    if (allowedAuthors.length) {
+      const permalink = ownPermalink(article)?.href || "",
+        author = permalink.match(/\/([^/]+)\/status\//u)?.[1]?.toLowerCase();
+      if (!author || !allowedAuthors.includes(author)) return;
+    }
+    const repostState = article.querySelector(
+      '[data-testid="retweet"],[data-testid="repost"],[data-testid="unretweet"],[data-testid="unrepost"]',
+    );
+    const alreadyReposted =
+      !!article.querySelector('[data-testid="unretweet"],[data-testid="unrepost"]') ||
+      /(?:undo repost|undo retweet|đã đăng lại|bỏ đăng lại|huỷ đăng lại)/iu.test(
+        repostState?.getAttribute("aria-label") || "",
+      );
+    if (alreadyReposted) return;
+    const datetime = article.querySelector("time[datetime]")?.getAttribute("datetime"),
+      publishedAt = Date.parse(String(datetime || "")),
+      maxAgeHours = Math.max(1, Math.min(8760, Number(settings.autoRepostMaxAgeHours) || 10));
+    if (!Number.isFinite(publishedAt) || (Date.now() - publishedAt) / 3_600_000 > maxAgeHours)
+      return;
+    const repostButton = article.querySelector('[data-testid="retweet"],[data-testid="repost"]');
+    if (!repostButton) return;
+    repostButton.click();
+    let confirmButton = null;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      confirmButton =
+        document.querySelector('[data-testid="retweetConfirm"],[data-testid="repostConfirm"]') ||
+        [...document.querySelectorAll('[role="menuitem"],[role="dialog"] button')].find(
+          (candidate) =>
+            /^(?:repost|retweet|đăng lại)$/iu.test(
+              String(
+                candidate.innerText ||
+                  candidate.textContent ||
+                  candidate.getAttribute("aria-label") ||
+                  "",
+              )
+                .replace(/\s+/gu, " ")
+                .trim(),
+            ),
+        );
+      if (confirmButton) break;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    if (!confirmButton) {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      return;
+    }
+    confirmButton.click();
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const current = article.querySelector('[data-testid="unretweet"],[data-testid="unrepost"]');
+      if (current) break;
+    }
+    // The interaction panel refreshes this state whenever it opens.
   }
   function appendReplyQualityText(target, value, issues) {
     const text = String(value || ""),
@@ -1434,8 +1547,7 @@
       score.textContent = Number.isFinite(item.relevance_score) ? `${item.relevance_score}%` : "";
       row.append(t, score);
       b.append(row);
-      const translation =
-        typeof item.translation_vi === "string" ? item.translation_vi.trim() : "";
+      const translation = typeof item.translation_vi === "string" ? item.translation_vi.trim() : "";
       if (translation && !/^null$/iu.test(translation)) {
         const s = document.createElement("small");
         s.className = "xra-translation";
@@ -1486,11 +1598,16 @@
       "autoReply",
       "autoSuggest",
       "autoLike",
+      "autoRepost",
+      "autoRepostMaxAgeHours",
+      "autoRepostTopics",
       "replyEnterToSend",
       "usageMode",
       "replyCount",
       "fastReplyMode",
       "replyMediaSuggestions",
+      "styleMinWords",
+      "styleMaxWords",
     ]);
     if (!saved) {
       mounting = false;
@@ -1574,7 +1691,7 @@
     box.dataset.replyTopic = "";
     box.dataset.autoSkipTopics = "";
     const icon = (name) => globalThis.AssistantIcons?.svg(name) || "";
-    box.innerHTML = `<div class="xra-tools"><span class="xra-spacer"></span><div class="xra-tools-group xra-tools-left"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại">${icon("refresh")}</button></div><div class="xra-tools-group xra-tools-right"><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><button class="xra-button xra-settings" title="Cài đặt tự động">${icon("setting")}</button></div><div class="xra-tools-group xra-tools-hidden"><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài">${icon("sparkles")}</button><button class="xra-button xra-auto-like" title="Tự like khi mở bài">${icon("heart")}</button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý">${icon("send")}</button></div></div><div class="xra-results"></div>`;
+    box.innerHTML = `<div class="xra-tools"><span class="xra-spacer"></span><div class="xra-tools-group xra-tools-left"><button class="xra-button xra-generate" title="Tạo gợi ý"><span class="ai-icon" aria-hidden="true"></span></button><button class="xra-button xra-sync" title="Tạo lại">${icon("refresh")}</button></div><div class="xra-tools-group xra-tools-right"><div class="xra-word-range" data-enabled="false" title="Bật để dùng độ dài riêng cho ô trả lời này"><button type="button" class="xra-word-range-toggle" role="checkbox" aria-checked="false" aria-label="Dùng độ dài riêng cho ô trả lời này"></button><input class="xra-word-range-min" type="number" min="1" max="100" aria-label="Số từ tối thiểu"><span class="xra-word-range-arrow" aria-hidden="true">→</span><input class="xra-word-range-max" type="number" min="1" max="100" aria-label="Số từ tối đa"><span class="xra-word-range-unit">từ</span></div><div class="xra-count-wrap"><button class="xra-count" title="Số lượng gợi ý">2</button><div class="xra-count-menu" hidden></div></div><button class="xra-button xra-settings" title="Cài đặt tự động">${icon("setting")}</button></div><div class="xra-tools-group xra-tools-hidden"><button class="xra-button xra-auto-suggest" title="Tự gợi ý khi mở bài">${icon("sparkles")}</button><button class="xra-button xra-auto-like" title="Tự like khi mở bài">${icon("heart")}</button><button class="xra-button xra-auto-reply" title="Tự đăng khi chọn gợi ý">${icon("send")}</button></div></div><div class="xra-results"></div>`;
     const tools = box.querySelector(".xra-tools");
     const generate = box.querySelector(".xra-generate"),
       sync = box.querySelector(".xra-sync");
@@ -1597,7 +1714,35 @@
     pairIcon(".xra-auto-reply", "send");
     let replyCount = Math.min(10, Math.max(1, Number(saved.replyCount) || 2));
     const countButton = box.querySelector(".xra-count"),
-      countMenu = box.querySelector(".xra-count-menu");
+      countMenu = box.querySelector(".xra-count-menu"),
+      wordRange = box.querySelector(".xra-word-range"),
+      wordRangeToggle = box.querySelector(".xra-word-range-toggle"),
+      wordRangeMin = box.querySelector(".xra-word-range-min"),
+      wordRangeMax = box.querySelector(".xra-word-range-max");
+    const setWordRangeEnabled = (enabled) => {
+      wordRange.dataset.enabled = String(enabled);
+      wordRangeToggle.setAttribute("aria-checked", String(enabled));
+    };
+    const normalizeWordRange = (changed) => {
+      let min = Math.min(100, Math.max(1, Number(wordRangeMin.value) || 1));
+      let max = Math.min(100, Math.max(1, Number(wordRangeMax.value) || min));
+      if (max < min) {
+        if (changed === wordRangeMin) max = min;
+        else min = max;
+      }
+      wordRangeMin.value = String(min);
+      wordRangeMax.value = String(max);
+    };
+    wordRangeMin.value = String(Math.min(100, Math.max(1, Number(saved.styleMinWords) || 6)));
+    wordRangeMax.value = String(
+      Math.min(100, Math.max(Number(wordRangeMin.value), Number(saved.styleMaxWords) || 10)),
+    );
+    wordRangeToggle.onclick = () => setWordRangeEnabled(wordRange.dataset.enabled !== "true");
+    for (const input of [wordRangeMin, wordRangeMax]) {
+      input.addEventListener("click", (event) => event.stopPropagation());
+      input.addEventListener("change", () => normalizeWordRange(input));
+      input.addEventListener("keydown", (event) => event.stopPropagation());
+    }
     countButton.textContent = replyCount;
     for (let i = 1; i <= 10; i++) {
       const button = document.createElement("button");
@@ -1628,6 +1773,10 @@
           chrome.storage.local.set({ [key]: next }).catch(() => {});
         } catch {}
         if (key === "autoLike" && next) likePost();
+        if (key === "autoRepost" && next && !globalThis.__assistantAutoFlowRunning) {
+          if (state.topic) repostManualPostIfEligible(box.dataset.postId, state.topic);
+          else if (!state.generated) run(false);
+        }
         if (
           key === "autoSuggest" &&
           next &&
@@ -1649,9 +1798,71 @@
     autoPanel.className = "xra-auto-panel";
     autoPanel.hidden = true;
     autoPanel.innerHTML =
-      '<label><span><b>Tự động tạo gợi ý khi mở bài đăng</b></span><input type="checkbox" data-key="autoSuggest"></label><label><span><b>Tự thả like</b></span><input type="checkbox" data-key="autoLike"></label><label><span><b>Tự bấm trả lời sau khi chọn gợi ý</b></span><input type="checkbox" data-key="autoReply"></label><label><span><b>Nhấn Enter để trả lời</b></span><input type="checkbox" data-key="replyEnterToSend"></label><label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
+      '<div class="xra-interaction-status" role="status" aria-live="polite"><span data-interaction-repost>Repost: đang kiểm tra</span><span data-interaction-reply>Trả lời: đang kiểm tra</span><span data-interaction-like>Like: đang kiểm tra</span></div>' +
+      '<label><span><b>Tự động tạo gợi ý khi mở bài đăng</b></span><input type="checkbox" data-key="autoSuggest"></label>' +
+      '<label><span><b>Tự thả like</b></span><input type="checkbox" data-key="autoLike"></label>' +
+      '<label><span><b>Tự repost</b></span><input type="checkbox" data-key="autoRepost"></label>' +
+      '<div class="xra-repost-options"><label class="xra-repost-age"><span>Chỉ xử lý bài đăng trong vòng</span><input type="number" min="1" max="8760" step="1" data-auto-repost-age aria-label="Giới hạn tuổi bài đăng để tự repost"> <span>giờ</span></label><div class="xra-repost-topic-area"><b>Chủ đề cần repost</b><div class="xra-repost-token-box"><div class="xra-repost-tokens"></div><input type="text" data-auto-repost-topic-input placeholder="Nhập chủ đề rồi nhấn Enter" aria-label="Nhập chủ đề repost"></div><small>Mô hình chỉ repost khi xác định bài thuộc một chủ đề trong danh sách.</small></div></div>' +
+      '<label><span><b>Tự bấm trả lời sau khi chọn gợi ý</b></span><input type="checkbox" data-key="autoReply"></label>' +
+      '<label><span><b>Nhấn Enter để trả lời</b></span><input type="checkbox" data-key="replyEnterToSend"></label>' +
+      '<label><span><b>Gợi ý GIF/ảnh</b><small>Đề xuất media khi phù hợp</small></span><input type="checkbox" data-key="replyMediaSuggestions"></label>';
     box.querySelector(".xra-results").before(autoPanel);
-    for (const input of autoPanel.querySelectorAll("input")) {
+    const interactionStatus = autoPanel.querySelector(".xra-interaction-status");
+    const updateInteractionStatus = () => {
+      const id = String(box.dataset.postId || ""),
+        article = articleFor(id),
+        likeButton = article?.querySelector('[data-testid="like"],[data-testid="unlike"]'),
+        repostButton = article?.querySelector(
+          '[data-testid="retweet"],[data-testid="repost"],[data-testid="unretweet"],[data-testid="unrepost"]',
+        ),
+        liked =
+          !!article?.querySelector('[data-testid="unlike"]') ||
+          likeButton?.getAttribute("aria-pressed") === "true" ||
+          /(?:unlike|đã thích|bỏ thích)/iu.test(likeButton?.getAttribute("aria-label") || ""),
+        reposted =
+          !!article?.querySelector('[data-testid="unretweet"],[data-testid="unrepost"]') ||
+          /(?:undo repost|undo retweet|đã đăng lại|bỏ đăng lại|huỷ đăng lại)/iu.test(
+            repostButton?.getAttribute("aria-label") || "",
+          ),
+        profileLink = document.querySelector('[data-testid="AppTabBar_Profile_Link"]'),
+        viewer = String(
+          profileLink?.getAttribute("href") ||
+            document
+              .querySelector('[data-testid^="UserAvatar-Container-"]')
+              ?.getAttribute("data-testid")
+              ?.replace("UserAvatar-Container-", "") ||
+            "",
+        )
+          .replace(/^\/+|\/+$/gu, "")
+          .split(/[/?#]/u)[0]
+          .toLowerCase(),
+        articles = [...document.querySelectorAll('article[data-testid="tweet"]')],
+        targetIndex = articles.indexOf(article),
+        replied =
+          !!viewer &&
+          targetIndex >= 0 &&
+          articles.slice(targetIndex + 1).some((replyArticle) => {
+            const href = replyArticle
+              .querySelector('[data-testid="User-Name"] a[href^="/"]')
+              ?.getAttribute("href");
+            return (
+              String(href || "")
+                .replace(/^\/+|\/+$/gu, "")
+                .split(/[/?#]/u)[0]
+                .toLowerCase() === viewer
+            );
+          });
+      const setStatus = (selector, label, value) => {
+        const node = interactionStatus.querySelector(selector);
+        node.textContent = `${label}: ${value === null ? "chưa xác định" : value ? "đã" : "chưa"}`;
+        node.dataset.complete = value === null ? "unknown" : String(value);
+      };
+      setStatus("[data-interaction-repost]", "Repost", article ? reposted : null);
+      setStatus("[data-interaction-reply]", "Trả lời", viewer && article ? replied : null);
+      setStatus("[data-interaction-like]", "Like", article ? liked : null);
+    };
+    updateInteractionStatus();
+    for (const input of autoPanel.querySelectorAll('input[type="checkbox"][data-key]')) {
       input.dataset.savedEnabled = String(!!saved[input.dataset.key]);
       input.checked = !!saved[input.dataset.key] && !autoFlowMutedSetting(input.dataset.key);
       input.disabled = false;
@@ -1664,6 +1875,10 @@
           .querySelector(`.xra-${key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}`)
           ?.classList.toggle("active", value);
         if (key === "autoLike" && value) likePost();
+        if (key === "autoRepost" && value && !globalThis.__assistantAutoFlowRunning) {
+          if (state.topic) repostManualPostIfEligible(box.dataset.postId, state.topic);
+          else if (!state.generated) run(false);
+        }
         if (
           key === "autoSuggest" &&
           value &&
@@ -1673,9 +1888,73 @@
           run(false);
       };
     }
+    const repostAgeInput = autoPanel.querySelector("[data-auto-repost-age]"),
+      repostTopicInput = autoPanel.querySelector("[data-auto-repost-topic-input]"),
+      repostTokenList = autoPanel.querySelector(".xra-repost-tokens");
+    const normalizedRepostTopics = (values) => {
+      const seen = new Set();
+      return (Array.isArray(values) ? values : [])
+        .map((value) =>
+          String(value || "")
+            .replace(/\s+/gu, " ")
+            .trim()
+            .slice(0, 60),
+        )
+        .filter((value) => {
+          const key = value.toLocaleLowerCase();
+          if (!value || seen.has(key) || seen.size >= 30) return false;
+          seen.add(key);
+          return true;
+        });
+    };
+    let repostTopics = normalizedRepostTopics(
+      Array.isArray(saved.autoRepostTopics)
+        ? saved.autoRepostTopics
+        : ["Ăn uống", "Đồ ăn", "Kinh tế", "Đời sống thường ngày"],
+    );
+    repostAgeInput.value = String(
+      Math.max(1, Math.min(8_760, Number(saved.autoRepostMaxAgeHours) || 10)),
+    );
+    const renderRepostTopics = () => {
+      repostTokenList.replaceChildren();
+      for (const topic of repostTopics) {
+        const chip = document.createElement("span"),
+          remove = document.createElement("button");
+        chip.className = "xra-repost-token";
+        chip.append(document.createTextNode(topic));
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.title = `Xóa chủ đề ${topic}`;
+        remove.setAttribute("aria-label", `Xóa chủ đề ${topic}`);
+        remove.onclick = () => {
+          repostTopics = repostTopics.filter((value) => value !== topic);
+          chrome.storage.local.set({ autoRepostTopics: repostTopics }).catch(() => {});
+          renderRepostTopics();
+        };
+        chip.append(remove);
+        repostTokenList.append(chip);
+      }
+    };
+    renderRepostTopics();
+    repostAgeInput.addEventListener("change", () => {
+      const hours = Math.max(1, Math.min(8_760, Math.trunc(Number(repostAgeInput.value) || 10)));
+      repostAgeInput.value = String(hours);
+      chrome.storage.local.set({ autoRepostMaxAgeHours: hours }).catch(() => {});
+    });
+    repostTopicInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const topic = repostTopicInput.value.replace(/\s+/gu, " ").trim().slice(0, 60);
+      if (!topic) return;
+      repostTopics = normalizedRepostTopics([...repostTopics, topic]);
+      repostTopicInput.value = "";
+      chrome.storage.local.set({ autoRepostTopics: repostTopics }).catch(() => {});
+      renderRepostTopics();
+    });
     gear.onclick = () => {
       autoPanel.hidden = !autoPanel.hidden;
       gear.classList.toggle("active", !autoPanel.hidden);
+      if (!autoPanel.hidden) updateInteractionStatus();
     };
     let remountBox = null;
     const enterReplyInput = autoPanel.querySelector('input[data-key="replyEnterToSend"]');
@@ -1694,11 +1973,7 @@
       const targetEditor = event.target?.closest?.(replyTextareaSelector);
       if (!targetEditor || targetEditor !== boundEditor) return;
       const sendButton = sendButtonForEditor(targetEditor);
-      if (
-        !sendButton ||
-        sendButton.disabled ||
-        sendButton.getAttribute("aria-disabled") === "true"
-      )
+      if (!sendButton || sendButton.disabled || sendButton.getAttribute("aria-disabled") === "true")
         return;
       event.preventDefault();
       event.stopPropagation();
@@ -1774,6 +2049,8 @@
           "customStyles",
           "replyTone",
           "replyMediaSuggestions",
+          "autoRepost",
+          "autoRepostTopics",
           "feedbackExtraContext",
         ]);
         if (!s) throw new Error("Hãy tải lại trang X.");
@@ -1809,11 +2086,22 @@
         // Keep the numeric constraint alongside the prompt. A style can be
         // enriched by preferences/corpus hints later, so it is safer to pass
         // the user setting as structured data instead of re-parsing the prompt.
-        const styleMinWords = Math.min(100, Math.max(1, Number(s.styleMinWords) || 6));
-        const styleWordRange = {
-          min: styleMinWords,
-          max: Math.min(100, Math.max(styleMinWords, Number(s.styleMaxWords) || 10)),
+        const localWordRangeEnabled = wordRange.dataset.enabled === "true";
+        if (!localWordRangeEnabled) {
+          wordRangeMin.value = String(Math.min(100, Math.max(1, Number(s.styleMinWords) || 6)));
+          wordRangeMax.value = String(
+            Math.min(100, Math.max(Number(wordRangeMin.value), Number(s.styleMaxWords) || 10)),
+          );
+        }
+        normalizeWordRange();
+        const localWordRange = {
+          min: Number(wordRangeMin.value),
+          max: Number(wordRangeMax.value),
         };
+        const requestPost = { ...post };
+        // Otherwise the background must use the latest side-panel range.
+        delete requestPost.styleWordRange;
+        delete requestPost.style_word_range;
         const data = await request({
           provider,
           apiKey: s.apiKey,
@@ -1828,7 +2116,7 @@
           autoFlow: false,
           force,
           post: {
-            ...post,
+            ...requestPost,
             draft_text: draftText,
             feedbackExtraContext: String(s.feedbackExtraContext || "").slice(0, 500),
             style:
@@ -1839,7 +2127,8 @@
                 : s.replyTone === "female"
                   ? "The reply author is female. Use a natural feminine voice while preserving the post's original language; do not mention gender."
                   : ""),
-            styleWordRange,
+            ...(localWordRangeEnabled ? { styleWordRange: localWordRange } : {}),
+            autoRepostTopics: s.autoRepost ? normalizedRepostTopics(s.autoRepostTopics) : [],
             replyCount,
             fastMode: !!s.fastReplyMode,
             excludeReplies: force ? state.replyHistory : [],
@@ -1853,12 +2142,17 @@
           location.pathname.match(/\/status\/(\d+)/)?.[1] === box.dataset.postId
         ) {
           state.replies = data.result.replies;
-          state.topic = String(data.result.topic || "").replace(/\s+/gu, " ").trim().slice(0, 180);
+          state.topic = String(data.result.topic || "")
+            .replace(/\s+/gu, " ")
+            .trim()
+            .slice(0, 180);
           state.autoSkipTopics = Array.isArray(data.result.auto_skip_topics)
             ? data.result.auto_skip_topics.map((value) => String(value).trim()).filter(Boolean)
             : [];
           box.dataset.replyTopic = state.topic;
           box.dataset.autoSkipTopics = state.autoSkipTopics.join("\n");
+          if (s.autoRepost && globalThis.__assistantAutoFlowRunning !== true)
+            repostManualPostIfEligible(box.dataset.postId, state.topic);
           state.replyHistory = [
             ...new Set([
               ...state.replyHistory,

@@ -101,6 +101,24 @@
       "0";
     return Number(String(value).replace(/,/g, "")) || 0;
   };
+  function hidePromotedArticle(article) {
+    const promoted = [...article.querySelectorAll('[data-testid*="promoted" i],[data-testid*="sponsor" i],[aria-label],span,div')]
+      .some((node) =>
+        node.closest("article") === article &&
+        !node.closest('[data-testid="tweetText"],[data-testid="quoteTweet"]') &&
+        !node.querySelector('[data-testid="tweetText"],[data-testid="quoteTweet"]') &&
+        (/(?:promoted|sponsor)/iu.test(node.getAttribute("data-testid") || "") ||
+          [node.getAttribute("aria-label"), node.textContent].some((label) =>
+            /^(?:ad|advertisement|promoted|sponsored|quảng cáo|được quảng cáo|tài trợ|được tài trợ)$/iu.test(label?.trim() || ""))));
+    if (promoted) {
+      article.style.setProperty("display", "none", "important");
+      article.dataset.feedbackHiddenAd = "true";
+    } else if (article.dataset.feedbackHiddenAd) {
+      article.style.removeProperty("display");
+      delete article.dataset.feedbackHiddenAd;
+    }
+    return promoted;
+  }
   function currentPost(article) {
     const id = postId(article);
     if (!id) return null;
@@ -315,6 +333,7 @@
       const rootIndex = visible.findIndex((article) => postId(article, rootId) === rootId);
       const candidates = visible.slice(rootIndex >= 0 ? rootIndex + 1 : 0);
       for (const article of candidates) {
+        if (hidePromotedArticle(article)) continue;
         const item = currentPost(article);
         if (!item || item.id === rootId) continue;
         const isOwnReply =
@@ -423,14 +442,29 @@
   async function waitForChip(box, timeout = 45000) {
     const started = Date.now();
     while (Date.now() - started < timeout) {
-      const chip = box?.querySelector(".xra-chip");
-      if (chip && !box.querySelector(".xra-loading")) return chip;
+      if (!box?.querySelector(".xra-loading")) {
+        const chips = [...(box?.querySelectorAll(".xra-chip") || [])];
+        if (chips.length) return chips.find((chip) => !chip.closest(".quality-flagged")) || null;
+      }
       if (box?.querySelector(".xra-error")) return null;
       await sleep(250);
     }
     return null;
   }
-  async function replyComment({ commentUrl = "", extraContext = "", ownHandleOverride = "" } = {}) {
+  async function replyComment({ commentUrl = "", extraContext = "", ownHandleOverride = "", postId: parentPostId = "" } = {}) {
+    const canReply = async () => {
+      if (!parentPostId) return true;
+      while (true) {
+        const state = await chrome.runtime.sendMessage({
+          type: "feedbackCanReply", postId: parentPostId,
+        }).catch(() => null);
+        if (!state?.allowed) return false;
+        if (!state.paused) return true;
+        await sleep(250);
+      }
+    };
+    const cancelled = { ok: false, selectionCancelled: true };
+    if (!(await canReply())) return cancelled;
     if (autoFlowBusy()) return autoFlowBusyResult();
     const replyKey = String(commentUrl || location.href);
     if (feedbackReplyLocks.has(replyKey)) {
@@ -445,6 +479,11 @@
         return { ok: false, reload: true };
       }
       const currentId = String(commentUrl || location.href).match(/\/status\/(\d+)/)?.[1] || "";
+      if (!(await canReply())) return cancelled;
+      const article = [...document.querySelectorAll('main article[data-testid="tweet"]')]
+        .find((tweet) => postId(tweet, currentId) === currentId);
+      if (article && hidePromotedArticle(article))
+        return { ok: false, error: "Bình luận là quảng cáo" };
       await likeCurrentPostIfEnabled(currentId);
       if (extraContext)
         await chrome.storage.local
@@ -468,6 +507,7 @@
         return { ok: false, alreadyReplied: true, error: "Comment đã được phản hồi trước đó." };
       }
       if (autoFlowBusy()) return autoFlowBusyResult();
+      if (!(await canReply())) return cancelled;
       generate.click();
       const chip = await waitForChip(box);
       if (!chip)
@@ -475,12 +515,14 @@
           ok: false,
           error: box.querySelector(".xra-error")?.textContent || "Không tạo được gợi ý phản hồi.",
         };
+      if (!(await canReply())) return cancelled;
       chip.click();
       await sleep(150);
       const submit =
         box.closest("article")?.querySelector('[data-testid="tweetButtonInline"]') ||
         document.querySelector('[data-testid="tweetButtonInline"]');
       if (!submit || submit.disabled) return { ok: false, error: "Chưa thấy nút đăng phản hồi." };
+      if (!(await canReply())) return cancelled;
       submit.click();
       await sleep(700);
       return { ok: true };

@@ -444,7 +444,15 @@ html[data-theme="light"] {
     padding: 8px 10px;
   }
   .xra-tools {
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
+  }
+  .xra-tools-left {
+    justify-content: flex-start;
+  }
+  .xra-tools-right {
+    width: 100%;
+    justify-self: stretch;
   }
   .xra-tools-group {
     gap: 3px;

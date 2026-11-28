@@ -6176,6 +6176,11 @@ body.settings-open .prompt-collapse {
   gap: 7px;
   padding: 0 0 12px;
 }
+.auto-exclusion-expanded-row:not([hidden]) {
+  display: grid;
+  gap: 7px;
+  padding: 0 0 12px;
+}
 .auto-exclusion-empty {
   color: var(--muted);
   font-size: 10.5px;
@@ -6336,12 +6341,47 @@ body.settings-open .prompt-collapse {
   height: 20px;
   color: currentColor;
 }
-#autoExcludedAuthorsToggle {
-  border: 0 !important;
+.auto-flow-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.auto-flow-label > b {
+  margin-right: 0;
+}
+.auto-flow-label > .auto-exclusion-toggle {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  flex: 0 0 24px;
+  padding: 0 !important;
+}
+#autoExcludedAuthorsToggle,
+#autoRepostAllowedAuthorsToggle {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 !important;
   border-radius: 50%;
   background: transparent !important;
 }
-#autoExcludedAuthorsToggle.is-expanded svg {
+#autoExcludedAuthorsToggle {
+  border: 0 !important;
+  color: #f4212e !important;
+}
+#autoRepostAllowedAuthorsToggle {
+  border: 0 !important;
+  color: #00ba7c !important;
+}
+#autoExcludedAuthorsToggle svg,
+#autoRepostAllowedAuthorsToggle svg {
+  width: 17px;
+  height: 17px;
+  color: inherit !important;
+  stroke: currentColor;
+}
+#autoExcludedAuthorsToggle.is-expanded svg,
+#autoRepostAllowedAuthorsToggle.is-expanded svg {
   transform: none;
 }
 .auto-flow-actions .switch {
@@ -6356,8 +6396,19 @@ body.settings-open .prompt-collapse {
   padding: 8px 0 10px;
   border-top: 1px solid var(--line);
 }
-.reply-live-preview .auto-flow-row + #autoExcludedAuthorsBody[hidden] + .toggle-row,
-.reply-live-preview .auto-flow-row + #autoExcludedAuthorsBody:not([hidden]) + .toggle-row {
+.reply-live-preview #autoRepostAllowedAuthorsBody:not([hidden]) {
+  display: grid;
+  width: 100%;
+  gap: 7px;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--line);
+}
+.reply-live-preview .auto-flow-row + #autoExcludedAuthorsBody[hidden] + #autoRepostAllowedAuthorsBody[hidden] + .toggle-row,
+.reply-live-preview .auto-flow-row + #autoExcludedAuthorsBody:not([hidden]) + #autoRepostAllowedAuthorsBody[hidden] + .toggle-row,
+.reply-live-preview .auto-flow-row + #autoExcludedAuthorsBody[hidden] + #autoRepostAllowedAuthorsBody:not([hidden]) + .toggle-row,
+.reply-live-preview .auto-flow-row + #autoExcludedAuthorsBody:not([hidden]) + #autoRepostAllowedAuthorsBody:not([hidden]) + .toggle-row {
   border-top: 1px solid var(--line);
 }
 
