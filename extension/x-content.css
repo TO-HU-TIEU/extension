@@ -543,6 +543,13 @@
 .xra-interaction-status [data-complete="false"]::before {
   color: #8b98a5;
 }
+.xra-interaction-status [data-interaction-topic]:not(:empty) {
+  max-width: 45%;
+  margin-left: auto;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+}
 .xra-repost-options {
   padding: 4px 0 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--xra-color, #e7e9ea) 18%, transparent);

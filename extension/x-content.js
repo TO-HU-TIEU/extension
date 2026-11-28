@@ -1816,7 +1816,7 @@
     interactionStatus.setAttribute("role", "status");
     interactionStatus.setAttribute("aria-live", "polite");
     interactionStatus.innerHTML =
-      "<span data-interaction-repost>Repost: đang kiểm tra</span><span data-interaction-reply>Trả lời: đang kiểm tra</span><span data-interaction-like>Like: đang kiểm tra</span>";
+      "<span data-interaction-repost>Repost: đang kiểm tra</span><span data-interaction-reply>Trả lời: đang kiểm tra</span><span data-interaction-like>Like: đang kiểm tra</span><span data-interaction-topic></span>";
     box.insertBefore(interactionStatus, tools);
     const updateInteractionStatus = () => {
       const id = String(box.dataset.postId || ""),
@@ -1870,6 +1870,12 @@
       setStatus("[data-interaction-repost]", "Repost", article ? reposted : null);
       setStatus("[data-interaction-reply]", "Trả lời", viewer && article ? replied : null);
       setStatus("[data-interaction-like]", "Like", article ? liked : null);
+      const topic = String(box.dataset.replyTopic || "")
+          .replace(/\s+/gu, " ")
+          .trim(),
+        topicNode = interactionStatus.querySelector("[data-interaction-topic]");
+      topicNode.textContent = topic ? `Chủ đề: ${topic}` : "";
+      topicNode.title = topic ? `Chủ đề: ${topic}` : "";
     };
     updateInteractionStatus();
     const interactionArticle = articleFor(String(box.dataset.postId || ""));
@@ -2177,6 +2183,7 @@
             : [];
           box.dataset.replyTopic = state.topic;
           box.dataset.autoSkipTopics = state.autoSkipTopics.join("\n");
+          updateInteractionStatus();
           if (s.autoRepost && globalThis.__assistantAutoFlowRunning !== true)
             repostManualPostIfEligible(box.dataset.postId, state.topic);
           state.replyHistory = [
